@@ -28,6 +28,7 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 |---|---|
 | Understand the ideas behind the four parts | [Concepts](docs/concepts.md) |
 | See how the parts connect, and why the code is split the way it is | [Architecture](docs/architecture.md) |
+| Decide whether to trust the hooks on your machine | [Trust model](docs/trust-model.md) |
 | Find a binary, a package, or a make target | [Repository layout](docs/repository-layout.md) |
 | Look up a term | [Glossary](docs/glossary.md) |
 | See what is planned, and in what order | [Roadmap](docs/roadmap.md) |
