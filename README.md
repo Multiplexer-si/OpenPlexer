@@ -1,75 +1,50 @@
 # OpenPlexer
 
-OpenPlexer is the open-source Go foundation for coordinating AI coding agents on a team. It is licensed under Apache-2.0. It has four parts:
+OpenPlexer coordinates the AI coding agents on a team. Each developer keeps their own agent, such as Claude Code or Codex. OpenPlexer gives those agents a shared Room where they see each other's work, and a policy that limits what each agent may do.
 
-1. Claude Code and Codex adapters and hooks, with local policy enforcement.
-2. The Room protocol, with claim and decision formats.
-3. A single-team, self-hosted hub with basic policies.
-4. A hash-chain audit log format and an independent verifier.
+> [!NOTE]
+> OpenPlexer is pre-alpha and nothing is implemented yet. This repository holds the project structure, the design documents, and the plan. Each of the three binaries prints "not implemented yet" and exits with status 1.
 
-## Status
+## The problem
 
-OpenPlexer is pre-alpha. Nothing is implemented yet. The repository holds the module, the directory layout, the build and check entry points, CI, and a test that enforces the dependency rules below. The plan is tracked at https://github.com/Multiplexer-si/OpenPlexer/issues/1.
+A coding agent sees one conversation and one checkout. It does not know what a teammate's agent is building at the same moment. Two agents can build the same thing twice, or build two things that contradict each other, and nobody finds out until the branches meet.
 
-The three binaries print "not implemented yet" to stderr and exit with status 1.
+An agent with write access to a repository can also change code that belongs to another person or team. Nothing tells the agent where its work stops.
 
-## Repository layout
+## The four parts
 
-```
-apps/
-  openplexer/            local CLI and daemon that runs on a developer's machine
-  openplexer-hub/        hub server
-  openplexer-verify/     standalone audit log verifier
-internal/
-  policy/                policy model and evaluator (pure, no I/O)
-  room/                  Room protocol: events, claims, decisions, validation (pure, no I/O)
-  audit/                 audit hash-chain record format, append, and verification
-  adapter/
-    claudecode/          Claude Code hook adapter
-    codex/               Codex hook adapter
-  daemon/                local runtime: the policy gate, local identity, policy source, offline behavior
-  hub/                   single-team hub server
-  layering/              test that enforces the dependency rules
-spec/                    language-independent contracts (schemas, examples, fixtures)
-  room/                  Room events, claims, and decisions
-  policy/                policies
-  audit/                 audit records and hash-chain test vectors
-.github/workflows/       CI
-Makefile                 check, build, and fmt targets
-```
+OpenPlexer is the open-source foundation for this coordination, licensed under Apache-2.0.
 
-## Dependency rules
-
-The rules apply to transitive imports. The test in `internal/layering` reads the imports of every package and fails when a package depends on one it must not. The rule table in that test is the authority; this table is a copy for readers.
-
-| Packages | Must not depend on |
+| Part | Purpose |
 |---|---|
-| `internal/policy`, `internal/room`, `internal/audit` | `internal/adapter/...`, `internal/daemon`, `internal/hub` |
-| `internal/adapter/...` | `internal/daemon`, `internal/hub` |
-| `internal/daemon` | `internal/hub` |
-| `internal/hub` | `internal/daemon`, `internal/adapter/...` |
-| `apps/openplexer` | `internal/hub` |
-| `apps/openplexer-hub` | `internal/daemon`, `internal/adapter/...` |
-| `apps/openplexer-verify` | every internal package except `internal/audit` |
+| Agent adapters and local policy enforcement | Connect Claude Code and Codex to a gate on the developer's machine. The gate allows or denies each action that the agent sends through its hooks. |
+| Room protocol | The format that agents use to share claims on work and decisions that are in force. |
+| Self-hosted hub | A server that one team runs to host its Room and manage its policy. |
+| Audit log and verifier | A hash-chained log, and a separate program that checks an exported log. |
 
-The last row is an allowlist. A new internal package is denied to the verifier until someone adds it to the allowlist in the test.
+## Documentation
 
-## Where new code goes
+| If you want to | Read |
+|---|---|
+| Understand the ideas behind the four parts | [Concepts](docs/concepts.md) |
+| See how the parts connect, and why the code is split the way it is | [Architecture](docs/architecture.md) |
+| Find a binary, a package, or a make target | [Repository layout](docs/repository-layout.md) |
+| Look up a term | [Glossary](docs/glossary.md) |
+| See what is planned, and in what order | [Roadmap](docs/roadmap.md) |
+| Change the code or the documentation | [Contributing](CONTRIBUTING.md) |
+| Implement a format in another language | [The contracts in `spec/`](spec/README.md) |
 
-A new agent adapter is a new directory under `internal/adapter/`. The layering test covers it without changes.
+## Build and check
 
-Everything starts in `internal/`. A package becomes public only when an outside importer needs it.
+Install [Go](https://go.dev/doc/install) 1.27 or later. Then run the checks and build the binaries.
 
-## Development
+```sh
+make check
+make build
+```
 
-OpenPlexer needs Go 1.27 and uses only the standard library.
-
-- `make check` fails if `gofmt -l .` prints anything, then runs `go vet ./...` and `go test ./...`.
-- `make build` builds every `apps/*` binary into `bin/`.
-- `make fmt` runs `gofmt -w .`.
-
-CI runs `make check` and `make build`.
+`make check` runs the format check, `go vet`, and the tests. `make build` writes the three binaries to `bin/`. [Contributing](CONTRIBUTING.md) covers the rest.
 
 ## License
 
-Apache-2.0. See `LICENSE` and `NOTICE`.
+OpenPlexer is licensed under Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
