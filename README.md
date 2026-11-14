@@ -35,6 +35,7 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 | See what the existing implementation does today | [Inventory of the existing implementation](docs/inventory.md) |
 | Change the code or the documentation | [Contributing](CONTRIBUTING.md) |
 | Implement a format in another language | [The contracts in `spec/`](spec/README.md) |
+| Check where the material in this repository comes from | [Provenance and scope](docs/provenance.md) |
 
 ## Build and check
 
