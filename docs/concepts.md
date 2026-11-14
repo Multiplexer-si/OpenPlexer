@@ -27,11 +27,11 @@ The gate sees only the actions that a coding agent sends through its hooks. [Wha
 
 A policy states what each role on a team may do. The policy evaluator takes a policy and a request, and returns a result: allow, or deny with a reason.
 
-The evaluator denies by default. If no rule in the policy allows an action, the evaluator denies the action.
+The evaluator treats reads and writes differently. It allows a read unless the path is in a private area that the role may not read and that no temporary grant or override opens. It denies a write, and every other action, unless a rule in the policy allows it.
 
-The evaluator is pure. It reads no files and opens no network connections, so the same policy and the same request always give the same result. That property is what lets one set of fixtures test every implementation of the evaluator.
+The evaluator is pure. It reads no files and opens no network connections, and the request carries the current time, so the same policy and the same request always give the same result. That property is what lets one set of fixtures test every implementation of the evaluator.
 
-The daemon does not trust a policy because the policy is on disk. A policy arrives as a signed bundle, and the daemon verifies the signature against a public key before it enforces the policy. When the daemon cannot reach the hub, it keeps enforcing the last policy that it verified.
+The daemon accepts a policy only as a signed bundle. It verifies the signature against a public key before it stores and enforces the policy. When the daemon cannot reach the hub, it keeps enforcing the last policy that it verified.
 
 ## The Room, claims, and decisions
 
