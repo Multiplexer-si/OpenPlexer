@@ -1,0 +1,23 @@
+{
+  "$id": "urn:openplexer:spec:policy:v1:jws-protected-header",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The protected header of the compact JWS that signs a policy bundle. Authored.",
+  "properties": {
+    "alg": {
+      "const": "ES256"
+    },
+    "kid": {
+      "description": "The `kid` of the key in the JWKS that signed the bundle.",
+      "type": "string"
+    },
+    "typ": {
+      "const": "mp-policy+jws"
+    }
+  },
+  "required": [
+    "alg",
+    "typ"
+  ],
+  "title": "Protected header of the bundle signature",
+  "type": "object"
+}

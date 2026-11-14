@@ -1,0 +1,5 @@
+{
+  "area": "backend",
+  "decision": "allow",
+  "rule": "area \"backend\" write is granted to role backend"
+}

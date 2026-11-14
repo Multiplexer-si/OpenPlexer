@@ -75,10 +75,15 @@ func modulePath(t *testing.T) string {
 // imports. It reads the source in this process, not through "go list", so that
 // the test cache sees every file the result depends on. A subprocess is
 // invisible to the cache, which then reports a stale pass after a violation.
-func directImports(t *testing.T) map[string][]string {
+//
+// The second result maps each package to its imports from other modules. Test
+// files are not read, so both results describe the code that a binary can
+// contain.
+func directImports(t *testing.T) (graph, external map[string][]string) {
 	t.Helper()
 	module := modulePath(t)
-	graph := map[string][]string{}
+	graph = map[string][]string{}
+	external = map[string][]string{}
 	fset := token.NewFileSet()
 	err := filepath.WalkDir(moduleRoot, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -111,6 +116,9 @@ func directImports(t *testing.T) map[string][]string {
 			}
 			if dep, ok := strings.CutPrefix(imported, module+"/"); ok {
 				graph[pkg] = append(graph[pkg], dep)
+			} else if first, _, _ := strings.Cut(imported, "/"); strings.Contains(first, ".") {
+				// Only an import path outside the standard library has a dot in its first element.
+				external[pkg] = append(external[pkg], imported)
 			}
 		}
 		return nil
@@ -118,7 +126,7 @@ func directImports(t *testing.T) map[string][]string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return graph
+	return graph, external
 }
 
 func transitiveDeps(graph map[string][]string, pkg string) []string {
@@ -148,7 +156,7 @@ func matchesAny(patterns []string, pkg string) bool {
 }
 
 func TestLayering(t *testing.T) {
-	graph := directImports(t)
+	graph, _ := directImports(t)
 	packages := slices.Sorted(maps.Keys(graph))
 	for _, r := range rules {
 		for _, pattern := range r.subjects {
@@ -167,6 +175,17 @@ func TestLayering(t *testing.T) {
 			if !matched {
 				t.Errorf("subject pattern %q matches no packages", pattern)
 			}
+		}
+	}
+}
+
+// The module depends on other modules for its tests only. Code that a binary
+// can contain imports the standard library and this module, and nothing else.
+func TestBinariesUseOnlyTheStandardLibrary(t *testing.T) {
+	_, external := directImports(t)
+	for _, pkg := range slices.Sorted(maps.Keys(external)) {
+		for _, dep := range external[pkg] {
+			t.Errorf("%s must not import %s: only a test may import another module", pkg, dep)
 		}
 	}
 }

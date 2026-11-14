@@ -1,0 +1,736 @@
+{
+  "$defs": {
+    "answer": {
+      "additionalProperties": {},
+      "properties": {
+        "question_id": {
+          "description": "The id of the question event.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The answer.",
+          "minLength": 1,
+          "pattern": "[^\t\n\u000b\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "question_id",
+        "text"
+      ],
+      "type": "object"
+    },
+    "blocked": {
+      "additionalProperties": {},
+      "properties": {
+        "needs": {
+          "description": "What would unblock the agent.",
+          "properties": {
+            "decision": {
+              "type": "string"
+            },
+            "request_id": {
+              "type": "string"
+            }
+          },
+          "type": "object"
+        },
+        "reason": {
+          "description": "Why the agent cannot continue.",
+          "type": "string"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "type": "object"
+    },
+    "claim": {
+      "additionalProperties": {},
+      "properties": {
+        "intent": {
+          "description": "What the agent intends to do.",
+          "type": "string"
+        },
+        "item": {
+          "description": "The piece of work that the agent claims.",
+          "type": "string"
+        },
+        "paths": {
+          "description": "The paths and globs that the claim covers, in the claims dialect.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        },
+        "ttl_seconds": {
+          "description": "The number of seconds after which the claim expires.",
+          "exclusiveMinimum": 0,
+          "maximum": 9007199254740991,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "item",
+        "paths",
+        "intent",
+        "ttl_seconds"
+      ],
+      "type": "object"
+    },
+    "decision": {
+      "additionalProperties": {},
+      "properties": {
+        "detail": {
+          "description": "The full text of the decision.",
+          "type": "string"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "What the decision applies to.",
+          "type": "string"
+        },
+        "supersedes": {
+          "description": "The id of the decision that this decision replaces.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        },
+        "title": {
+          "description": "A short name for what the team settled.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "title",
+        "detail"
+      ],
+      "type": "object"
+    },
+    "decision.confirm": {
+      "additionalProperties": {},
+      "properties": {
+        "decision_id": {
+          "description": "The id of the decision event.",
+          "type": "string"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "result": {
+          "description": "Whether a person confirmed or rejected the decision.",
+          "enum": [
+            "confirmed",
+            "rejected"
+          ],
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "decision_id",
+        "result"
+      ],
+      "type": "object"
+    },
+    "human": {
+      "additionalProperties": {},
+      "properties": {
+        "mentions": {
+          "description": "The members that the message mentions.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "text": {
+          "description": "A message that a person wrote.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "policy.denied": {
+      "additionalProperties": {},
+      "properties": {
+        "action": {
+          "description": "The action that the gate denied.",
+          "type": "string"
+        },
+        "detected": {
+          "description": "`after` marks a write that the daemon found after it had happened.",
+          "type": "string"
+        },
+        "path": {
+          "description": "The path that the gate denied. For `exec` it is the command.",
+          "type": "string"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "rule": {
+          "description": "The `rule` text of the evaluation result.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "action",
+        "path",
+        "rule"
+      ],
+      "type": "object"
+    },
+    "policy.override": {
+      "additionalProperties": {},
+      "properties": {
+        "actions": {
+          "description": "The actions that the override allows.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "agent": {
+          "description": "The agent session that the override is for.",
+          "type": "string"
+        },
+        "areas": {
+          "description": "The names of the areas that the override opens.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "lead": {
+          "description": "The member that granted the override.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why the lead granted the override.",
+          "type": "string"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "scope": {
+          "description": "The scope of the override: `once`, `mission`, or `until`.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "lead",
+        "agent",
+        "areas",
+        "actions",
+        "scope",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "policy.override.revoked": {
+      "additionalProperties": {},
+      "properties": {
+        "agent": {
+          "description": "The agent session that the override was for.",
+          "type": "string"
+        },
+        "area": {
+          "description": "The name of the area that the override opened.",
+          "type": "string"
+        },
+        "override_id": {
+          "description": "The id of the override.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "The reason that the override was granted for.",
+          "type": "string"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "revoked_by": {
+          "description": "The member that revoked the override.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "override_id",
+        "agent",
+        "area",
+        "revoked_by"
+      ],
+      "type": "object"
+    },
+    "question": {
+      "additionalProperties": {},
+      "properties": {
+        "ack_required": {
+          "description": "If true, the asker wants an acknowledgement.",
+          "type": "boolean"
+        },
+        "addressed_to": {
+          "description": "The member that the question is for.",
+          "minLength": 1,
+          "pattern": "[^\t\n\u000b\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]",
+          "type": "string"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "text": {
+          "description": "The question.",
+          "minLength": 1,
+          "pattern": "[^\t\n\u000b\f\r \u00a0\u1680\u2000-\u200a\u2028\u2029\u202f\u205f\u3000\ufeff]",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "type": "object"
+    },
+    "release": {
+      "additionalProperties": {},
+      "properties": {
+        "claim_id": {
+          "description": "The id of the claim that the agent releases.",
+          "type": "string"
+        },
+        "outcome": {
+          "description": "What happened to the work.",
+          "type": "string"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "claim_id"
+      ],
+      "type": "object"
+    },
+    "status": {
+      "additionalProperties": {},
+      "properties": {
+        "files": {
+          "description": "The files that the agent is working on.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        },
+        "plan_step": {
+          "description": "The step of the plan that the agent is on.",
+          "type": "string"
+        },
+        "reply_to": {
+          "description": "The id of the event that this event answers.",
+          "type": "string"
+        },
+        "summary": {
+          "description": "What the agent is doing.",
+          "type": "string"
+        },
+        "thread_id": {
+          "description": "The id of the event that started the thread.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "summary"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:openplexer:spec:room:v1:room-event",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "status"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/status"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "claim"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/claim"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "release"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/release"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "decision"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/decision"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "decision.confirm"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/decision.confirm"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "question"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/question"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "answer"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/answer"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "blocked"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/blocked"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "human"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/human"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "policy.denied"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/policy.denied"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "policy.override"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/policy.override"
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "type": {
+            "const": "policy.override.revoked"
+          }
+        },
+        "required": [
+          "type"
+        ]
+      },
+      "then": {
+        "properties": {
+          "body": {
+            "$ref": "#/$defs/policy.override.revoked"
+          }
+        }
+      }
+    }
+  ],
+  "description": "A stored Room event. The base object and each body under `$defs` are generated from the reference. The list of event types and the rule that ties `body` to `type` are authored.",
+  "properties": {
+    "agent": {
+      "description": "Who posted the event: an agent session, or the member for an event that a person caused.",
+      "properties": {
+        "id": {
+          "description": "The id of the agent session. For an event that no agent session posted, the id of the member.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "parent": {
+          "description": "The id of the root agent session. Present only on the events of a sub-agent.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "vendor": {
+          "description": "The coding agent, such as `claude-code` or `codex`. `human` for an event that no agent session posted.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "vendor"
+      ],
+      "type": "object"
+    },
+    "at": {
+      "description": "The time that the hub stored the event.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "body": {
+      "description": "The content of the event. Its schema depends on `type`."
+    },
+    "id": {
+      "description": "The id of the event.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "mission": {
+      "description": "The mission that the event belongs to.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "on_behalf_of": {
+      "description": "The id of the member that the agent acts for, or of the member that posted the event.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "seq": {
+      "description": "The position of the event in its Room. The hub assigns it.",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "type": {
+      "description": "The event type. It selects the schema of `body`.",
+      "enum": [
+        "status",
+        "claim",
+        "release",
+        "decision",
+        "decision.confirm",
+        "question",
+        "answer",
+        "blocked",
+        "human",
+        "policy.denied",
+        "policy.override",
+        "policy.override.revoked"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "seq",
+    "mission",
+    "type",
+    "agent",
+    "on_behalf_of",
+    "at",
+    "body"
+  ],
+  "title": "Room event",
+  "type": "object"
+}

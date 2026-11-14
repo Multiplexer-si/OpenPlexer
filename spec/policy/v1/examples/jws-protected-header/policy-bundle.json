@@ -1,0 +1,5 @@
+{
+  "alg": "ES256",
+  "kid": "hk_example",
+  "typ": "mp-policy+jws"
+}

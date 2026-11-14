@@ -1,0 +1,109 @@
+{
+  "bundle": {
+    "areas": [
+      {
+        "name": "backend",
+        "patterns": [
+          "api:src/**"
+        ]
+      },
+      {
+        "name": "billing",
+        "patterns": [
+          "api:src/billing/**"
+        ]
+      },
+      {
+        "name": "frontend",
+        "patterns": [
+          "web:src/**"
+        ]
+      },
+      {
+        "name": "secrets",
+        "patterns": [
+          "*:**/.env*"
+        ],
+        "private": true
+      },
+      {
+        "generated": true,
+        "name": "lockfiles",
+        "patterns": [
+          "*:**/package-lock.json"
+        ]
+      },
+      {
+        "name": "ci",
+        "patterns": [
+          "*:.github/**"
+        ],
+        "system": true
+      }
+    ],
+    "members": {
+      "mem-ana": "backend",
+      "mem-lee": "lead"
+    },
+    "project_id": "prj-shop",
+    "repos": [
+      "api",
+      "web"
+    ],
+    "roles": {
+      "backend": {
+        "exec": [
+          "npm test"
+        ],
+        "push": [
+          "api"
+        ],
+        "read": [],
+        "write": [
+          "backend"
+        ]
+      },
+      "lead": {
+        "exec": [
+          "npm test",
+          "npm run"
+        ],
+        "push": [
+          "*"
+        ],
+        "read": [
+          "secrets"
+        ],
+        "write": [
+          "backend",
+          "billing",
+          "frontend",
+          "secrets"
+        ]
+      }
+    },
+    "temporary_grants": [
+      {
+        "actions": [
+          "write"
+        ],
+        "area": "billing",
+        "member_id": "mem-ana",
+        "mission_id": "mis-checkout",
+        "scope": "mission"
+      },
+      {
+        "actions": [
+          "read"
+        ],
+        "area": "secrets",
+        "expires_at": "2026-01-16T09:00:00+01:00",
+        "member_id": "mem-ana",
+        "scope": "until"
+      }
+    ],
+    "version": 3
+  },
+  "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2V4YW1wbGUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19LHsibmFtZSI6ImJpbGxpbmciLCJwYXR0ZXJucyI6WyJhcGk6c3JjL2JpbGxpbmcvKioiXX0seyJuYW1lIjoiZnJvbnRlbmQiLCJwYXR0ZXJucyI6WyJ3ZWI6c3JjLyoqIl19LHsibmFtZSI6InNlY3JldHMiLCJwYXR0ZXJucyI6WyIqOioqLy5lbnYqIl0sInByaXZhdGUiOnRydWV9LHsiZ2VuZXJhdGVkIjp0cnVlLCJuYW1lIjoibG9ja2ZpbGVzIiwicGF0dGVybnMiOlsiKjoqKi9wYWNrYWdlLWxvY2suanNvbiJdfSx7Im5hbWUiOiJjaSIsInBhdHRlcm5zIjpbIio6LmdpdGh1Yi8qKiJdLCJzeXN0ZW0iOnRydWV9XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCIsIm1lbS1sZWUiOiJsZWFkIn0sInByb2plY3RfaWQiOiJwcmotc2hvcCIsInJlcG9zIjpbImFwaSIsIndlYiJdLCJyb2xlcyI6eyJiYWNrZW5kIjp7ImV4ZWMiOlsibnBtIHRlc3QiXSwicHVzaCI6WyJhcGkiXSwicmVhZCI6W10sIndyaXRlIjpbImJhY2tlbmQiXX0sImxlYWQiOnsiZXhlYyI6WyJucG0gdGVzdCIsIm5wbSBydW4iXSwicHVzaCI6WyIqIl0sInJlYWQiOlsic2VjcmV0cyJdLCJ3cml0ZSI6WyJiYWNrZW5kIiwiYmlsbGluZyIsImZyb250ZW5kIiwic2VjcmV0cyJdfX0sInRlbXBvcmFyeV9ncmFudHMiOlt7ImFjdGlvbnMiOlsid3JpdGUiXSwiYXJlYSI6ImJpbGxpbmciLCJtZW1iZXJfaWQiOiJtZW0tYW5hIiwibWlzc2lvbl9pZCI6Im1pcy1jaGVja291dCIsInNjb3BlIjoibWlzc2lvbiJ9LHsiYWN0aW9ucyI6WyJyZWFkIl0sImFyZWEiOiJzZWNyZXRzIiwiZXhwaXJlc19hdCI6IjIwMjYtMDEtMTZUMDk6MDA6MDArMDE6MDAiLCJtZW1iZXJfaWQiOiJtZW0tYW5hIiwic2NvcGUiOiJ1bnRpbCJ9XSwidmVyc2lvbiI6M30.MXPRgeRlNtyfZlww-VpFkhurTDdg02k8WnS19F0RmvC__UZpYBh0D4AS9yauRmz_v--Hn2dDufTTedlssCklhA",
+  "version": 3
+}

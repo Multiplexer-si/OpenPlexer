@@ -1,0 +1,10 @@
+{
+  "action": "exec",
+  "agent_session_id": "ses-ana-1",
+  "command": "npm test -- --watch",
+  "member": "mem-ana",
+  "mission_id": "mis-checkout",
+  "now": "2026-01-15T12:00:00.000Z",
+  "path": "",
+  "repo": "api"
+}

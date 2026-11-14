@@ -1,0 +1,10 @@
+{
+  "actions": [
+    "write"
+  ],
+  "agent_session_id": "ses-ana-1",
+  "area": "billing",
+  "expires_at": "2026-01-15T13:00:00.000Z",
+  "id": "ovr-1",
+  "scope": "once"
+}

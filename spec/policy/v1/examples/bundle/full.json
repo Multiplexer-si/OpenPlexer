@@ -1,0 +1,105 @@
+{
+  "areas": [
+    {
+      "name": "backend",
+      "patterns": [
+        "api:src/**"
+      ]
+    },
+    {
+      "name": "billing",
+      "patterns": [
+        "api:src/billing/**"
+      ]
+    },
+    {
+      "name": "frontend",
+      "patterns": [
+        "web:src/**"
+      ]
+    },
+    {
+      "name": "secrets",
+      "patterns": [
+        "*:**/.env*"
+      ],
+      "private": true
+    },
+    {
+      "generated": true,
+      "name": "lockfiles",
+      "patterns": [
+        "*:**/package-lock.json"
+      ]
+    },
+    {
+      "name": "ci",
+      "patterns": [
+        "*:.github/**"
+      ],
+      "system": true
+    }
+  ],
+  "members": {
+    "mem-ana": "backend",
+    "mem-lee": "lead"
+  },
+  "project_id": "prj-shop",
+  "repos": [
+    "api",
+    "web"
+  ],
+  "roles": {
+    "backend": {
+      "exec": [
+        "npm test"
+      ],
+      "push": [
+        "api"
+      ],
+      "read": [],
+      "write": [
+        "backend"
+      ]
+    },
+    "lead": {
+      "exec": [
+        "npm test",
+        "npm run"
+      ],
+      "push": [
+        "*"
+      ],
+      "read": [
+        "secrets"
+      ],
+      "write": [
+        "backend",
+        "billing",
+        "frontend",
+        "secrets"
+      ]
+    }
+  },
+  "temporary_grants": [
+    {
+      "actions": [
+        "write"
+      ],
+      "area": "billing",
+      "member_id": "mem-ana",
+      "mission_id": "mis-checkout",
+      "scope": "mission"
+    },
+    {
+      "actions": [
+        "read"
+      ],
+      "area": "secrets",
+      "expires_at": "2026-01-16T09:00:00+01:00",
+      "member_id": "mem-ana",
+      "scope": "until"
+    }
+  ],
+  "version": 3
+}

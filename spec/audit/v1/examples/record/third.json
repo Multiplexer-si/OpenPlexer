@@ -1,0 +1,20 @@
+{
+  "action": "override.granted",
+  "actor_member_id": "mem-lee",
+  "agent_session_id": "ses-ana-1",
+  "created_at": "2026-01-15T12:03:30.250Z",
+  "flagged": false,
+  "hash": "e1228d63016b7cfa1fcb4a48eff322a18afb68e7e4f11ca543d5a34cd0884c4f",
+  "id": "3",
+  "meta": {
+    "actions": [
+      "write"
+    ],
+    "override_id": "ovr-2",
+    "scope": "mission"
+  },
+  "prev_hash": "18c85de8fee7139003c34d8851790ebccde3bdd8ee6a65527c0a7dce300b4e3a",
+  "reason": "The discount work needs one change to the invoice total",
+  "target": "billing",
+  "workspace_id": "wsp-shop"
+}

@@ -1,0 +1,64 @@
+{
+  "entries": [
+    {
+      "action": "override.granted",
+      "actor_member_id": "mem-lee",
+      "agent_member_id": "mem-ana",
+      "agent_session_id": "ses-ana-1",
+      "created_at": "2026-01-15T12:03:30.250Z",
+      "flagged": false,
+      "hash": "e1228d63016b7cfa1fcb4a48eff322a18afb68e7e4f11ca543d5a34cd0884c4f",
+      "id": "3",
+      "meta": {
+        "actions": [
+          "write"
+        ],
+        "override_id": "ovr-2",
+        "scope": "mission"
+      },
+      "prev_hash": "18c85de8fee7139003c34d8851790ebccde3bdd8ee6a65527c0a7dce300b4e3a",
+      "reason": "The discount work needs one change to the invoice total",
+      "result": "granted",
+      "target": "billing",
+      "workspace_id": "wsp-shop"
+    },
+    {
+      "action": "event.policy-denied",
+      "actor_member_id": "mem-ana",
+      "agent_member_id": "mem-ana",
+      "agent_session_id": "ses-ana-1",
+      "created_at": "2026-01-15T12:00:00.000Z",
+      "flagged": false,
+      "hash": "18c85de8fee7139003c34d8851790ebccde3bdd8ee6a65527c0a7dce300b4e3a",
+      "id": "2",
+      "meta": {
+        "action": "write",
+        "event_id": "evt-0010"
+      },
+      "prev_hash": "06002a7506ef34b85b14456c74abeb16ee728ec31090e57bebd7e49dd7288199",
+      "reason": "area \"billing\" is writable by role lead only",
+      "result": "denied",
+      "target": "src/billing/invoice.ts",
+      "workspace_id": "wsp-shop"
+    },
+    {
+      "action": "policy.updated",
+      "actor_member_id": "mem-lee",
+      "agent_member_id": null,
+      "agent_session_id": null,
+      "created_at": "2026-01-15T11:58:00.000Z",
+      "flagged": false,
+      "hash": "06002a7506ef34b85b14456c74abeb16ee728ec31090e57bebd7e49dd7288199",
+      "id": "1",
+      "meta": {
+        "version": 3
+      },
+      "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+      "reason": null,
+      "result": "updated",
+      "target": "prj-shop",
+      "workspace_id": "wsp-shop"
+    }
+  ],
+  "next_cursor": null
+}

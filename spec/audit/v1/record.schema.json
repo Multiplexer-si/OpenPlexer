@@ -1,0 +1,84 @@
+{
+  "$id": "urn:openplexer:spec:audit:v1:record",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "One record of the hash chain. Generated from the reference.",
+  "properties": {
+    "action": {
+      "description": "What happened, as a stable token such as `override.granted`. Hashed.",
+      "type": "string"
+    },
+    "actor_member_id": {
+      "description": "The member that acted, or null. Hashed.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "agent_session_id": {
+      "description": "The agent session that the record is about, or null. Hashed.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "created_at": {
+      "description": "The time of the record, in UTC with milliseconds, such as `2026-01-15T12:00:00.000Z`. Hashed as this exact string.",
+      "type": "string"
+    },
+    "flagged": {
+      "description": "True if `reason` or `meta` quote text that moderation flagged. Hashed.",
+      "type": "boolean"
+    },
+    "hash": {
+      "description": "The SHA-256 of `prev_hash` followed by the canonical JSON of the hashed fields, in lowercase hexadecimal.",
+      "type": "string"
+    },
+    "id": {
+      "description": "The position of the record in the log, as a decimal string. Not hashed.",
+      "type": "string"
+    },
+    "meta": {
+      "additionalProperties": {},
+      "description": "More data about the action. Hashed.",
+      "propertyNames": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "prev_hash": {
+      "description": "The `hash` of the record before this one. The first record has 64 zeros.",
+      "type": "string"
+    },
+    "reason": {
+      "description": "The reason that the actor gave, or null. Hashed.",
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "target": {
+      "description": "What the action was applied to. Hashed.",
+      "type": "string"
+    },
+    "workspace_id": {
+      "description": "The team that the log belongs to. Hashed.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "workspace_id",
+    "actor_member_id",
+    "agent_session_id",
+    "action",
+    "target",
+    "reason",
+    "meta",
+    "flagged",
+    "created_at",
+    "prev_hash",
+    "hash"
+  ],
+  "title": "Audit record",
+  "type": "object"
+}

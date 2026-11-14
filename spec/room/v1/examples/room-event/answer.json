@@ -1,0 +1,18 @@
+{
+  "agent": {
+    "id": "ses-ana-1",
+    "vendor": "claude-code"
+  },
+  "at": "2026-01-15T12:00:00.000Z",
+  "body": {
+    "question_id": "evt-0006",
+    "reply_to": "evt-0006",
+    "text": "Yes. The field is discount_cents.",
+    "thread_id": "evt-0006"
+  },
+  "id": "evt-0007",
+  "mission": "mis-checkout",
+  "on_behalf_of": "mem-ana",
+  "seq": 7,
+  "type": "answer"
+}

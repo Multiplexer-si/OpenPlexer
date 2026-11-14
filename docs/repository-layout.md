@@ -8,6 +8,7 @@ This page lists the directories, binaries, packages, dependency rules, make targ
 apps/                    one directory per binary
 internal/                Go packages, one per domain
 spec/                    language-independent contracts
+tools/                   programs that write files in this repository
 docs/                    documentation
 .github/workflows/       CI
 ```
@@ -28,7 +29,7 @@ Each binary prints "not implemented yet" to standard error and exits with status
 
 ## Packages
 
-The first seven packages each hold a `doc.go` file with a package comment and no other code. The last two packages each hold one test.
+The first seven packages each hold a `doc.go` file with a package comment and no other code. The last three packages hold only tests.
 
 | Package | Owns |
 |---|---|
@@ -39,8 +40,9 @@ The first seven packages each hold a `doc.go` file with a package comment and no
 | `internal/adapter/codex` | The hook adapter for Codex. |
 | `internal/daemon` | The runtime on a developer's machine: the gate, local identity, the policy source, and offline behavior. |
 | `internal/hub` | The single-team hub server. |
-| `internal/layering` | The test that enforces the dependency rules. |
+| `internal/layering` | The tests that enforce the dependency rules, and the rule that only a test may import another module. |
 | `internal/doclinks` | The test that checks the relative links in the documentation. |
+| `internal/spectest` | The tests that check the contracts: every file under `spec/` is in its place, every schema compiles, every example validates against its schema, and every hash in an example follows from its rule. |
 
 ## Dependency rules
 
@@ -60,13 +62,18 @@ A trailing `/...` matches the package and every package under it. The last row i
 
 ## Contracts
 
-Each directory under `spec/` holds the schema, the examples, and the fixtures of one contract. The three directories hold only a README today.
+Each directory under `spec/` holds one contract: a README with the rules, and, except for canonical JSON, a `v1/` directory with the schemas and the examples. Canonical JSON defines text and not a shape, so it has no schema, and its contract is the README alone. [The contracts in `spec/`](../spec/README.md) describes the layout.
 
 | Directory | Contract |
 |---|---|
-| `spec/room` | Room events, claims, and decisions |
-| `spec/policy` | Policies |
-| `spec/audit` | Audit records and the test vectors for the hash chain |
+| `spec/canonical-json` | Canonical JSON, the byte form that the bundle signature and the audit hash are computed over |
+| `spec/policy` | The policy bundle, overrides, policy evaluation, and the signed bundle |
+| `spec/room` | Room events, which include claims and decisions, the transport envelope, and the overlap rules for claims |
+| `spec/audit` | The audit record, its hash, chain verification, and the JSON export |
+
+## Tools
+
+`tools/extract` is the TypeScript program that writes every schema and every example under `spec/`. It runs the existing TypeScript implementation, so it needs a checkout of that implementation and Node. It is not part of the Go module, and neither `make check` nor CI runs it. [Regenerate the contracts](../CONTRIBUTING.md#regenerate-the-contracts) gives the commands.
 
 ## Make targets
 
@@ -82,4 +89,6 @@ The workflow in `.github/workflows/ci.yml` runs on every pull request and on eve
 
 ## Toolchain
 
-The module is `github.com/multiplexer-si/openplexer`. It needs Go 1.27 or later and it uses only the standard library.
+The module is `github.com/multiplexer-si/openplexer`. It needs Go 1.27 or later.
+
+The three binaries use only the standard library. A test in `internal/layering` fails if a file that is not a test imports another module. The tests in `internal/spectest` use `github.com/santhosh-tekuri/jsonschema/v6` to compile and run the JSON Schemas, so `go.mod` requires that module.

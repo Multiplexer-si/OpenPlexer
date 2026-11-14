@@ -1,0 +1,5 @@
+{
+  "area": "billing",
+  "decision": "allow",
+  "rule": "area \"billing\" write is allowed by an active temporary grant"
+}

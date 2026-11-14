@@ -1,0 +1,17 @@
+{
+  "agent": {
+    "id": "ses-ana-1",
+    "vendor": "claude-code"
+  },
+  "at": "2026-01-15T12:00:00.000Z",
+  "body": {
+    "detail": "Every amount in the API is an integer number of cents. No endpoint returns a decimal amount.",
+    "scope": "api",
+    "title": "Money is an integer number of cents"
+  },
+  "id": "evt-0004",
+  "mission": "mis-checkout",
+  "on_behalf_of": "mem-ana",
+  "seq": 4,
+  "type": "decision"
+}

@@ -1,0 +1,28 @@
+{
+  "$id": "urn:openplexer:spec:policy:v1:signed-bundle",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "description": "The message that carries a policy bundle and its signature to a daemon. Generated from the reference.",
+  "properties": {
+    "bundle": {
+      "description": "A copy of the bundle, for display. The signed payload is the authority."
+    },
+    "signature": {
+      "description": "A compact JWS. Its payload is the canonical JSON of the bundle.",
+      "type": "string"
+    },
+    "version": {
+      "description": "A copy of the bundle version, for display. The signed payload is the authority.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "bundle",
+    "signature"
+  ],
+  "title": "Signed policy bundle",
+  "type": "object"
+}

@@ -1,0 +1,16 @@
+{
+  "action": "policy.updated",
+  "actor_member_id": "mem-lee",
+  "agent_session_id": null,
+  "created_at": "2026-01-15T11:58:00.000Z",
+  "flagged": false,
+  "hash": "06002a7506ef34b85b14456c74abeb16ee728ec31090e57bebd7e49dd7288199",
+  "id": "1",
+  "meta": {
+    "version": 3
+  },
+  "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+  "reason": null,
+  "target": "prj-shop",
+  "workspace_id": "wsp-shop"
+}

@@ -1,0 +1,224 @@
+{
+  "$id": "urn:openplexer:spec:policy:v1:bundle",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "description": "The policy of one project. Generated from the reference.",
+  "properties": {
+    "areas": {
+      "description": "The named sets of paths that the roles refer to.",
+      "items": {
+        "additionalProperties": {},
+        "properties": {
+          "generated": {
+            "description": "Marks lock files and build output. The flag never changes the result of an evaluation.",
+            "type": "boolean"
+          },
+          "name": {
+            "description": "The name that grants, overrides, and results use for the area.",
+            "type": "string"
+          },
+          "owner_team_id": {
+            "description": "The team that owns the area. The evaluator does not read it.",
+            "type": "string"
+          },
+          "patterns": {
+            "description": "Each pattern is `repo:glob`, `*:glob` for any repository, or a bare glob, which also means any repository.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "private": {
+            "description": "If true, a read or a write needs a grant or an override, and a more specific area cannot reopen the path.",
+            "type": "boolean"
+          },
+          "system": {
+            "description": "If true, nothing can write to the area. No grant and no override changes that.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "patterns"
+        ],
+        "type": "object"
+      },
+      "type": "array"
+    },
+    "members": {
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Maps each member id to a role name.",
+      "propertyNames": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "project_id": {
+      "description": "The project that the policy belongs to.",
+      "type": "string"
+    },
+    "repos": {
+      "description": "The names of the repositories of the project.",
+      "items": {
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "roles": {
+      "additionalProperties": {
+        "additionalProperties": {},
+        "properties": {
+          "exec": {
+            "description": "Command prefixes. A command matches a prefix if the two are equal, or if the command starts with the prefix followed by white space.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "push": {
+            "description": "The repositories that the role may push to. `*` means every repository.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "read": {
+            "description": "The names of the private areas that the role may read.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "write": {
+            "description": "The names of the areas that the role may write.",
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "read",
+          "write",
+          "exec"
+        ],
+        "type": "object"
+      },
+      "description": "Maps each role name to the grants of that role.",
+      "propertyNames": {
+        "type": "string"
+      },
+      "type": "object"
+    },
+    "temporary_grants": {
+      "description": "Grants that give one member read or write access to one area, for one mission or until a time.",
+      "items": {
+        "oneOf": [
+          {
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "enum": [
+                    "read",
+                    "write"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 2,
+                "minItems": 1,
+                "type": "array"
+              },
+              "area": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "member_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "mission_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "scope": {
+                "const": "mission",
+                "type": "string"
+              }
+            },
+            "required": [
+              "member_id",
+              "area",
+              "actions",
+              "scope",
+              "mission_id"
+            ],
+            "type": "object"
+          },
+          {
+            "additionalProperties": false,
+            "properties": {
+              "actions": {
+                "items": {
+                  "enum": [
+                    "read",
+                    "write"
+                  ],
+                  "type": "string"
+                },
+                "maxItems": 2,
+                "minItems": 1,
+                "type": "array"
+              },
+              "area": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "expires_at": {
+                "format": "date-time",
+                "pattern": "^(?:(?:[0-9][0-9][2468][048]|[0-9][0-9][13579][26]|[0-9][0-9]0[48]|[02468][048]00|[13579][26]00)-02-29|[0-9]{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12][0-9]|3[01])|(?:0[469]|11)-(?:0[1-9]|[12][0-9]|30)|(?:02)-(?:0[1-9]|1[0-9]|2[0-8])))T(?:(?:[01][0-9]|2[0-3]):[0-5][0-9]:[0-5][0-9](?:\\.[0-9]+)?(?:Z|([+-](?:[01][0-9]|2[0-3]):[0-5][0-9])))$",
+                "type": "string"
+              },
+              "member_id": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "scope": {
+                "const": "until",
+                "type": "string"
+              }
+            },
+            "required": [
+              "member_id",
+              "area",
+              "actions",
+              "scope",
+              "expires_at"
+            ],
+            "type": "object"
+          }
+        ]
+      },
+      "maxItems": 200,
+      "type": "array"
+    },
+    "version": {
+      "description": "The version of the policy. A daemon refuses a bundle whose version is lower than the version it holds for the same project.",
+      "maximum": 9007199254740991,
+      "minimum": -9007199254740991,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "version",
+    "project_id",
+    "repos",
+    "areas",
+    "roles",
+    "members"
+  ],
+  "title": "Policy bundle",
+  "type": "object"
+}
