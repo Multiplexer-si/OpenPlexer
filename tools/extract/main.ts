@@ -1,13 +1,20 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { examples, signedExample } from "./examples.ts";
-import { explain, ownedFiles, read, remove, render, write, type Files, type SealedFiles } from "./output.ts";
+import { auditChainFixtures } from "./fixtures/audit-chain.ts";
+import { canonicalJsonFixtures } from "./fixtures/canonical-json.ts";
+import { claimsOverlapFixtures } from "./fixtures/claims-overlap.ts";
+import { FIXTURE_FILE_PATH, fixtureFileSchema } from "./fixtures/format.ts";
+import { policyEvaluateFixtures } from "./fixtures/policy-evaluate.ts";
+import { signedBundleFixtures } from "./fixtures/signed-bundle.ts";
+import { validationFixtures } from "./fixtures/validation.ts";
+import { explain, ownedFiles, read, remove, render, write, type Files, type Json, type SealedFiles } from "./output.ts";
 import { loadReference, REFERENCE_COMMIT, type Reference } from "./reference.ts";
 import { contractSchemas } from "./schemas.ts";
 
 const USAGE = `usage: tsx tools/extract/main.ts <generate|check> --reference <dir> [--new-signatures]
 
-generate  Writes the schemas and the examples under spec/.
+generate  Writes the schemas, the examples, and the fixtures under spec/.
 check     Recomputes every file in memory and compares it with the committed file.
           Prints each difference and exits with status 1 if there is one.
 
@@ -24,10 +31,16 @@ interface Plan {
 }
 
 function plan(reference: Reference): Plan {
-  const values = new Map([...contractSchemas(reference), ...examples(reference)]);
+  const fixtures = [policyEvaluateFixtures, validationFixtures, claimsOverlapFixtures, canonicalJsonFixtures, auditChainFixtures].flatMap((build) => build(reference));
+  const values = new Map<string, Json>([
+    ...contractSchemas(reference),
+    ...examples(reference),
+    [FIXTURE_FILE_PATH, fixtureFileSchema()],
+    ...fixtures.map(([path, file]): [string, Json] => [path, file as unknown as Json]),
+  ]);
   return {
     files: new Map([...values].map(([path, value]) => [path, render(value)])),
-    sealed: [signedExample(reference)],
+    sealed: [signedExample(reference), ...signedBundleFixtures(reference)],
   };
 }
 

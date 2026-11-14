@@ -1,0 +1,337 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "README.md",
+        "repo": "api"
+      },
+      "name": "read outside every area is allowed",
+      "why": "A read of a path that no area matches is allowed by default."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "README.md",
+        "repo": "api"
+      },
+      "name": "write outside every area is denied",
+      "why": "A write of a path that no area matches is denied by default."
+    },
+    {
+      "expected": {
+        "area": "backend",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"backend\" write is granted to role backend"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/orders/cart.ts",
+        "repo": "api"
+      },
+      "name": "write in an area granted to the role is allowed",
+      "why": "A role that lists the area under write may write in it."
+    },
+    {
+      "expected": {
+        "area": "frontend",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"frontend\" is writable by role frontend only"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/pages/cart.tsx",
+        "repo": "web"
+      },
+      "name": "write in an area not granted to the role is denied",
+      "why": "A role may write only in the areas that it lists under write."
+    },
+    {
+      "expected": {
+        "area": "frontend",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"frontend\" is readable by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/pages/cart.tsx",
+        "repo": "web"
+      },
+      "name": "read in an area that is not private is allowed without a grant",
+      "why": "Only a private area needs a read grant."
+    },
+    {
+      "expected": {
+        "area": "backend",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"backend\" is writable by role backend only (member mem-eve has no role)"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-eve",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/orders/cart.ts",
+        "repo": "api"
+      },
+      "name": "write by a member with no role is denied",
+      "why": "A member that the bundle does not list has no grants."
+    },
+    {
+      "expected": {
+        "area": "backend",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"backend\" is readable by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-eve",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/orders/cart.ts",
+        "repo": "api"
+      },
+      "name": "read by a member with no role is allowed in an area that is not private",
+      "why": "The default read does not depend on a role."
+    },
+    {
+      "expected": {
+        "area": "backend",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"backend\" is writable by role backend only"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-dan",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/orders/cart.ts",
+        "repo": "api"
+      },
+      "name": "write by a member whose role is not defined is denied",
+      "why": "A member mapped to a role name that the bundle does not define has no grants."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/orders/cart.ts",
+        "repo": "tools"
+      },
+      "name": "a pattern with a repository does not match another repository",
+      "why": "`api:src/**` matches only in the repository `api`."
+    },
+    {
+      "expected": {
+        "area": "docs",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"docs\" is writable by role frontend only"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-rae",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "docs/setup.md",
+        "repo": "api"
+      },
+      "name": "a read grant does not allow a write",
+      "why": "A role that lists an area under read only may not write in it."
+    },
+    {
+      "expected": {
+        "area": "docs",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"docs\" write is granted to role frontend"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ben",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "docs/setup.md",
+        "repo": "api"
+      },
+      "name": "a pattern with * matches every repository",
+      "why": "`*:docs/**` matches in any repository."
+    },
+    {
+      "expected": {
+        "area": "ci",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"ci\" is readable by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": ".github/workflows/ci.yml",
+        "repo": "web"
+      },
+      "name": "a pattern without a repository matches every repository",
+      "why": "A pattern with no `:` is the same as `*:` followed by the pattern."
+    },
+    {
+      "expected": {
+        "area": "backend",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"backend\" write is granted to role backend"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/orders/cart.ts",
+        "repo": "API"
+      },
+      "name": "the repository name is compared without case",
+      "why": "`API` selects the patterns of `api`."
+    },
+    {
+      "expected": {
+        "area": "colon",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"colon\" write is granted to role backend"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src:x/y",
+        "repo": "api"
+      },
+      "name": "a pattern is split at its first colon",
+      "why": "`api:src:x/**` is the repository `api` and the glob `src:x/**`, so it matches `src:x/y` in `api`."
+    }
+  ],
+  "contract": "policy",
+  "description": "Default results outside any area, role grants, and how a pattern selects a repository.",
+  "operation": "evaluate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/evaluate.ts",
+      "packages/protocol/src/policy/glob.ts"
+    ]
+  },
+  "shared": {
+    "bundle": {
+      "areas": [
+        {
+          "name": "backend",
+          "patterns": [
+            "api:src/**"
+          ]
+        },
+        {
+          "name": "frontend",
+          "patterns": [
+            "web:src/**"
+          ]
+        },
+        {
+          "name": "docs",
+          "patterns": [
+            "*:docs/**"
+          ]
+        },
+        {
+          "name": "ci",
+          "patterns": [
+            ".github/**"
+          ]
+        },
+        {
+          "name": "colon",
+          "patterns": [
+            "api:src:x/**"
+          ]
+        }
+      ],
+      "members": {
+        "mem-ana": "backend",
+        "mem-ben": "frontend",
+        "mem-dan": "ghost",
+        "mem-rae": "reader"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "api",
+        "web"
+      ],
+      "roles": {
+        "backend": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "backend",
+            "colon"
+          ]
+        },
+        "frontend": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "frontend",
+            "docs"
+          ]
+        },
+        "reader": {
+          "exec": [],
+          "read": [
+            "docs"
+          ],
+          "write": []
+        }
+      },
+      "version": 1
+    }
+  },
+  "version": 1
+}

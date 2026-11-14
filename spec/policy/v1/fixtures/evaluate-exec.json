@@ -1,0 +1,641 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "command is granted to role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command equal to a grant is allowed",
+      "why": "A command matches a grant that is the same string."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "command is granted to role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test -- --watch",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command that continues a grant after a space is allowed",
+      "why": "A command matches a grant that it starts with, if white space follows the grant."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "command is granted to role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "make\tbuild",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command that continues a grant after a tab is allowed",
+      "why": "Any white space character ends the prefix, not only a space."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "command is granted to role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test\u000bx",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command that continues a grant after a line tabulation is allowed",
+      "why": "U+000B is white space."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "command is granted to role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test\u00a0x",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command that continues a grant after a no-break space is allowed",
+      "why": "U+00A0 is white space."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "command is granted to role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test\u2028x",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command that continues a grant after a line separator is allowed",
+      "why": "U+2028 is white space, and it is not one of the characters that deny a command."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "command is granted to role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test\ufeffx",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command that continues a grant after a zero width no-break space is allowed",
+      "why": "U+FEFF is white space."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test\u0085x",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command that continues a grant after a next line character is denied",
+      "why": "U+0085 is not white space in this contract."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test\u200bx",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command that continues a grant after a zero width space is denied",
+      "why": "U+200B is not white space in this contract."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "command is granted to role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "\ufeffnpm test\u00a0",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "white space outside ASCII around the command is ignored",
+      "why": "The command is trimmed of every white space character, here U+FEFF and U+00A0."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "\u0085npm test",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a next line character around the command is not ignored",
+      "why": "U+0085 is not white space, so it stays in the command."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm testing",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command that continues a grant inside a word is denied",
+      "why": "`npm testing` does not match the grant `npm test`."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "makefile",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command that starts with a granted word but is another word is denied",
+      "why": "`makefile` does not match the grant `make`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "command is granted to role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "  npm test  ",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "white space around the command is ignored",
+      "why": "The command is trimmed before it is compared."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm  test",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "white space inside the command is not normalized",
+      "why": "`npm  test` with two spaces does not match the grant `npm test`."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "NPM test",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command is compared with case",
+      "why": "Command matching is case-sensitive, unlike path matching."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "git",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command shorter than every grant is denied",
+      "why": "A grant is a prefix of the command, never the reverse."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "rm -rf build",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with no matching grant is denied",
+      "why": "A command is denied by default."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command contains shell chaining or redirection and cannot be matched to an exec grant"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test; rm -rf build",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with ; is denied",
+      "why": "A command that contains `;` is denied before any grant is tried."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command contains shell chaining or redirection and cannot be matched to an exec grant"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test && npm run deploy",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with && is denied",
+      "why": "A command that contains `&` is denied before any grant is tried."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command contains shell chaining or redirection and cannot be matched to an exec grant"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test | tee out.log",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with | is denied",
+      "why": "A command that contains `|` is denied before any grant is tried."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command contains shell chaining or redirection and cannot be matched to an exec grant"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test > out.log",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with > is denied",
+      "why": "A command that contains `>` is denied before any grant is tried."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command contains shell chaining or redirection and cannot be matched to an exec grant"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test < input.txt",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with < is denied",
+      "why": "A command that contains `<` is denied before any grant is tried."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command contains shell chaining or redirection and cannot be matched to an exec grant"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test `whoami`",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with a backquote is denied",
+      "why": "A command that contains a backquote is denied before any grant is tried."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command contains shell chaining or redirection and cannot be matched to an exec grant"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test $(whoami)",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with $( is denied",
+      "why": "A command that contains `$(` is denied before any grant is tried."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command contains shell chaining or redirection and cannot be matched to an exec grant"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test\nrm -rf build",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with a line feed is denied",
+      "why": "A command that contains a line feed is denied before any grant is tried."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command contains shell chaining or redirection and cannot be matched to an exec grant"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test\rrm -rf build",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with a carriage return is denied",
+      "why": "A command that contains a carriage return is denied before any grant is tried."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command contains shell chaining or redirection and cannot be matched to an exec grant"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test \"a;b\"",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "shell syntax inside quotes is still denied",
+      "why": "The check does not parse quotes."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "command is granted to role dev"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test $HOME",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a command with a $ variable is allowed",
+      "why": "`$` alone is not treated as shell syntax. Only `$(` is."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role reviewer"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test",
+        "member": "mem-ben",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a role with an empty exec list is denied",
+      "why": "A role with no command grants can run nothing."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "member mem-eve has no role"
+      },
+      "input": {
+        "action": "exec",
+        "command": "npm test",
+        "member": "mem-eve",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "",
+        "repo": "api"
+      },
+      "name": "a member with no role is denied",
+      "why": "A member that the bundle does not list has no command grants."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "command is not in the exec grants of role reviewer"
+      },
+      "input": {
+        "action": "exec",
+        "agent_session_id": "ses-1",
+        "command": "npm test",
+        "member": "mem-ben",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "exec"
+            ],
+            "area": "everything",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "",
+        "repo": "api"
+      },
+      "name": "an override does not allow a command",
+      "why": "`exec` ignores overrides and areas."
+    }
+  ],
+  "contract": "policy",
+  "description": "Command grants: exact match, prefix match, and commands that contain shell syntax.",
+  "operation": "evaluate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/evaluate.ts",
+      "packages/protocol/src/policy/glob.ts"
+    ]
+  },
+  "shared": {
+    "bundle": {
+      "areas": [
+        {
+          "name": "everything",
+          "patterns": [
+            "*:**"
+          ]
+        }
+      ],
+      "members": {
+        "mem-ana": "dev",
+        "mem-ben": "reviewer"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "api",
+        "web"
+      ],
+      "roles": {
+        "dev": {
+          "exec": [
+            "npm test",
+            "git status",
+            "make"
+          ],
+          "read": [],
+          "write": []
+        },
+        "reviewer": {
+          "exec": [],
+          "read": [],
+          "write": []
+        }
+      },
+      "version": 1
+    }
+  },
+  "version": 1
+}

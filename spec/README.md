@@ -1,6 +1,6 @@
 # spec
 
-`spec/` holds the language-independent contracts: schemas and examples. Another tool can produce and validate every message from these files without reading Go code.
+`spec/` holds the language-independent contracts: schemas, examples, and data-only compatibility fixtures. Another tool can produce and validate every message from these files, and test its behavior against them, without reading Go code.
 
 ## Contracts
 
@@ -17,11 +17,13 @@ Each README states what the contract covers, its rules, and what is still open.
 
 ```
 spec/
+	fixture-file.schema.json            the format of every fixture file
 	<contract>/
 		README.md                       the rules of the contract
 		v1/
 			<name>.schema.json          one schema
 			examples/<name>/*.json      valid instances of <name>.schema.json
+			fixtures/*.json             inputs with their expected results
 ```
 
 ## Schemas
@@ -72,7 +74,7 @@ Everything else is outside the subset, because engines disagree about it. Some e
 - A character outside the Basic Multilingual Plane. ECMA-262 without the `u` flag reads it as two UTF-16 code units, and RE2 reads it as one character.
 - U+FFFD. Some JSON readers, such as the one in the Go standard library, turn a lone surrogate escape such as `\ud800` into U+FFFD, so the pattern that the engine sees differs from the pattern in the file.
 
-In ECMA-262 and RE2, `^` matches only at the start of the value, and `$` matches only at its end. Other engines differ. In Python `re` and Perl, `$` also matches before a line feed at the end of the value, so there a timestamp followed by a line feed passes the timestamp pattern. In Ruby, `^` and `$` match at the start and the end of every line, so a value passes if any line in it matches. A validator on one of these engines replaces the anchors: the final `$` with `\Z` in Python and with `\z` in Perl and Ruby, and in Ruby the first `^` with `\A`.
+In ECMA-262 and RE2, `^` matches only at the start of the value, and `$` matches only at its end. Other engines differ. In Python `re` and Perl, `$` also matches before a line feed at the end of the value, so there a timestamp followed by a line feed passes the timestamp pattern. In Ruby, `^` and `$` match at the start and the end of every line, so a value passes if any line in it matches. A validator on one of these engines replaces the anchors: the final `$` with `\Z` in Python and with `\z` in Perl and Ruby, and in Ruby the first `^` with `\A`. Two cases of the policy fixture `validate-bundle` fail on a validator that does not. `a timed grant whose expires_at ends in a line feed is invalid` fails in Python, Perl, and Ruby. `a timed grant whose expires_at has a line before the timestamp is invalid` fails in Ruby only.
 
 ### Numbers
 
@@ -105,6 +107,47 @@ Two rules use the set: the `exec` rule of the [policy contract](policy/README.md
 
 Every file under `v1/examples/<name>/` is a valid instance of `v1/<name>.schema.json`. Every schema in a version directory has at least one example.
 
+## Fixture files
+
+A fixture file is a JSON document that lists cases for one operation of one contract. [`fixture-file.schema.json`](fixture-file.schema.json) defines the format. Its `$id` is `urn:openplexer:spec:fixture-file`.
+
+| Field | Meaning |
+|---|---|
+| `contract` | The contract directory that the file belongs to. |
+| `version` | The version of the contract. |
+| `operation` | What an implementation does with each case. The table below lists the operations. |
+| `description` | What the file covers. |
+| `reference` | The commit of the reference that produced the expected values, and the source files that the cases exercise. |
+| `schema` | For `validate` only: the `$id` of the schema under test. |
+| `shared` | Input that every case of the file shares. |
+| `cases` | The cases. |
+
+Each case has these fields.
+
+| Field | Meaning |
+|---|---|
+| `name` | A name that is unique in the file. |
+| `why` | The behavior that the case pins. |
+| `input` | What the implementation receives. |
+| `expected` | What the implementation must return. |
+| `informational` | Output of the reference that is not part of the contract, such as the wording of a message. Do not compare it. |
+
+To run a case, do the operation on `shared` and `input`, and compare the whole result with `expected`.
+
+| Operation | Contract | `shared` | `input` | `expected` |
+|---|---|---|---|---|
+| `evaluate` | policy | `bundle` | An evaluation query | `decision`, and `area` if an area decided |
+| `verify-signed-bundle` | policy | `jwks` | `signature`, a compact JWS | `ok`, and `bundle` if `ok` is true |
+| `validate` | policy, room | None | Any JSON value | `valid` |
+| `patterns-overlap` | room | None | Two patterns, `a` and `b` | `overlap` |
+| `path-sets-overlap` | room | None | Two lists of patterns, `a` and `b` | `overlap` |
+| `canonicalize` | canonical-json | None | `json`, a JSON text | `canonical`, and `sha256` of its UTF-8 bytes |
+| `verify-chain` | audit | None | `records`, in chain order | A chain verification result |
+
+For `validate`, validate `input` against the schema that `schema` names, and compare the verdict with `expected.valid`.
+
+The fixture-file schema refers to the contract schemas. A fixture file that validates against it therefore has a valid `shared`, a valid `input`, and a valid `expected` in every case. `validate` is the exception, because its inputs are invalid on purpose.
+
 ## Versions and compatibility
 
 The version of a contract is the name of its version directory. Every contract is at version 1.
@@ -124,6 +167,7 @@ A change inside version 1 may do only these things.
 
 - Add an optional field to an object that accepts unknown fields. No conforming writer sent a field with that name before, so no conforming message changes its meaning. A receiver that was built before the change keeps the new field as an unknown field.
 - Add an example.
+- Add a fixture case that pins behavior that version 1 already has.
 - Correct a description or a README.
 
 A new optional field can change the verdict of a schema on a message that is not conforming. Today `{"summary": "x", "files2": 5}` is a valid `status` body, because `files2` is an unknown field. If version 1 later defines `files2` as a string, that body becomes invalid. No conforming writer sends `files2` today, so the change breaks no conforming message.
@@ -137,6 +181,7 @@ Any other change needs a new version, in a new directory `v2/` next to `v1/`. Th
 - Reject a message that a conforming version 1 writer can send.
 - Accept a value of a defined field that version 1 rejects, such as a new value in a closed list. A version 1 receiver rejects a message with that value.
 - Change one byte of the canonical JSON output, of the input to the audit hash, or of the payload that a bundle signature covers.
+- Change the expected result of a fixture case.
 
 Each contract README says what else the rule means for that contract.
 
@@ -149,8 +194,9 @@ The existing TypeScript implementation is the reference. Every file under `spec/
 - A generated schema is the output of the JSON Schema export of Zod, the validation library that the reference uses. The descriptions in it are authored. The extractor writes `[0-9]` where Zod writes `\d` in a pattern, and `0-9` where Zod writes `\d` inside a class, to keep the pattern inside [the portable subset](#patterns).
 - An authored schema covers a shape that the reference defines only as a TypeScript type or in code. Each contract README lists the authored parts.
 - An example is authored. The extractor fails if the reference rejects one.
+- A fixture input is authored. Every expected value is computed by the reference code.
 
-[Regenerate the contracts](../CONTRIBUTING.md#regenerate-the-contracts) gives the commands.
+[Regenerate the contracts and fixtures](../CONTRIBUTING.md#regenerate-the-contracts-and-fixtures) gives the commands.
 
 ## What checks these files
 
@@ -162,5 +208,9 @@ The Go tests in `internal/spectest` run in `make check`. They need neither the r
 - Every example validates against its schema, and every schema in a version directory has an example.
 - A number outside the range of a double gets the verdict that [Numbers](#numbers) gives.
 - Every audit record among the examples has the hash that [the hash rule](audit/README.md#the-hash-of-a-record) gives, and the export example verifies.
+- Every fixture file validates against the fixture-file schema.
+- For every `validate` case, the schema under test belongs to the contract and the version of the fixture file, and the verdict of the published schema equals the verdict of the reference.
+- For every `canonicalize` case, `sha256` is the SHA-256 of `canonical`.
+- For every `verify-chain` case, the verification steps of the audit contract give the expected result.
 
 The tests read numbers as doubles, and a number outside their range as infinity, as [Numbers](#numbers) says. The validator in the tests compiles each pattern with the Go engine. Inside [the portable subset](#patterns), the Go engine and an ECMA-262 engine give the same verdict on a value made only of characters of the Basic Multilingual Plane, with no lone surrogate.

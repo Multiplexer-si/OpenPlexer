@@ -1,0 +1,399 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/orders/cart.ts",
+        "b": "src/orders/cart.ts"
+      },
+      "name": "two equal paths overlap",
+      "why": "Two paths overlap only if they are equal after normalization."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/orders/cart.ts",
+        "b": "src/orders/total.ts"
+      },
+      "name": "two different paths do not overlap",
+      "why": "Two paths overlap only if they are equal after normalization."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "./src/orders/cart.ts",
+        "b": "src/orders/cart.ts"
+      },
+      "name": "a leading ./ is ignored",
+      "why": "A leading `./` is removed before the comparison."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src//orders/cart.ts",
+        "b": "src/orders/cart.ts"
+      },
+      "name": "a repeated slash is ignored",
+      "why": "`//` is the same as `/`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src\\orders\\cart.ts",
+        "b": "src/orders/cart.ts"
+      },
+      "name": "a backslash is a separator",
+      "why": "`\\` is replaced by `/`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/orders/../orders/cart.ts",
+        "b": "src/orders/cart.ts"
+      },
+      "name": "a .. segment is not resolved",
+      "why": "The claims dialect does not resolve `..`. The policy dialect does."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/orders/Cart.ts",
+        "b": "src/orders/cart.ts"
+      },
+      "name": "paths that differ in case do not overlap",
+      "why": "The claims dialect is case-sensitive. The policy dialect is not: see `the path is compared without case` in the policy fixture `evaluate-paths`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "SRC/**",
+        "b": "src/orders/cart.ts"
+      },
+      "name": "a glob that differs in case from a path does not overlap",
+      "why": "The claims dialect is case-sensitive for globs too."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/**",
+        "b": "src/orders/cart.ts"
+      },
+      "name": "a glob overlaps a path that it matches",
+      "why": "A glob and a path overlap if the glob matches the path."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/orders/cart.ts",
+        "b": "src/**"
+      },
+      "name": "a path overlaps a glob that matches it",
+      "why": "The order of the two arguments does not matter."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/*.ts",
+        "b": "src/orders/cart.ts"
+      },
+      "name": "a * glob does not overlap a deeper path",
+      "why": "`*` does not cross `/`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/**",
+        "b": "src"
+      },
+      "name": "dir/** does not overlap the directory itself",
+      "why": "The claims dialect has no rule that makes `dir/**` match `dir`. The policy dialect has that rule."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/**/cart.ts",
+        "b": "src/cart.ts"
+      },
+      "name": "**/ in the middle matches zero directories",
+      "why": "`a/**/b` matches `a/b`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/[ab].ts",
+        "b": "src/a.ts"
+      },
+      "name": "a class matches a listed character",
+      "why": "`[ab]` matches one of the listed characters."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/a[!]b",
+        "b": "src/a/b"
+      },
+      "name": "[!] matches a slash",
+      "why": "`[!]` is a negated class with no members, which matches any one character, as in the policy dialect."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "t[!a]x",
+        "b": "t/x"
+      },
+      "name": "a negated class with members matches a slash",
+      "why": "`[!a]` matches every character that is not `a`, `/` included, as in the policy dialect."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "t[!a]x",
+        "b": "t\ud83d\ude00x"
+      },
+      "name": "a negated class does not match one character outside the Basic Multilingual Plane",
+      "why": "A class matches one UTF-16 code unit, and U+1F600 is two, as in the policy dialect."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "t[.-0]x",
+        "b": "t/x"
+      },
+      "name": "a class whose range holds the slash matches a slash",
+      "why": "`[.-0]` is the range from `.` to `0`, which holds `/`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/[^]",
+        "b": "src/\n"
+      },
+      "name": "[^] matches a line feed",
+      "why": "`[^]` is the same as `[!]`, and it matches a line terminator."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/[!]x]",
+        "b": "src/ax]"
+      },
+      "name": "[!]x] is [!] followed by x and ]",
+      "why": "The class ends at the first `]` after its first character."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/[]x]",
+        "b": "src/x"
+      },
+      "name": "a class whose first character is ] does not match its other member",
+      "why": "The reference reads `[]` as a class that matches nothing, so the glob matches no path. The seventh open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/[]x]",
+        "b": "src/]"
+      },
+      "name": "a class whose first character is ] does not match that character",
+      "why": "The reference reads `[]` as a class that matches nothing, so the glob matches no path. The seventh open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/[]]",
+        "b": "src/]"
+      },
+      "name": "[]] does not match ]",
+      "why": "The reference reads `[]` as a class that matches nothing, so the glob matches no path. The seventh open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/?.ts",
+        "b": "src/ab.ts"
+      },
+      "name": "a ? does not match two characters",
+      "why": "`?` matches exactly one character."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/**",
+        "b": "src/a\nb.ts"
+      },
+      "name": "** does not match a line feed",
+      "why": "`**` matches any run of characters except the four line terminators, as in the policy dialect."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/**",
+        "b": "src/a\rb.ts"
+      },
+      "name": "** does not match a carriage return",
+      "why": "`**` matches any run of characters except the four line terminators."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/**",
+        "b": "src/a\u2028b.ts"
+      },
+      "name": "** does not match U+2028",
+      "why": "`**` matches any run of characters except the four line terminators."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/**",
+        "b": "src/a\u2029b.ts"
+      },
+      "name": "** does not match U+2029",
+      "why": "`**` matches any run of characters except the four line terminators."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/*",
+        "b": "src/a\nb.ts"
+      },
+      "name": "* matches a line feed",
+      "why": "Only `**` excludes the line terminators. `*` excludes only `/`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/a\nb.ts",
+        "b": "src/a\nb.ts"
+      },
+      "name": "two equal paths with a line feed overlap",
+      "why": "A path is compared as text, so a line terminator in it changes nothing."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/**",
+        "b": "src/orders/*.ts"
+      },
+      "name": "two globs overlap when one literal prefix starts the other",
+      "why": "Two globs overlap if the literal prefix of one is a prefix of the other."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "src/orders/**",
+        "b": "src/billing/**"
+      },
+      "name": "two globs under different directories do not overlap",
+      "why": "Neither literal prefix starts the other, and neither glob matches the other prefix."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "**/invites/*",
+        "b": "api/**"
+      },
+      "name": "a glob with an empty literal prefix overlaps every glob",
+      "why": "An empty prefix is a prefix of everything. The comparison reports more overlaps than exist, on purpose."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/*.ts",
+        "b": "src/*.js"
+      },
+      "name": "two globs with the same prefix overlap even if no path matches both",
+      "why": "`a/*.ts` and `a/*.js` share the prefix `a/`. The comparison reports more overlaps than exist, on purpose."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/a[b",
+        "b": "src/a[c*"
+      },
+      "name": "the literal prefix ends at a [ that starts no class",
+      "why": "The literal prefix of `src/a[b` is `src/a`, although its `[` starts no class and matches itself. The two prefixes are equal, so the globs overlap."
+    }
+  ],
+  "contract": "room",
+  "description": "Whether two patterns of the claims dialect overlap.",
+  "operation": "patterns-overlap",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/hub/src/claims/overlap.ts"
+    ]
+  },
+  "version": 1
+}

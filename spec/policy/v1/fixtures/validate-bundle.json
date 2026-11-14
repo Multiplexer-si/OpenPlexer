@@ -1,0 +1,619 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "version": 1
+      },
+      "name": "the six required fields is valid",
+      "why": "`temporary_grants` is optional."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "members: Invalid input: expected record, received undefined"
+      },
+      "input": {
+        "areas": [],
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "version": 1
+      },
+      "name": "a missing members is invalid",
+      "why": "`members` is required, even when it is empty."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "version: Invalid input: expected int, received number"
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "version": 1.5
+      },
+      "name": "a version with a fraction is invalid",
+      "why": "`version` is an integer."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "note": "draft",
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "version": 1
+      },
+      "name": "an unknown top-level field is valid",
+      "why": "A bundle keeps fields that the schema does not name."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "areas": [
+          {
+            "color": "red",
+            "name": "a",
+            "patterns": [
+              "a/**"
+            ]
+          }
+        ],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "version": 1
+      },
+      "name": "an area with an unknown field is valid",
+      "why": "An area keeps fields that the schema does not name."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "areas.0.patterns: Invalid input: expected array, received undefined"
+      },
+      "input": {
+        "areas": [
+          {
+            "name": "a"
+          }
+        ],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "version": 1
+      },
+      "name": "an area without patterns is invalid",
+      "why": "`patterns` is required in an area."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {
+          "dev": {
+            "exec": [],
+            "read": [],
+            "write": []
+          }
+        },
+        "version": 1
+      },
+      "name": "a role without push is valid",
+      "why": "`push` is optional in a role."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "roles.dev.exec: Invalid input: expected array, received undefined"
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {
+          "dev": {
+            "read": [],
+            "write": []
+          }
+        },
+        "version": 1
+      },
+      "name": "a role without exec is invalid",
+      "why": "`read`, `write`, and `exec` are required in a role."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "members.mem-ana: Invalid input: expected string, received number"
+      },
+      "input": {
+        "areas": [],
+        "members": {
+          "mem-ana": 1
+        },
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "version": 1
+      },
+      "name": "a member mapped to a number is invalid",
+      "why": "`members` maps a member id to a role name."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "member_id": "mem-ana",
+            "mission_id": "mis-1",
+            "scope": "mission"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a mission grant is valid",
+      "why": "A grant with scope mission needs `mission_id`."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "read",
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-16T09:00:00Z",
+            "member_id": "mem-ana",
+            "scope": "until"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a timed grant is valid",
+      "why": "A grant with scope until needs `expires_at`."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "read",
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-16T09:00:00+01:00",
+            "member_id": "mem-ana",
+            "scope": "until"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a timed grant with a UTC offset is valid",
+      "why": "`expires_at` accepts `Z` or an offset such as `+01:00`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0.expires_at: Invalid ISO datetime"
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "read",
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-16T09:00:00",
+            "member_id": "mem-ana",
+            "scope": "until"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a timed grant without a UTC offset is invalid",
+      "why": "`expires_at` needs `Z` or an offset."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0.expires_at: Invalid ISO datetime"
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "read",
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-16",
+            "member_id": "mem-ana",
+            "scope": "until"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a timed grant with a date and no time is invalid",
+      "why": "`expires_at` is a full timestamp."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0.expires_at: Invalid ISO datetime"
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "read",
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-16T09:00:00Z\n",
+            "member_id": "mem-ana",
+            "scope": "until"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a timed grant whose expires_at ends in a line feed is invalid",
+      "why": "The pattern matches the whole value. In Python `re`, Perl, and Ruby a final `$` also matches before a trailing line feed, so a validator there replaces it, as `spec/README.md` says."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0.expires_at: Invalid ISO datetime"
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "read",
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "x\n2026-01-16T09:00:00Z",
+            "member_id": "mem-ana",
+            "scope": "until"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a timed grant whose expires_at has a line before the timestamp is invalid",
+      "why": "The pattern matches the whole value. In Ruby `^` also matches after a line feed, so a validator there replaces it, as `spec/README.md` says."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0.mission_id: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "member_id": "mem-ana",
+            "scope": "mission"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a mission grant without mission_id is invalid",
+      "why": "The scope decides which field is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0: Unrecognized key: \"expires_at\""
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-16T09:00:00Z",
+            "member_id": "mem-ana",
+            "mission_id": "mis-1",
+            "scope": "mission"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a mission grant with expires_at is invalid",
+      "why": "A grant accepts no field outside its scope."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0: Unrecognized key: \"note\""
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "member_id": "mem-ana",
+            "mission_id": "mis-1",
+            "note": "x",
+            "scope": "mission"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a grant with an unknown field is invalid",
+      "why": "A temporary grant is a closed object, unlike the rest of the bundle."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0.scope: Invalid discriminator value. Expected 'mission' | 'until'"
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "member_id": "mem-ana",
+            "mission_id": "mis-1",
+            "scope": "once"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a grant with scope once is invalid",
+      "why": "A temporary grant has scope `mission` or `until`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0.actions: Too small: expected array to have >=1 items"
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [],
+            "area": "billing",
+            "member_id": "mem-ana",
+            "mission_id": "mis-1",
+            "scope": "mission"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a grant with no actions is invalid",
+      "why": "`actions` has one or two entries."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0.actions.0: Invalid option: expected one of \"read\"|\"write\""
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "exec"
+            ],
+            "area": "billing",
+            "member_id": "mem-ana",
+            "mission_id": "mis-1",
+            "scope": "mission"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a grant for exec is invalid",
+      "why": "A temporary grant covers `read` and `write` only."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "read",
+              "read"
+            ],
+            "area": "billing",
+            "member_id": "mem-ana",
+            "mission_id": "mis-1",
+            "scope": "mission"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a grant that lists one action twice is valid",
+      "why": "The schema limits the length of `actions`, not its content."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "temporary_grants.0.member_id: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "areas": [],
+        "members": {},
+        "project_id": "prj-shop",
+        "repos": [],
+        "roles": {},
+        "temporary_grants": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "member_id": "",
+            "mission_id": "mis-1",
+            "scope": "mission"
+          }
+        ],
+        "version": 1
+      },
+      "name": "a grant with an empty member_id is invalid",
+      "why": "`member_id` is not empty."
+    }
+  ],
+  "contract": "policy",
+  "description": "Valid and invalid policy bundles.",
+  "operation": "validate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/types.ts"
+    ]
+  },
+  "schema": "urn:openplexer:spec:policy:v1:bundle",
+  "version": 1
+}

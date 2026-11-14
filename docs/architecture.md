@@ -77,7 +77,7 @@ A package moves out of `internal/` when an outside importer needs it, and not be
 
 ## Why the contracts live in `spec/`
 
-The formats are meant to outlive this implementation. A Room event or an audit record that is defined only by Go types can be implemented only by reading Go. The contracts in [`spec/`](../spec/README.md) define each format with a README of rules, and the schemas and examples that apply to it, so the Go code is one implementation of the contract and not the definition of it.
+The formats are meant to outlive this implementation. A Room event or an audit record that is defined only by Go types can be implemented only by reading Go. The contracts in [`spec/`](../spec/README.md) define each format with a README of rules, and the schemas, examples, and fixtures that apply to it, so the Go code is one implementation of the contract and not the definition of it.
 
 ## What is not decided yet
 

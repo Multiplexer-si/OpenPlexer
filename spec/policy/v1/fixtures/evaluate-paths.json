@@ -1,0 +1,419 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "area": "src",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"src\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/a.ts",
+        "repo": "api"
+      },
+      "name": "a plain relative path matches",
+      "why": "The baseline for this file."
+    },
+    {
+      "expected": {
+        "area": "src",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"src\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "./src/a.ts",
+        "repo": "api"
+      },
+      "name": "a leading ./ is removed",
+      "why": "`.` segments are dropped."
+    },
+    {
+      "expected": {
+        "area": "src",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"src\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/./a.ts",
+        "repo": "api"
+      },
+      "name": "a . segment inside the path is removed",
+      "why": "`.` segments are dropped."
+    },
+    {
+      "expected": {
+        "area": "src",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"src\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/sub/../a.ts",
+        "repo": "api"
+      },
+      "name": "a .. segment removes the segment before it",
+      "why": "`..` is resolved before the path is matched."
+    },
+    {
+      "expected": {
+        "area": "src",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"src\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "docs/../src/a.ts",
+        "repo": "api"
+      },
+      "name": "a path that enters the area through .. matches",
+      "why": "The area is chosen from the resolved path."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/../README.md",
+        "repo": "api"
+      },
+      "name": "a path that leaves the area through .. does not match",
+      "why": "The area is chosen from the resolved path, not from its first segment."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is absolute or escapes the project root; denied"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "../src/a.ts",
+        "repo": "api"
+      },
+      "name": "a path that starts with .. is denied",
+      "why": "A path that escapes the project root is denied."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is absolute or escapes the project root; denied"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/../../src/a.ts",
+        "repo": "api"
+      },
+      "name": "a path that escapes the root after entering it is denied",
+      "why": "The escape is detected at any depth."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is absolute or escapes the project root; denied"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "/src/a.ts",
+        "repo": "api"
+      },
+      "name": "an absolute path is denied",
+      "why": "A path that starts with `/` is denied."
+    },
+    {
+      "expected": {
+        "area": "src",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"src\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src\\a.ts",
+        "repo": "api"
+      },
+      "name": "a backslash is a separator",
+      "why": "`\\` is replaced by `/` before anything else."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is absolute or escapes the project root; denied"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "\\src\\a.ts",
+        "repo": "api"
+      },
+      "name": "a path that starts with a backslash is denied",
+      "why": "After the replacement the path is absolute."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is absolute or escapes the project root; denied"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "C:/src/a.ts",
+        "repo": "api"
+      },
+      "name": "a path with a drive letter is denied",
+      "why": "A path that starts with a letter and `:` is denied, although the area `drive`, which the role may write, matches the path."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is absolute or escapes the project root; denied"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "c:src/a.ts",
+        "repo": "api"
+      },
+      "name": "a drive letter without a slash is denied",
+      "why": "The drive check needs only the letter and the colon. The area `drive` matches this path too."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is absolute or escapes the project root; denied"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "C:/src/a.ts",
+        "repo": "api"
+      },
+      "name": "a read of a path with a drive letter is denied",
+      "why": "The drive check comes before the default for reads, which would allow the read."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is absolute or escapes the project root; denied"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "c:src/a.ts",
+        "repo": "api"
+      },
+      "name": "a read of a drive letter without a slash is denied",
+      "why": "The drive check comes before the default for reads, which would allow the read."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "\u00e9:src/a.ts",
+        "repo": "api"
+      },
+      "name": "a letter outside ASCII before a colon is not a drive letter",
+      "why": "The drive check takes only the ASCII letters. No area matches `\u00e9:src/a.ts`, so the read is allowed by default."
+    },
+    {
+      "expected": {
+        "area": "src",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"src\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src//a.ts",
+        "repo": "api"
+      },
+      "name": "an empty segment is dropped",
+      "why": "`//` is the same as `/`."
+    },
+    {
+      "expected": {
+        "area": "src",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"src\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/sub/",
+        "repo": "api"
+      },
+      "name": "a trailing slash is dropped",
+      "why": "The trailing empty segment is dropped."
+    },
+    {
+      "expected": {
+        "area": "src",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"src\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "SRC/A.TS",
+        "repo": "api"
+      },
+      "name": "the path is compared without case",
+      "why": "Path matching is case-insensitive. The claims dialect in the Room contract is case-sensitive."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is absolute or escapes the project root; denied"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "../secrets.txt",
+        "repo": "api"
+      },
+      "name": "a read of a path that escapes the root is denied",
+      "why": "The escape is denied before the default for reads applies."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is absolute or escapes the project root; denied"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "/etc/passwd",
+        "repo": "api"
+      },
+      "name": "a read of an absolute path is denied",
+      "why": "An absolute path is denied before the default for reads applies."
+    }
+  ],
+  "contract": "policy",
+  "description": "How a path is made canonical before it is matched, and which paths are denied outright.",
+  "operation": "evaluate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/evaluate.ts",
+      "packages/protocol/src/policy/glob.ts"
+    ]
+  },
+  "shared": {
+    "bundle": {
+      "areas": [
+        {
+          "name": "src",
+          "patterns": [
+            "api:src/**"
+          ]
+        },
+        {
+          "name": "drive",
+          "patterns": [
+            "api:c:/**",
+            "api:c:src/**"
+          ]
+        }
+      ],
+      "members": {
+        "mem-ana": "dev"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "api",
+        "web"
+      ],
+      "roles": {
+        "dev": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "src",
+            "drive"
+          ]
+        }
+      },
+      "version": 1
+    }
+  },
+  "version": 1
+}

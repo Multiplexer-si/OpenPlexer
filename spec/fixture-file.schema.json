@@ -1,0 +1,610 @@
+{
+  "$defs": {
+    "case": {
+      "additionalProperties": false,
+      "properties": {
+        "expected": {
+          "description": "What the implementation must return. Compare the whole value."
+        },
+        "informational": {
+          "description": "Output of the reference that an implementation need not reproduce, such as the wording of a message.",
+          "type": "object"
+        },
+        "input": {
+          "description": "What the implementation receives."
+        },
+        "name": {
+          "description": "Unique in the file.",
+          "minLength": 1,
+          "type": "string"
+        },
+        "why": {
+          "description": "The behavior that the case pins.",
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "name",
+        "why",
+        "input",
+        "expected"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "urn:openplexer:spec:fixture-file",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "evaluate"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Evaluate the query in `input` against the bundle in `shared`.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "area": {
+                      "type": "string"
+                    },
+                    "decision": {
+                      "enum": [
+                        "allow",
+                        "deny"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "decision"
+                  ],
+                  "type": "object"
+                },
+                "informational": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "rule": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "rule"
+                  ],
+                  "type": "object"
+                },
+                "input": {
+                  "$ref": "urn:openplexer:spec:policy:v1:eval-query"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "policy"
+            ]
+          },
+          "schema": false,
+          "shared": {
+            "additionalProperties": false,
+            "properties": {
+              "bundle": {
+                "$ref": "urn:openplexer:spec:policy:v1:bundle"
+              }
+            },
+            "required": [
+              "bundle"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "shared"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "validate"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Validate `input` against the schema that `schema` names.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "valid"
+                  ],
+                  "type": "object"
+                },
+                "informational": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "reason"
+                  ],
+                  "type": "object"
+                },
+                "input": {}
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "policy",
+              "room"
+            ]
+          },
+          "schema": {
+            "type": "string"
+          },
+          "shared": false
+        },
+        "required": [
+          "schema"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "patterns-overlap"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Decide whether two claim patterns overlap.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "overlap": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "overlap"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "a": {
+                      "type": "string"
+                    },
+                    "b": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "a",
+                    "b"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "room"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "path-sets-overlap"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Decide whether any pattern of one claim overlaps any pattern of another claim.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "overlap": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "overlap"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "a": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "b": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "a",
+                    "b"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "room"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "canonicalize"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Parse the JSON text in `input.json` and write the value as canonical JSON.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "canonical": {
+                      "type": "string"
+                    },
+                    "sha256": {
+                      "pattern": "^[0-9a-f]{64}$",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "canonical",
+                    "sha256"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "json": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "json"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "canonical-json"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "verify-chain"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Verify the records in `input.records`, in the order given, from the genesis hash.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "$ref": "urn:openplexer:spec:audit:v1:verify-result"
+                },
+                "informational": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "hash_inputs": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "hash_inputs"
+                  ],
+                  "type": "object"
+                },
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "records": {
+                      "items": {
+                        "$ref": "urn:openplexer:spec:audit:v1:record"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "records"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "audit"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "verify-signed-bundle"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Verify the compact JWS in `input.signature` against the key set in `shared`.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "bundle": {
+                          "$ref": "urn:openplexer:spec:policy:v1:bundle"
+                        },
+                        "ok": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "ok",
+                        "bundle"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "ok": {
+                          "const": false
+                        }
+                      },
+                      "required": [
+                        "ok"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "informational": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "reason": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "reason"
+                  ],
+                  "type": "object"
+                },
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "signature": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "signature"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "policy"
+            ]
+          },
+          "schema": false,
+          "shared": {
+            "additionalProperties": false,
+            "properties": {
+              "jwks": {
+                "$ref": "urn:openplexer:spec:policy:v1:jwks"
+              }
+            },
+            "required": [
+              "jwks"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "shared"
+        ]
+      }
+    }
+  ],
+  "description": "A list of cases for one operation of one contract. Each case pairs an input with the result that the reference gives.",
+  "properties": {
+    "cases": {
+      "items": {
+        "$ref": "#/$defs/case"
+      },
+      "minItems": 1,
+      "type": "array"
+    },
+    "contract": {
+      "description": "The contract directory that the file belongs to.",
+      "enum": [
+        "policy",
+        "room",
+        "audit",
+        "canonical-json"
+      ]
+    },
+    "description": {
+      "minLength": 1,
+      "type": "string"
+    },
+    "operation": {
+      "description": "What an implementation does with each case.",
+      "enum": [
+        "evaluate",
+        "validate",
+        "patterns-overlap",
+        "path-sets-overlap",
+        "canonicalize",
+        "verify-chain",
+        "verify-signed-bundle"
+      ]
+    },
+    "reference": {
+      "additionalProperties": false,
+      "properties": {
+        "commit": {
+          "description": "The commit of the existing TypeScript implementation that produced the expected values.",
+          "pattern": "^[0-9a-f]{8}$",
+          "type": "string"
+        },
+        "sources": {
+          "description": "The files of that implementation that the cases exercise, relative to its root.",
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "type": "array"
+        }
+      },
+      "required": [
+        "commit",
+        "sources"
+      ],
+      "type": "object"
+    },
+    "schema": {
+      "description": "For `validate`: the `$id` of the schema under test.",
+      "type": "string"
+    },
+    "shared": {
+      "description": "Input that every case of the file shares.",
+      "type": "object"
+    },
+    "version": {
+      "const": 1,
+      "description": "The version of the contract."
+    }
+  },
+  "required": [
+    "contract",
+    "version",
+    "operation",
+    "description",
+    "reference",
+    "cases"
+  ],
+  "title": "Fixture file",
+  "type": "object"
+}

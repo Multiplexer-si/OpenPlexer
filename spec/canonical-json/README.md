@@ -6,6 +6,12 @@ Two other contracts depend on it. The signature of a [policy bundle](../policy/R
 
 The contract has no schema, because it defines text and not a shape.
 
+## Files
+
+| File | Content |
+|---|---|
+| `v1/fixtures/canonicalize.json` | JSON texts, each with its canonical form and the SHA-256 of that form. |
+
 ## The input
 
 The input is a JSON text. Parse it with these rules.
@@ -82,6 +88,7 @@ The reference is at commit `7d80045a`.
 | Part | Source |
 |---|---|
 | The rules on this page | Authored from `apps/hub/src/policy/canonical.ts` and from the behavior of `JSON.parse` and `JSON.stringify` in ECMA-262. |
+| Every expected value in the fixtures | Computed by the `canonicalJson` function of the reference, on the value that `JSON.parse` gives for the input text. |
 
 ## Intentional differences from the reference
 
@@ -93,7 +100,7 @@ The reference is at commit `7d80045a`.
 
 Each item is behavior of the reference that looks unintended, or a choice that the owner has not made. Version 1 keeps the behavior of the reference until the owner decides.
 
-1. **A number beyond the range of a double is written as `null`.** `1e400` becomes `null`, so two different inputs have the same canonical form.
-2. **An integer above 2^53 is rounded.** `9007199254740993` becomes `9007199254740992`. A hash or a signature covers the rounded value, not the value in the input.
+1. **A number beyond the range of a double is written as `null`.** `1e400` becomes `null`, so two different inputs have the same canonical form. The fixture case `a number too large for a double is written as null` pins the behavior.
+2. **An integer above 2^53 is rounded.** `9007199254740993` becomes `9007199254740992`. A hash or a signature covers the rounded value, not the value in the input. The fixture case `a large integer is rounded to the nearest double` pins the behavior.
 3. **A repeated key is accepted.** The later member wins without an error.
 4. **The rules look the same as RFC 8785 (JSON Canonicalization Scheme) for every input that RFC 8785 accepts.** Nothing in this repository tests that. If the owner adopts RFC 8785 by name, an implementation can use an existing library, and the cases that RFC 8785 rejects, such as an unpaired surrogate, need a decision.

@@ -1,0 +1,465 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "canonical": "{}",
+        "sha256": "44136fa355b3678a1146ad16f7e8649e94fb4fc21fe77e8310c060f61caaff8a"
+      },
+      "input": {
+        "json": "{}"
+      },
+      "name": "an empty object",
+      "why": "An empty object is `{}`."
+    },
+    {
+      "expected": {
+        "canonical": "[]",
+        "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+      },
+      "input": {
+        "json": "[]"
+      },
+      "name": "an empty array",
+      "why": "An empty array is `[]`."
+    },
+    {
+      "expected": {
+        "canonical": "null",
+        "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      },
+      "input": {
+        "json": "null"
+      },
+      "name": "null at the top level",
+      "why": "A value that is not an object or an array is written as JSON writes it."
+    },
+    {
+      "expected": {
+        "canonical": "\"text\"",
+        "sha256": "1e1d0f251d3a76fa2b1bfc81164078572623403887db02988b504b0492e9f076"
+      },
+      "input": {
+        "json": "\"text\""
+      },
+      "name": "a string at the top level",
+      "why": "A value that is not an object or an array is written as JSON writes it."
+    },
+    {
+      "expected": {
+        "canonical": "{\"a\":[1,2],\"b\":\"x y\"}",
+        "sha256": "7cbf9a1925627414ac77c5981864910898c7d4e7bfcb7a1f141c20abf7bd66df"
+      },
+      "input": {
+        "json": "{ \"a\" : [ 1 , 2 ] ,\n\t\"b\" : \"x y\" }"
+      },
+      "name": "white space between tokens is removed",
+      "why": "The output has no white space outside strings."
+    },
+    {
+      "expected": {
+        "canonical": "{\"a\":3,\"b\":1,\"c\":2}",
+        "sha256": "caeaf5292bf86b1e0922a3f2320a457f31e1fa5e9a5dc42f0e114890b4c6dee9"
+      },
+      "input": {
+        "json": "{\"b\":1,\"c\":2,\"a\":3}"
+      },
+      "name": "keys are sorted",
+      "why": "The keys of an object are written in ascending order."
+    },
+    {
+      "expected": {
+        "canonical": "{\"a\":[3,2,1],\"z\":{\"a\":null,\"b\":[{\"x\":2,\"y\":1}]}}",
+        "sha256": "296fe42b04782049806cfe079c9d21dfb9522eb4d275f2d7b1a4ea6ac0a07fe8"
+      },
+      "input": {
+        "json": "{\"z\":{\"b\":[{\"y\":1,\"x\":2}],\"a\":null},\"a\":[3,2,1]}"
+      },
+      "name": "keys are sorted at every depth and arrays keep their order",
+      "why": "Sorting applies to every object. It never reorders an array."
+    },
+    {
+      "expected": {
+        "canonical": "{\"a\":{},\"b\":[],\"c\":[[],{}]}",
+        "sha256": "925c673adf18ca220ee7da7f5e344def6f8c60be721b2ef68c93a67ee7d9c883"
+      },
+      "input": {
+        "json": "{\"a\":{},\"b\":[],\"c\":[[],{}]}"
+      },
+      "name": "empty containers inside containers",
+      "why": "Empty objects and arrays are written at any depth."
+    },
+    {
+      "expected": {
+        "canonical": "{\"1\":4,\"B\":2,\"_\":3,\"a\":1}",
+        "sha256": "252d913dbf7a714498b12382080ea52cd97e36a1038404f7a46ae19ffb2cae14"
+      },
+      "input": {
+        "json": "{\"a\":1,\"B\":2,\"_\":3,\"1\":4}"
+      },
+      "name": "keys are compared by code unit, so uppercase sorts before lowercase",
+      "why": "The order is by UTF-16 code unit, not by any alphabet: `1` < `B` < `_` < `a`."
+    },
+    {
+      "expected": {
+        "canonical": "{\"\":3,\"a\":2,\"ab\":1}",
+        "sha256": "f7c822ad8e8a17f47959dac9f7e1f4368bdd1d91df2bf4775b803230904bb635"
+      },
+      "input": {
+        "json": "{\"ab\":1,\"a\":2,\"\":3}"
+      },
+      "name": "a key that is a prefix of another sorts first",
+      "why": "The empty key sorts before every other key."
+    },
+    {
+      "expected": {
+        "canonical": "{\"1\":3,\"10\":2,\"9\":1}",
+        "sha256": "99cddc35d3f643b0039ce45d340f10ac126734cba2a96e55fa2d10018faf6b55"
+      },
+      "input": {
+        "json": "{\"9\":1,\"10\":2,\"1\":3}"
+      },
+      "name": "keys that look like numbers are sorted as strings",
+      "why": "`10` sorts before `9`."
+    },
+    {
+      "expected": {
+        "canonical": "{\"\ud83d\ude00\":2,\"\uff5e\":1}",
+        "sha256": "c44a324298283d910e4120a2ff3c2d7746b4a5c9f2d9625c67f6abb58748cf31"
+      },
+      "input": {
+        "json": "{\"\uff5e\":1,\"\ud83d\ude00\":2}"
+      },
+      "name": "keys are sorted by UTF-16 code unit, not by code point",
+      "why": "U+1F600 is the surrogate pair D83D DE00 in UTF-16, so it sorts before U+FF5E. Sorted by code point or by UTF-8 byte, U+FF5E would sort first."
+    },
+    {
+      "expected": {
+        "canonical": "{\"a\":3,\"b\":2}",
+        "sha256": "493df656a590967c84d643bdd55ee956fb53262c51b154115083c9bcc4c992e3"
+      },
+      "input": {
+        "json": "{\"a\":1,\"b\":2,\"a\":3}"
+      },
+      "name": "a repeated key keeps the last value",
+      "why": "The parser decides: the later member replaces the earlier one."
+    },
+    {
+      "expected": {
+        "canonical": "{\"name\":\"Zo\u00eb \u65e5\u672c\"}",
+        "sha256": "ec4050015e701da0f39ac07c522466f75e75f30fef7bab81fd6a213e830fad11"
+      },
+      "input": {
+        "json": "{\"name\":\"Zo\u00eb \u65e5\u672c\"}"
+      },
+      "name": "characters outside ASCII are written as they are",
+      "why": "Only the characters that JSON requires are escaped."
+    },
+    {
+      "expected": {
+        "canonical": "\"\ud83d\ude00\"",
+        "sha256": "7a0c50b92434b015545fe93ab723db2d4b2cdd14a441405624a9ce8be29f1d5a"
+      },
+      "input": {
+        "json": "\"\ud83d\ude00\""
+      },
+      "name": "a character outside the Basic Multilingual Plane is written as it is",
+      "why": "A valid surrogate pair is written as the character, which is four bytes in UTF-8."
+    },
+    {
+      "expected": {
+        "canonical": "\"<script>alert(1 & 2)</script>\"",
+        "sha256": "3535856dab6e6700b601fc41010dc96bd4af00f8450d310d94d7a0d302e7cf96"
+      },
+      "input": {
+        "json": "\"<script>alert(1 & 2)</script>\""
+      },
+      "name": "<, >, and & are not escaped",
+      "why": "Characters that are special in HTML are written as they are."
+    },
+    {
+      "expected": {
+        "canonical": "\"a\u2028b\u2029c\"",
+        "sha256": "18c6bee2c10cadf5dec772e4b216f9060a21814a302ce989e183178afcf43e1a"
+      },
+      "input": {
+        "json": "\"a\u2028b\u2029c\""
+      },
+      "name": "U+2028 and U+2029 are not escaped",
+      "why": "The two line separator characters are written as they are."
+    },
+    {
+      "expected": {
+        "canonical": "\"say \\\"hi\\\" \\\\ bye\"",
+        "sha256": "05dabad52a6671eb821b166e6cbdea0b6eb96809823b532504f47eb8b7292607"
+      },
+      "input": {
+        "json": "\"say \\\"hi\\\" \\\\ bye\""
+      },
+      "name": "the quote and the backslash are escaped",
+      "why": "`\"` is written as `\\\"` and `\\` as `\\\\`."
+    },
+    {
+      "expected": {
+        "canonical": "\"a/b\"",
+        "sha256": "f5effa31772a3689cb116700c569f4b72d765290968f099016a899ab6c1e4ee3"
+      },
+      "input": {
+        "json": "\"a\\/b\""
+      },
+      "name": "the slash is not escaped",
+      "why": "An escaped `/` in the input is written as `/`."
+    },
+    {
+      "expected": {
+        "canonical": "\"\\b\\t\\n\\f\\r\"",
+        "sha256": "6e62a535b04fecef3e63e0a67bc2a0657383132fed040cbe7fcb725ed72bae27"
+      },
+      "input": {
+        "json": "\"\\b\\t\\n\\f\\r\""
+      },
+      "name": "control characters with a short escape use it",
+      "why": "U+0008, U+0009, U+000A, U+000C, and U+000D are written as `\\b`, `\\t`, `\\n`, `\\f`, and `\\r`."
+    },
+    {
+      "expected": {
+        "canonical": "\"\\u0000\\u0001\\u000b\\u001f\"",
+        "sha256": "85f7dbf2425e6ed4de2c75c09c26eaf31a3ca1dc2949cbff2c542523083959d6"
+      },
+      "input": {
+        "json": "\"\\u0000\\u0001\\u000B\\u001F\""
+      },
+      "name": "other control characters use \\u with lowercase hexadecimal",
+      "why": "Every other character below U+0020 is written as `\\u00xx` in lowercase."
+    },
+    {
+      "expected": {
+        "canonical": "\"\"",
+        "sha256": "6fe76740e12a93d5598fe685cb6ad3d3c94e44609065a56866b69647772026ec"
+      },
+      "input": {
+        "json": "\"\\u007f\""
+      },
+      "name": "U+007F is not escaped",
+      "why": "Only the characters below U+0020 are control characters for this purpose."
+    },
+    {
+      "expected": {
+        "canonical": "\"\\ud800\"",
+        "sha256": "8c0c59dd0d275aadcd462a5fe12eb352cbdfeaf961eae4f85a4660521df7d2f5"
+      },
+      "input": {
+        "json": "\"\\ud800\""
+      },
+      "name": "a lone high surrogate is escaped",
+      "why": "A surrogate with no partner is written as a `\\u` escape in lowercase."
+    },
+    {
+      "expected": {
+        "canonical": "\"x\\udc00y\"",
+        "sha256": "c91a0081735934cc581d12f23aeca7297432094058539a9936c69c0f9d038170"
+      },
+      "input": {
+        "json": "\"x\\uDC00y\""
+      },
+      "name": "a lone low surrogate is escaped",
+      "why": "A surrogate with no partner is written as a `\\u` escape in lowercase."
+    },
+    {
+      "expected": {
+        "canonical": "\"\\ude00\\ud83d\"",
+        "sha256": "cb91344a6d81e322394ff40c42c8ce0564018477448256a47bf611ed63dfe1e9"
+      },
+      "input": {
+        "json": "\"\\ude00\\ud83d\""
+      },
+      "name": "surrogates in the wrong order are both escaped",
+      "why": "A low surrogate followed by a high surrogate is not a pair."
+    },
+    {
+      "expected": {
+        "canonical": "1",
+        "sha256": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b"
+      },
+      "input": {
+        "json": "1.0"
+      },
+      "name": "1.0 is written as 1",
+      "why": "A number with a zero fraction is written as an integer."
+    },
+    {
+      "expected": {
+        "canonical": "2.5",
+        "sha256": "b8736b999909049671d0ea075a42b308a5fbe2df1854899123fe09eb0ee9de61"
+      },
+      "input": {
+        "json": "2.50"
+      },
+      "name": "2.50 is written as 2.5",
+      "why": "Trailing zeros of a fraction are dropped."
+    },
+    {
+      "expected": {
+        "canonical": "0",
+        "sha256": "5feceb66ffc86f38d952786c6d696c79c2dbc239dd4e91b46729d73a27fb57e9"
+      },
+      "input": {
+        "json": "-0"
+      },
+      "name": "-0 is written as 0",
+      "why": "Negative zero loses its sign."
+    },
+    {
+      "expected": {
+        "canonical": "1000",
+        "sha256": "40510175845988f13f6162ed8526f0b09f73384467fa855e1e79b44a56562a58"
+      },
+      "input": {
+        "json": "1E3"
+      },
+      "name": "an exponent is expanded below 1e21",
+      "why": "`1E3` is written as `1000`."
+    },
+    {
+      "expected": {
+        "canonical": "100000000000000000000",
+        "sha256": "c344e9487bfbd5c4e03c9fb90d62a5dde5e00b54d55c46e9f4a803aea162b80c"
+      },
+      "input": {
+        "json": "1e20"
+      },
+      "name": "1e20 is written in full",
+      "why": "The largest power of ten that is written without an exponent."
+    },
+    {
+      "expected": {
+        "canonical": "1e+21",
+        "sha256": "241c4643fa70b1dcde1205b71be4e3bebb17e9f880c8e1a33d0ead6c27271d3c"
+      },
+      "input": {
+        "json": "1e21"
+      },
+      "name": "1e21 is written as 1e+21",
+      "why": "From 1e21 on, a number is written with an exponent and an explicit `+`."
+    },
+    {
+      "expected": {
+        "canonical": "-1e+21",
+        "sha256": "d1b781c586a6becc3c6bba876b259268cbead2c6085737f4799c2fd0607f55a4"
+      },
+      "input": {
+        "json": "-1e21"
+      },
+      "name": "-1e21 is written as -1e+21",
+      "why": "The limit of 1e21 is a limit on the absolute value."
+    },
+    {
+      "expected": {
+        "canonical": "0.000001",
+        "sha256": "159fb29a827ad04b260aa6c8ab6d8637f8f2b38af5c4f3cb49d6a21205e040f8"
+      },
+      "input": {
+        "json": "0.000001"
+      },
+      "name": "0.000001 is written in full",
+      "why": "The smallest power of ten that is written without an exponent."
+    },
+    {
+      "expected": {
+        "canonical": "1e-7",
+        "sha256": "5b33e02f2c5103a05d32f6ba9cb058294452bfbf393967f68bb30c1bdcbbab22"
+      },
+      "input": {
+        "json": "0.0000001"
+      },
+      "name": "0.0000001 is written as 1e-7",
+      "why": "Below 1e-6, a number is written with an exponent."
+    },
+    {
+      "expected": {
+        "canonical": "-1e-7",
+        "sha256": "48113218bfca2aac308c535f12c50222d0b564be656573126bb5dc63386cc95e"
+      },
+      "input": {
+        "json": "-0.0000001"
+      },
+      "name": "-0.0000001 is written as -1e-7",
+      "why": "The limit of 1e-6 is a limit on the absolute value."
+    },
+    {
+      "expected": {
+        "canonical": "9007199254740992",
+        "sha256": "c681da39d7273a6a24c15c9cac3a75526ff2ecf8ba4ee60346a0c70c8163bdb2"
+      },
+      "input": {
+        "json": "9007199254740993"
+      },
+      "name": "a large integer is rounded to the nearest double",
+      "why": "Every number is an IEEE 754 double. 9007199254740993 is not one, so it becomes 9007199254740992."
+    },
+    {
+      "expected": {
+        "canonical": "123456789012345680000",
+        "sha256": "725abf175290195635e55a971cf88e02a46d6d56e964ec2d8bc47614b9559062"
+      },
+      "input": {
+        "json": "123456789012345678901"
+      },
+      "name": "a 21-digit integer is rounded and written in full",
+      "why": "The shortest digits that identify the double are written, then zeros."
+    },
+    {
+      "expected": {
+        "canonical": "3.141592653589793",
+        "sha256": "f0a1b7875844c3ae0d28f3cc44e9a6241da33e2623a69f0a71263158dffb4e87"
+      },
+      "input": {
+        "json": "3.141592653589793238"
+      },
+      "name": "extra digits of a fraction are dropped",
+      "why": "The shortest digits that identify the double are written."
+    },
+    {
+      "expected": {
+        "canonical": "5e-324",
+        "sha256": "c46e7ca1be4c8734f373a56530787288fa2058d73d07855e9247e949f811a42a"
+      },
+      "input": {
+        "json": "5e-324"
+      },
+      "name": "the smallest double",
+      "why": "A subnormal number is written with an exponent."
+    },
+    {
+      "expected": {
+        "canonical": "null",
+        "sha256": "74234e98afe7498fb5daf1f36ac2d78acc339464f950703b8c019892f982b90b"
+      },
+      "input": {
+        "json": "1e400"
+      },
+      "name": "a number too large for a double is written as null",
+      "why": "1e400 is read as infinity, and infinity is written as `null`."
+    },
+    {
+      "expected": {
+        "canonical": "[1,0,1e+21,1e-7,-1.5]",
+        "sha256": "abbbb980bcd384899fe0be71952ed1de144f331b228759b765a43cc04a65bfb1"
+      },
+      "input": {
+        "json": "[1.0,-0,1e21,0.0000001,-1.50]"
+      },
+      "name": "numbers inside an array",
+      "why": "Number rules apply at any depth."
+    }
+  ],
+  "contract": "canonical-json",
+  "description": "JSON texts and their canonical form. `sha256` is the SHA-256 of the UTF-8 bytes of `canonical`, in lowercase hexadecimal.",
+  "operation": "canonicalize",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/hub/src/policy/canonical.ts"
+    ]
+  },
+  "version": 1
+}

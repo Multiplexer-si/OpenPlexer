@@ -1,0 +1,339 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "area": "src",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"src\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/app.ts",
+        "repo": "api"
+      },
+      "name": "the only matching area decides",
+      "why": "With one matching area, that area decides."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is writable by role biller only"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "the more specific area denies a member granted only the broader area",
+      "why": "The area whose pattern has the longer literal prefix wins."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is granted to role biller"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ben",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "the more specific area allows a member granted only that area",
+      "why": "The area whose pattern has the longer literal prefix wins."
+    },
+    {
+      "expected": {
+        "area": "src",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"src\" is writable by role dev only"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ben",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/app.ts",
+        "repo": "api"
+      },
+      "name": "a grant on the more specific area does not open the broader area",
+      "why": "A grant applies only where its area wins."
+    },
+    {
+      "expected": {
+        "area": "tie-b",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"tie-b\" is writable by role admin, biller only"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "shared/util.ts",
+        "repo": "api"
+      },
+      "name": "an exact tie denies when the first area allows and the second denies",
+      "why": "Between two areas of equal specificity, the one that denies wins."
+    },
+    {
+      "expected": {
+        "area": "tie-a",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"tie-a\" is writable by role admin, dev only"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ben",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "shared/util.ts",
+        "repo": "api"
+      },
+      "name": "an exact tie denies when the first area denies and the second allows",
+      "why": "The tie rule does not depend on the order of the areas."
+    },
+    {
+      "expected": {
+        "area": "tie-a",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"tie-a\" write is granted to role admin"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-lee",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "shared/util.ts",
+        "repo": "api"
+      },
+      "name": "an exact tie allows when both areas allow, and reports the first area",
+      "why": "When neither area denies, the area listed first in the bundle is reported."
+    },
+    {
+      "expected": {
+        "area": "pkg-nested",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"pkg-nested\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "pkg/a/b.ts",
+        "repo": "api"
+      },
+      "name": "equal prefixes: the pattern with more segments wins and allows",
+      "why": "When the literal prefixes have the same length, the pattern with more `/`-separated segments wins."
+    },
+    {
+      "expected": {
+        "area": "pkg-nested",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"pkg-nested\" is writable by role dev only"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ben",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "pkg/a/b.ts",
+        "repo": "api"
+      },
+      "name": "equal prefixes: the pattern with more segments wins and denies",
+      "why": "When the literal prefixes have the same length, the pattern with more `/`-separated segments wins."
+    },
+    {
+      "expected": {
+        "area": "lib",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"lib\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "lib/vendor/special/x.ts",
+        "repo": "api"
+      },
+      "name": "an area competes with its most specific matching pattern",
+      "why": "Each area is ranked by the best of its patterns that match the path."
+    },
+    {
+      "expected": {
+        "area": "vendor",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"vendor\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "lib/vendor/y.ts",
+        "repo": "api"
+      },
+      "name": "a pattern that does not match the path does not rank its area",
+      "why": "Only the patterns that match the path count."
+    },
+    {
+      "expected": {
+        "area": "long-prefix",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"long-prefix\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "abc/d/e",
+        "repo": "api"
+      },
+      "name": "a longer literal prefix wins over more segments",
+      "why": "The prefix length is compared first. `abc/d**` has the prefix `abc/d` and two segments, and it wins over `abc/*/e`, which has a shorter prefix and three segments."
+    }
+  ],
+  "contract": "policy",
+  "description": "Which area decides when several areas match one path.",
+  "operation": "evaluate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/evaluate.ts",
+      "packages/protocol/src/policy/glob.ts"
+    ]
+  },
+  "shared": {
+    "bundle": {
+      "areas": [
+        {
+          "name": "src",
+          "patterns": [
+            "api:src/**"
+          ]
+        },
+        {
+          "name": "billing",
+          "patterns": [
+            "api:src/billing/**"
+          ]
+        },
+        {
+          "name": "tie-a",
+          "patterns": [
+            "api:shared/**"
+          ]
+        },
+        {
+          "name": "tie-b",
+          "patterns": [
+            "api:shared/**"
+          ]
+        },
+        {
+          "name": "pkg-any",
+          "patterns": [
+            "api:pkg/**"
+          ]
+        },
+        {
+          "name": "pkg-nested",
+          "patterns": [
+            "api:pkg/*/**"
+          ]
+        },
+        {
+          "name": "lib",
+          "patterns": [
+            "api:lib/**",
+            "api:lib/vendor/special/**"
+          ]
+        },
+        {
+          "name": "vendor",
+          "patterns": [
+            "api:lib/vendor/**"
+          ]
+        },
+        {
+          "name": "long-prefix",
+          "patterns": [
+            "api:abc/d**"
+          ]
+        },
+        {
+          "name": "more-segments",
+          "patterns": [
+            "api:abc/*/e"
+          ]
+        }
+      ],
+      "members": {
+        "mem-ana": "dev",
+        "mem-ben": "biller",
+        "mem-lee": "admin"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "api",
+        "web"
+      ],
+      "roles": {
+        "admin": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "tie-a",
+            "tie-b"
+          ]
+        },
+        "biller": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "billing",
+            "tie-b",
+            "pkg-any"
+          ]
+        },
+        "dev": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "src",
+            "tie-a",
+            "pkg-nested",
+            "lib",
+            "long-prefix"
+          ]
+        }
+      },
+      "version": 1
+    }
+  },
+  "version": 1
+}

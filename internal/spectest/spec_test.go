@@ -1,8 +1,9 @@
 // Package spectest checks the contracts under spec/ against themselves: every
 // file is where the layout puts it, every schema compiles, every example
-// validates against its schema, and every hash in an example follows from its
-// documented rule. It reads the files in this process, so that the test cache
-// sees every file the result depends on.
+// validates against its schema, every hash in an example or a fixture follows
+// from its documented rule, and every fixture file validates against the
+// fixture-file schema. It reads the files in this process, so that the test
+// cache sees every file the result depends on.
 package spectest
 
 import (
@@ -203,9 +204,11 @@ func leaves(err error) []*jsonschema.ValidationError {
 // and nothing would say so.
 var layout = []*regexp.Regexp{
 	regexp.MustCompile(`^README\.md$`),
+	regexp.MustCompile(`^fixture-file\.schema\.json$`),
 	regexp.MustCompile(`^[a-z0-9-]+/README\.md$`),
 	regexp.MustCompile(`^[a-z0-9-]+/v[1-9][0-9]*/[a-z0-9-]+\.schema\.json$`),
 	regexp.MustCompile(`^[a-z0-9-]+/v[1-9][0-9]*/examples/[a-z0-9-]+/[a-z0-9.-]+\.json$`),
+	regexp.MustCompile(`^[a-z0-9-]+/v[1-9][0-9]*/fixtures/[a-z0-9-]+\.json$`),
 }
 
 func TestEveryFileIsInTheLayout(t *testing.T) {

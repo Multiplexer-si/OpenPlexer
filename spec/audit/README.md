@@ -14,6 +14,7 @@ The field descriptions are in the schemas. This page gives the rules that a sche
 | `v1/examples/record/` | The first three records of one chain. |
 | `v1/examples/export/` | The export of those three records. |
 | `v1/examples/verify-result/` | The result for those three records, and the result after a change to the second record. |
+| `v1/fixtures/verify-chain.json` | One valid chain of six records, an empty chain, and thirteen altered copies of the valid chain, each with its verification result. |
 
 ## The hash of a record
 
@@ -99,6 +100,7 @@ The reference is at commit `7d80045a`.
 | The hashes in the examples | Computed by the `computeAuditHash` function of the reference. |
 | `result` in the export example | Computed by the extractor. The reference computes it in SQL. |
 | The `verify-result` examples | Computed by the loop that is described below. |
+| Every expected value in the fixtures | Computed by the same loop. |
 
 The verification function of the reference reads its records from a Postgres database, so the extractor cannot call it. The extractor runs the same loop over a list of records, and it calls the `computeAuditHash` function of the reference for every hash. The loop is in `tools/extract/audit.ts`.
 
@@ -107,7 +109,7 @@ The verification function of the reference reads its records from a Postgres dat
 | Difference | Reason |
 |---|---|
 | Verification takes a list of records. The reference reads the rows of one team from its database, in ascending order of `id`. | A verifier outside the hub has an exported file and no database. |
-| Verification hashes `created_at` as the exact string in the record. The reference reads `created_at` from its database as a time and writes it again as UTC with milliseconds before it hashes, so the form of the stored time cannot change its result. | A verifier outside the hub has only the string. The JSON export of the reference always writes UTC with milliseconds, so the two agree on every export that the reference writes. |
+| Verification hashes `created_at` as the exact string in the record. The reference reads `created_at` from its database as a time and writes it again as UTC with milliseconds before it hashes, so the form of the stored time cannot change its result. The fixture case `a changed created_at format breaks the chain at that record` therefore has no counterpart in the reference. | A verifier outside the hub has only the string. The JSON export of the reference always writes UTC with milliseconds, so the two agree on every export that the reference writes. |
 
 ## Open questions
 
@@ -116,6 +118,6 @@ Each item is behavior of the reference that looks unintended, or a choice that t
 1. **The export lists the newest record first, and verification needs the oldest first.** Nothing in the export states the order.
 2. **An export can be filtered,** for example by member, by action, or by time. A filtered export skips records, so it does not verify, and nothing in the export says that a filter was applied.
 3. **The CSV export of the reference has no `workspace_id` column.** That field is hashed, so a CSV export cannot be verified without it. Version 1 covers the JSON export only.
-4. **The hash does not cover `id`.**
+4. **The hash does not cover `id`.** The fixture case `changed ids do not break the chain` pins the behavior.
 5. **`workspace_id` is the name that the reference uses for a team.** The name is hashed, so version 1 keeps it.
 6. **Numbers in `meta` follow the number rules of canonical JSON.** A number that a double cannot hold exactly is hashed as the rounded value. See the open questions of [canonical JSON](../canonical-json/README.md#open-questions).
