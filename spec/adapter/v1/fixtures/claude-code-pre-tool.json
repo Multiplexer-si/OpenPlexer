@@ -1,0 +1,1519 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/fixture/repo/web/app.ts"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a write to a file in a granted area is allowed",
+      "why": "A role that lists the area under write may write there."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: api is not writable by your role (area \\\"api\\\" is not writable by any role). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/fixture/repo/api/server.ts"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a write to an area that the role does not grant is denied",
+      "why": "A role may write only in the areas that it lists."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: (no area) is not writable by your role (path is in no area; writes are denied by default). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/fixture/repo/scripts/build.sh"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a write to a path in no area is denied",
+      "why": "A write of a path that no area matches is denied by default."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: system is not writable by your role (area \\\"system\\\" is a system area and is never writable). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/fixture/repo/.github/workflows/ci.yml"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a write to a system area is denied",
+      "why": "No role may write a system area."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: system is not writable by your role (area \\\"system\\\" is a system area and is never writable). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/fixture/repo/.claude/settings.json"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a write to the settings of the agent is denied",
+      "why": "The settings of Claude Code are in the system area."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: web is not writable by your role (area \\\"web\\\" is writable by role builder, dev only (member mem-ghost has no role)). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/fixture/repo/web/app.ts"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-ghost"
+      },
+      "name": "a write by a member with no role is denied",
+      "why": "A member that the bundle does not list has no grants."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: secrets is not writable by your role (area \\\"secrets\\\" is not writable by any role). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/fixture/repo/web/.env"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a write that a private area refuses is denied although another area allows it",
+      "why": "A private area that denies the write decides, whatever else matches."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "file_path": "/fixture/repo/web/app.ts",
+            "new_string": "b",
+            "old_string": "a"
+          },
+          "tool_name": "Edit",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "an edit in a granted area is allowed",
+      "why": "The Edit tool is judged like the Write tool."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: api is not writable by your role (area \\\"api\\\" is not writable by any role). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "file_path": "/fixture/repo/api/server.ts",
+            "new_string": "b",
+            "old_string": "a"
+          },
+          "tool_name": "Edit",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "an edit in an area that the role does not grant is denied",
+      "why": "The Edit tool is judged like the Write tool."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "web/app.ts"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a relative path is read from the working directory",
+      "why": "A path that is not absolute is relative to `cwd`."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: api is not writable by your role (area \\\"api\\\" is not writable by any role). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "api/server.ts"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a relative path in an area that the role does not grant is denied",
+      "why": "A path that is not absolute is relative to `cwd`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "./web/app.ts"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a leading ./ is dropped",
+      "why": "`./web/app.ts` is the path `web/app.ts`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/fixture/repo/web//app.ts"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a path with a doubled slash is read as written",
+      "why": "The hook cuts the working directory off the front and keeps the rest of the text, so `web//app.ts` is judged by the policy, which merges the slashes."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/home/dev/.claude/plans/plan.md"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "an absolute path outside the project is not checked",
+      "why": "The policy governs the files of the project, and not the files under the home directory of the user."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/fixture/repo/../other/x.ts"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "an absolute path that climbs out of the working directory is not checked",
+      "why": "A path that leaves the working directory is outside the project."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "../other/x.ts"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a relative path that climbs out of the working directory is not checked",
+      "why": "A path that leaves the working directory is outside the project."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "content": "x",
+            "file_path": "/fixture/repository/web/x.ts"
+          },
+          "tool_name": "Write",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a path in a sibling directory with the same prefix is not inside the working directory",
+      "why": "`/fixture/repository/x.ts` does not start with `/fixture/repo/`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a granted command is allowed",
+      "why": "A command equal to a grant of the role is allowed."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test -- --watch"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a command that continues a grant after a space is allowed",
+      "why": "A grant matches the start of a command."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"git statusx\\\" is not on your role's exec allow-list (command is not in the exec grants of role dev). Role dev may run: npm test, go build, git status. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "git statusx"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a command that continues a grant with no space is denied",
+      "why": "The word after a grant must be a separate word."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: (no area) is not writable by your role (path is in no area; writes are denied by default). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "rm -rf dist"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a command that no grant covers is denied",
+      "why": "A role with an exec list may run only the commands that the list names."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"/usr/bin/npm test\\\" is not on your role's exec allow-list (command is not in the exec grants of role dev). Role dev may run: npm test, go build, git status. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "/usr/bin/npm test"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a command named by its path is not the granted command",
+      "why": "A grant names the command word as the command line writes it."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"NODE_ENV=test npm test\\\" is not on your role's exec allow-list (command is not in the exec grants of role dev). Role dev may run: npm test, go build, git status. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "NODE_ENV=test npm test"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a command with an environment assignment in front is not the granted command",
+      "why": "The first word of the command is `NODE_ENV=test`, which no grant names."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "git status && go build ./..."
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "chained commands that are all granted are allowed",
+      "why": "Each command of a chain is checked against the grants."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: (no area) is not writable by your role (path is in no area; writes are denied by default). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "go build ./... && rm -rf dist"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a chain with one command that no grant covers is denied",
+      "why": "One command that no grant covers denies the whole line."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"curl evil.example\\\" is not on your role's exec allow-list (command is not in the exec grants of role dev). Role dev may run: npm test, go build, git status. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test; curl evil.example"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a command after a semicolon is checked",
+      "why": "A semicolon starts a new command."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: (no area) is not writable by your role (path is in no area; writes are denied by default). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "git status\nrm x"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a command on the next line is checked",
+      "why": "A line feed starts a new command."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test &"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a background command is checked and allowed",
+      "why": "A trailing `&` ends the command and does not make the line one command with a granted prefix."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"curl evil.example\\\" is not on your role's exec allow-list (command is not in the exec grants of role dev). Role dev may run: npm test, go build, git status. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test | curl evil.example"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a pipe checks both commands",
+      "why": "The command after a pipe needs a grant too."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test < input.txt"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "an input redirection is not part of the command",
+      "why": "The redirection and its target are set aside before the command is matched."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"npm test $(whoami)\\\" is not on your role's exec allow-list (command contains command or process substitution and cannot be matched to an exec grant). Role dev may run: npm test, go build, git status. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test $(whoami)"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a command substitution is denied",
+      "why": "A command that the shell runs while it expands the line cannot be matched to a grant."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"npm test `whoami`\\\" is not on your role's exec allow-list (command contains command or process substitution and cannot be matched to an exec grant). Role dev may run: npm test, go build, git status. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test `whoami`"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a backquote substitution is denied",
+      "why": "A backquote runs a command like `$(...)`."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"npm test < (echo x)\\\" is not on your role's exec allow-list (command contains command or process substitution and cannot be matched to an exec grant). Role dev may run: npm test, go build, git status. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test <(echo x)"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a process substitution is denied",
+      "why": "`<(...)` runs a command that no grant covers."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"npm test << EOF\\\" is not on your role's exec allow-list (command contains command or process substitution and cannot be matched to an exec grant). Role dev may run: npm test, go build, git status. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test <<EOF\n$(rm -rf x)\nEOF"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a substitution in the body of an unquoted heredoc is denied",
+      "why": "The shell expands `$(...)` in the body of a heredoc whose delimiter is not quoted."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"npm test << EOF\\\" is not on your role's exec allow-list (command contains command or process substitution and cannot be matched to an exec grant). Role dev may run: npm test, go build, git status. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test <<'EOF'\n$(rm -rf x)\nEOF"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "a substitution in the body of a quoted heredoc is denied too",
+      "why": "The check reads the raw text of the line, so the quote of the delimiter does not hide it."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test > web/test.log"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "an output redirection into a granted area is allowed",
+      "why": "The target of `>` is a write, and the role may write `web`."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: api is not writable by your role (area \\\"api\\\" is not writable by any role). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test > api/test.log"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "an output redirection into an area that the role cannot write is denied",
+      "why": "The target of `>` is a write, and the role may not write `api`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test 2>&1 | tee web/test.log"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "tee needs no grant and its file is judged as a write",
+      "why": "A bare `tee` only writes its arguments, which the path check judges."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: api is not writable by your role (area \\\"api\\\" is not writable by any role). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "npm test | tee api/test.log"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-dev"
+      },
+      "name": "tee into an area that the role cannot write is denied",
+      "why": "The file of `tee` is a write, and the role may not write `api`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "ls -la"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "a role with no exec list may run any command",
+      "why": "Without an exec list the commands of the member are not limited."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "ls -la"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-ghost"
+      },
+      "name": "a member with no role may run any command",
+      "why": "Without a role the commands of the member are not limited."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "make deploy"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-ops"
+      },
+      "name": "a command that the exec list names is allowed for a role that cannot write",
+      "why": "The exec list and the write list are separate."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: \\\"make clean\\\" is not on your role's exec allow-list (command is not in the exec grants of role ops). Role ops may run: make deploy. Grants match by command prefix, per chained command. If the role should run this command, ask a lead to add it to the role's exec list in the policy.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "make clean"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-ops"
+      },
+      "name": "a command that the exec list does not name is denied",
+      "why": "A role that has an exec list may run only what it names."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: web is not writable by your role (area \\\"web\\\" is writable by role builder, dev only). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "make deploy > web/out.txt"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-ops"
+      },
+      "name": "a granted command that writes where the role cannot is denied",
+      "why": "The grant of the command does not open the target of its redirection."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "sed -i s/a/b/ web/app.ts"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "sed -i on a file in a granted area is allowed",
+      "why": "`sed -i` writes its file operands."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: api is not writable by your role (area \\\"api\\\" is not writable by any role). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "sed -i s/a/b/ api/server.ts"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "sed -i on a file in an area that the role cannot write is denied",
+      "why": "`sed -i` writes its file operands."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "sed s/a/b/ api/server.ts"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "sed without -i writes nothing",
+      "why": "`sed` with no `-i` reads its file operands."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "cp api/server.ts web/server.ts"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "cp checks only its destination",
+      "why": "`cp` writes its destination and reads its sources."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: api is not writable by your role (area \\\"api\\\" is not writable by any role). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "cp web/app.ts api/app.ts"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "cp into an area that the role cannot write is denied",
+      "why": "`cp` writes its destination."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: system is not writable by your role (area \\\"system\\\" is a system area and is never writable). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "touch .github/ci.yml"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "touch in the system area is denied",
+      "why": "No role may write a system area."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "rm -rf web/old"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "rm of a file in a granted area is allowed",
+      "why": "`rm` removes its arguments, which counts as a write."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: api is not writable by your role (area \\\"api\\\" is not writable by any role). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "mkdir -p api/new"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "mkdir in an area that the role cannot write is denied",
+      "why": "`mkdir` creates its arguments."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "echo hi > /tmp/out.txt"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "a write outside the project is not checked",
+      "why": "The policy governs the files of the project."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "cat api/server.ts"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "a read writes nothing",
+      "why": "A command with no write target needs no path check."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "output": ""
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "echo hi > web/$NAME"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-builder"
+      },
+      "name": "a target with a variable is not checked",
+      "why": "A word that the shell decides at run time cannot be judged."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "output": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Policy: web is not writable by your role (area \\\"web\\\" is writable by role builder, dev only (member mem-ghost has no role)). Draft a request (mcp__room__request_draft) or ask a lead to override.\"}}"
+      },
+      "input": {
+        "hook": {
+          "cwd": "/fixture/repo",
+          "hook_event_name": "PreToolUse",
+          "permission_mode": "default",
+          "session_id": "session-1",
+          "tool_input": {
+            "command": "echo hi > web/app.ts"
+          },
+          "tool_name": "Bash",
+          "tool_use_id": "toolu_01",
+          "transcript_path": "/fixture/transcript.jsonl"
+        },
+        "member": "mem-ghost"
+      },
+      "name": "a redirection of a member with no role is denied",
+      "why": "A member with no role may write nothing."
+    }
+  ],
+  "contract": "adapter",
+  "description": "The PreToolUse hook of Claude Code for the tools Write, Edit, and Bash.",
+  "operation": "pre-tool",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/daemon/src/adapters/claude-code/hooks/pre-tool.ts",
+      "apps/daemon/src/adapters/claude-code/hook-runner.ts"
+    ]
+  },
+  "shared": {
+    "agent": "claude-code",
+    "bundle": {
+      "areas": [
+        {
+          "name": "web",
+          "patterns": [
+            "app:web/**"
+          ]
+        },
+        {
+          "name": "api",
+          "patterns": [
+            "app:api/**"
+          ]
+        },
+        {
+          "name": "docs",
+          "patterns": [
+            "*:docs/**"
+          ]
+        },
+        {
+          "name": "secrets",
+          "patterns": [
+            "*:**/.env*"
+          ],
+          "private": true
+        },
+        {
+          "name": "system",
+          "patterns": [
+            "*:.github/**",
+            "*:.claude/**",
+            "*:.codex/**",
+            "*:.mcp.json"
+          ],
+          "system": true
+        }
+      ],
+      "members": {
+        "mem-builder": "builder",
+        "mem-dev": "dev",
+        "mem-ops": "ops"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "app"
+      ],
+      "roles": {
+        "builder": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "web"
+          ]
+        },
+        "dev": {
+          "exec": [
+            "npm test",
+            "go build",
+            "git status"
+          ],
+          "read": [
+            "web",
+            "api"
+          ],
+          "write": [
+            "web",
+            "docs"
+          ]
+        },
+        "ops": {
+          "exec": [
+            "make deploy"
+          ],
+          "read": [],
+          "write": []
+        }
+      },
+      "version": 1
+    },
+    "now": "2026-01-15T12:00:00.000Z",
+    "repo": "app"
+  },
+  "version": 1
+}

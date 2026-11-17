@@ -10,6 +10,7 @@
 | [`policy/`](policy/README.md) | The policy bundle, overrides, policy evaluation, and the signed bundle | 1 |
 | [`room/`](room/README.md) | Room events, which include claims and decisions, the transport envelope, and the overlap rules for claims | 1 |
 | [`audit/`](audit/README.md) | The audit record, its hash, chain verification, and the JSON export | 1 |
+| [`adapter/`](adapter/README.md) | How an adapter reads the hook input of a coding agent into policy queries, and answers the hook | 1 |
 
 Each README states what the contract covers, its rules, and what is still open.
 
@@ -143,6 +144,10 @@ To run a case, do the operation on `shared` and `input`, and compare the whole r
 | `path-sets-overlap` | room | None | Two lists of patterns, `a` and `b` | `overlap` |
 | `canonicalize` | canonical-json | None | `json`, a JSON text | `canonical`, and `sha256` of its UTF-8 bytes |
 | `verify-chain` | audit | None | `records`, in chain order | A chain verification result |
+| `bash-targets` | adapter | None | `command`, a shell command line | `targets`, the paths that the line writes |
+| `exec-segments` | adapter | None | `command`, a shell command line | `segments`, the words of each command |
+| `patch-targets` | adapter | None | `patch`, the text of an `apply_patch` call | `targets`, the paths of the patch, or null for a patch that Codex rejects |
+| `pre-tool` | adapter | `agent`, `bundle`, `repo`, `now` | `member` and `hook`, the JSON that the agent writes to the hook | `decision`, `allow` or `deny` |
 
 For `validate`, validate `input` against the schema that `schema` names, and compare the verdict with `expected.valid`.
 

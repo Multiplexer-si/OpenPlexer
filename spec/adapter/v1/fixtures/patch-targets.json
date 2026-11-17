@@ -1,0 +1,341 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "targets": [
+          "web/new.ts",
+          "src/old.ts",
+          "src/renamed.ts",
+          "web/gone.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Add File: web/new.ts\n+export const a = 1;\n*** Update File: src/old.ts\n*** Move to: src/renamed.ts\n@@\n-a\n+b\n*** Delete File: web/gone.ts\n*** Update File: web/new.ts\n@@\n+export const b = 2;\n*** End Patch"
+      },
+      "name": "every added, updated, deleted, and moved path is listed in patch order",
+      "why": "The list holds each path once, in the order of its first mention."
+    },
+    {
+      "expected": {
+        "targets": [
+          "a.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\r\n*** Update File: a.ts\r\n+*** Add File: not-a-header.ts\r\n*** End Patch"
+      },
+      "name": "a patch with CRLF line ends is read",
+      "why": "Codex reads a line that ends in a carriage return and a line feed."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts",
+          "src/core/b.ts",
+          "src/core/c.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n  *** Add File: web/a.ts\n+x\n\t*** Update File: src/core/b.ts  \n*** Move to: src/core/c.ts\t\n *** Delete File: d.ts\n*** End Patch"
+      },
+      "name": "headers with white space around them are read",
+      "why": "Codex trims a header line, and a context line that looks like a header is not a header."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/h.ts"
+        ]
+      },
+      "input": {
+        "patch": "<<EOF\n*** Begin Patch\n*** Add File: web/h.ts\n+h\n*** End Patch\nEOF"
+      },
+      "name": "a patch in a heredoc wrapper is read",
+      "why": "Codex accepts `<<EOF` and a closing line around a patch."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/h.ts"
+        ]
+      },
+      "input": {
+        "patch": "<<'EOF'\n*** Begin Patch\n*** Add File: web/h.ts\n+h\n*** End Patch\nEOF"
+      },
+      "name": "a quoted heredoc wrapper is read",
+      "why": "Codex accepts `<<'EOF'` too."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/e.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Environment ID: e1\n*** Add File: web/e.ts\n+e\n*** End Patch"
+      },
+      "name": "an environment line before the first hunk is skipped",
+      "why": "Codex accepts `*** Environment ID:` first."
+    },
+    {
+      "expected": {
+        "targets": [
+          "a.ts",
+          "b.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Update File: a.ts\n@@\n-o\n+p\n*** End of File\n*** Delete File: b.ts\n*** End Patch"
+      },
+      "name": "an end-of-file line ends a chunk",
+      "why": "`*** End of File` closes the chunk."
+    },
+    {
+      "expected": {
+        "targets": [
+          "a.ts",
+          "c.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Update File: a.ts\n@@\n-o\n\n*** Add File: c.ts\n+y\n*** End Patch"
+      },
+      "name": "a blank line between chunks is skipped",
+      "why": "Codex skips a blank line after a chunk."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Add File: a.ts\n+x\n\n*** Delete File: b.ts\n*** End Patch"
+      },
+      "name": "a blank line inside an add hunk ends the patch as invalid",
+      "why": "A blank line is not a `+` line, and it is not a header."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Update File: a.ts\n*** Add File: c.ts\n+y\n*** End Patch"
+      },
+      "name": "an update hunk with no chunk is invalid",
+      "why": "A header with no change under it is not a patch that Codex accepts."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Update File: a.ts\n@@\n-a\nx b\n*** End Patch"
+      },
+      "name": "a second chunk with no @@ is invalid",
+      "why": "Only the first chunk may leave out `@@`."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": ""
+      },
+      "name": "an empty string is not a patch",
+      "why": "A patch needs its markers."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "echo hi > x.txt"
+      },
+      "name": "a shell command is not a patch",
+      "why": "A patch needs its markers."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Add File: "
+      },
+      "name": "a header with no path is invalid",
+      "why": "A path is required."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** End Patch"
+      },
+      "name": "a patch with no hunk is invalid",
+      "why": "A patch holds at least one hunk."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Environment ID: e1\n*** End Patch"
+      },
+      "name": "a patch with only an environment line is invalid",
+      "why": "A patch holds at least one hunk."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Add File: a.ts\n+a"
+      },
+      "name": "a patch with no end marker is invalid",
+      "why": "A patch ends with its marker."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Add File: a.ts\n+a\n*** End Patch"
+      },
+      "name": "a patch with no begin marker is invalid",
+      "why": "A patch starts with its marker."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Update File: a.ts\n*** Move to: \n@@\n-a\n+b\n*** End Patch"
+      },
+      "name": "a move line with no path is invalid",
+      "why": "The path of a move is required."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Update File: a.ts\n@@\n-a\n+b\n*** Move to: b.ts\n*** End Patch"
+      },
+      "name": "a move line that is not the first line of the hunk is invalid",
+      "why": "Only the line after the header may move the file."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a b.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Add File: web/a b.ts\n+a\n*** End Patch"
+      },
+      "name": "a path with white space inside is kept",
+      "why": "Only the ends of a path are trimmed."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Add File: \u0085web/a.ts\u0085\n+a\n*** End Patch"
+      },
+      "name": "a path is trimmed with the white space that Codex trims",
+      "why": "Codex trims with the Unicode white space set, which includes U+0085."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/empty.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Add File: web/empty.ts\n*** End Patch"
+      },
+      "name": "an add hunk with no body is valid",
+      "why": "An empty file has no `+` line."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/old.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Delete File: web/old.ts\n*** End Patch"
+      },
+      "name": "a delete hunk is valid with no body",
+      "why": "A delete has no lines under it."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Rename File: a.ts\n*** End Patch"
+      },
+      "name": "an unknown header is invalid",
+      "why": "Only add, update, and delete are hunks."
+    },
+    {
+      "expected": {
+        "targets": null
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Add File: a.ts\n+a\n*** End Patch\nextra"
+      },
+      "name": "text after the end marker is invalid",
+      "why": "The end marker is the last line."
+    },
+    {
+      "expected": {
+        "targets": [
+          "a.ts"
+        ]
+      },
+      "input": {
+        "patch": "\n\n  *** Begin Patch\n*** Add File: a.ts\n+a\n*** End Patch  \n\n"
+      },
+      "name": "white space around the whole patch is trimmed",
+      "why": "Codex trims the patch text."
+    },
+    {
+      "expected": {
+        "targets": [
+          "a.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Add File: a.ts\n+a\n*** Update File: a.ts\n@@\n+b\n*** End Patch"
+      },
+      "name": "the same file added and updated is listed once",
+      "why": "The list has no repeats."
+    },
+    {
+      "expected": {
+        "targets": [
+          "a.ts"
+        ]
+      },
+      "input": {
+        "patch": "*** Begin Patch\n*** Update File: a.ts\n@@ func main\n keep\n-old\n+new\n*** End Patch"
+      },
+      "name": "a context line, a removed line, and an added line make a chunk",
+      "why": "A chunk line starts with a space, `-`, or `+`."
+    }
+  ],
+  "contract": "adapter",
+  "description": "The paths that a Codex apply_patch call touches, read the way Codex reads the patch.",
+  "operation": "patch-targets",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/daemon/src/adapters/codex/patch.ts"
+    ]
+  },
+  "version": 1
+}
