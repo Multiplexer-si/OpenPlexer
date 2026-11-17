@@ -7,6 +7,7 @@
 - `internal/doclinks` fails on a relative Markdown link to a missing file. It drops the part after `#`, so it does not check anchors.
 - `internal/layering` enforces the package dependency rules, and that no non-test file imports another module.
 - `internal/spectest` checks the layout of `spec/`, compiles every schema, and validates every example and fixture.
+- `internal/policy` runs every `validate` and `evaluate` fixture case of `spec/policy` against the Go policy evaluator, and holds its parsers to the published schemas.
 - `tools/checkinventory` tests run against a git repo that the test builds, so they need no reference.
 
 ## How to get to it (user POV)
@@ -15,7 +16,7 @@ A contributor runs `make check` from the repo root. CI runs `make check` and `ma
 
 ## Driving it with verify.sh
 
-`verify.sh <ref> check`. Pass means `make-check exit=0`, and `make-check.log` lists `ok` for doclinks, layering, spectest, and checkinventory.
+`verify.sh <ref> check`. Pass means `make-check exit=0`, and `make-check.log` lists `ok` for doclinks, layering, policy, spectest, and checkinventory.
 
 ## Gotchas
 

@@ -18,9 +18,9 @@ This guide covers the tasks that a contributor does in this repository. [Archite
 	make check
 	```
 
-	The last lines of the output list each package. The packages `internal/layering`, `internal/doclinks`, and `internal/spectest` report `ok`.
+	The last lines of the output list each package. The packages `internal/layering`, `internal/doclinks`, `internal/spectest`, and `internal/policy` report `ok`.
 
-The first run downloads the modules that the tests in `internal/spectest` use. The binaries use only the standard library.
+The first run downloads the modules that the tests in `internal/spectest` and `internal/policy` use. The binaries use only the standard library.
 
 ## Run the checks
 
