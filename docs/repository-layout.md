@@ -29,11 +29,11 @@ Each binary prints "not implemented yet" to standard error and exits with status
 
 ## Packages
 
-The first seven packages each hold a `doc.go` file with a package comment and no other code. The last three packages hold only tests.
+`internal/policy` holds the policy model, the validation of a bundle, an override, and a query, and the evaluator. It does not verify a signed bundle yet. The next six packages each hold a `doc.go` file with a package comment and no other code. The last three packages hold only tests.
 
 | Package | Owns |
 |---|---|
-| `internal/policy` | The policy model and the policy evaluator. Pure, no I/O. |
+| `internal/policy` | The policy model and the policy evaluator. Pure, no I/O. Its tests run the `validate` and `evaluate` fixtures of `spec/policy`. |
 | `internal/room` | The Room protocol: events, claims, decisions, and their validation. Pure, no I/O. |
 | `internal/audit` | The record format of the audit hash chain, appending, and verification. |
 | `internal/adapter/claudecode` | The hook adapter for Claude Code. |
@@ -91,4 +91,4 @@ The workflow in `.github/workflows/ci.yml` runs on every pull request and on eve
 
 The module is `github.com/multiplexer-si/openplexer`. It needs Go 1.27 or later.
 
-The three binaries use only the standard library. A test in `internal/layering` fails if a file that is not a test imports another module. The tests in `internal/spectest` use `github.com/santhosh-tekuri/jsonschema/v6` to compile and run the JSON Schemas, so `go.mod` requires that module.
+The three binaries use only the standard library. A test in `internal/layering` fails if a file that is not a test imports another module. The tests in `internal/spectest` and `internal/policy` use `github.com/santhosh-tekuri/jsonschema/v6` to compile and run the JSON Schemas, so `go.mod` requires that module.

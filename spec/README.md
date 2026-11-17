@@ -214,3 +214,5 @@ The Go tests in `internal/spectest` run in `make check`. They need neither the r
 - For every `verify-chain` case, the verification steps of the audit contract give the expected result.
 
 The tests read numbers as doubles, and a number outside their range as infinity, as [Numbers](#numbers) says. The validator in the tests compiles each pattern with the Go engine. Inside [the portable subset](#patterns), the Go engine and an ECMA-262 engine give the same verdict on a value made only of characters of the Basic Multilingual Plane, with no lone surrogate.
+
+The Go implementation runs the fixtures against its own code. The tests in `internal/policy` run every `validate` and every `evaluate` case of the policy contract. No Go code runs the `verify-signed-bundle` cases yet.
