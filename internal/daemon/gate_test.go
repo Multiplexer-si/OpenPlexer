@@ -58,31 +58,29 @@ type fixtureFile struct {
 }
 
 type fixtureCase struct {
-	Name  string `json:"name"`
-	Input struct {
-		Signature string          `json:"signature"`
-		Member    string          `json:"member"`
-		Now       time.Time       `json:"now"`
-		Overrides json.RawMessage `json:"overrides"`
-	} `json:"input"`
-	RawInput json.RawMessage `json:"-"`
+	Name     string          `json:"name"`
+	Input    json.RawMessage `json:"input"`
 	Expected map[string]any  `json:"expected"`
+}
+
+type caseInput struct {
+	Signature string          `json:"signature"`
+	Member    string          `json:"member"`
+	Now       time.Time       `json:"now"`
+	Overrides json.RawMessage `json:"overrides"`
+}
+
+func (c fixtureCase) input(t *testing.T) caseInput {
+	t.Helper()
+	var input caseInput
+	decode(t, c.Input, &input)
+	return input
 }
 
 func readFixture(t *testing.T, name string) fixtureFile {
 	t.Helper()
-	text := readFile(t, filepath.Join(specDir, "policy", "v1", "fixtures", name))
 	var file fixtureFile
-	decode(t, text, &file)
-	var raw struct {
-		Cases []struct {
-			Input json.RawMessage `json:"input"`
-		} `json:"cases"`
-	}
-	decode(t, text, &raw)
-	for i := range file.Cases {
-		file.Cases[i].RawInput = raw.Cases[i].Input
-	}
+	decode(t, readFile(t, filepath.Join(specDir, "policy", "v1", "fixtures", name)), &file)
 	if len(file.Cases) == 0 {
 		t.Fatalf("%s: no cases", name)
 	}
@@ -93,7 +91,7 @@ func (f fixtureFile) token(t *testing.T, name string) string {
 	t.Helper()
 	for _, c := range f.Cases {
 		if c.Name == name {
-			return c.Input.Signature
+			return c.input(t).Signature
 		}
 	}
 	t.Fatalf("no case %q", name)
@@ -288,22 +286,23 @@ func TestGateGivesTheResultOfEveryEvaluateFixture(t *testing.T) {
 		token := keys.sign(t, file.Shared.Bundle)
 		homes := map[string]string{}
 		for _, c := range file.Cases {
-			if c.Input.Overrides != nil {
+			input := c.input(t)
+			if input.Overrides != nil {
 				withOverrides++
 				continue
 			}
-			home, ok := homes[c.Input.Member]
+			home, ok := homes[input.Member]
 			if !ok {
 				home = t.TempDir()
-				homes[c.Input.Member] = home
-				configure(t, home, Settings{KeySet: keys.keySet(t), MemberID: c.Input.Member})
+				homes[input.Member] = home
+				configure(t, home, Settings{KeySet: keys.keySet(t), MemberID: input.Member})
 				load(t, open(t, home, loadedAt), token)
 			}
-			query, err := policy.ParseQuery(c.RawInput)
+			query, err := policy.ParseQuery(c.Input)
 			if err != nil {
 				t.Fatalf("%s: %s: %v", filepath.Base(path), c.Name, err)
 			}
-			verdict, err := open(t, home, c.Input.Now).Decide("codex", query)
+			verdict, err := open(t, home, input.Now).Decide("codex", query)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -329,7 +328,7 @@ func TestLoadAcceptsExactlyTheBundlesThatVerify(t *testing.T) {
 			home := t.TempDir()
 			configure(t, home, Settings{KeySet: file.Shared.JWKS})
 			gate := open(t, home, loadedAt)
-			status, err := gate.Load(context.Background(), tokenSource(c.Input.Signature))
+			status, err := gate.Load(context.Background(), tokenSource(c.input(t).Signature))
 			if c.Expected["ok"] == true {
 				accepted++
 				if err != nil || status.State != Verified {

@@ -39,9 +39,7 @@ func Open(home string, now func() time.Time) (*Gate, error) {
 
 // read sets the status and the bundle from the files of the home.
 func (g *Gate) read() *policy.Verified {
-	stored, storeProblem := readStoredPolicy(g.home)
-	keys, keysProblem := readKeys(g.home)
-	status, verified := classify(stored, storeProblem, keys, keysProblem, g.config.staleAfter(), g.now())
+	status, verified := classify(g.home, g.config.staleAfter(), g.now())
 	status.Member = g.config.MemberID
 	g.bundle = nil
 	if verified != nil {

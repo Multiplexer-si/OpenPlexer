@@ -67,22 +67,24 @@ type storedPolicy struct {
 	ConfirmedAt time.Time `json:"confirmed_at"`
 }
 
-// classify computes the state of the stored policy. stored and keys are the
-// two files of the home directory, and nil for a file that does not exist.
-func classify(stored *storedPolicy, storeProblem error, keys *policy.KeySet, keysProblem error, staleAfter time.Duration, now time.Time) (Status, *policy.Verified) {
-	if stored == nil && storeProblem == nil {
-		return Status{State: Absent, Detail: "no policy is loaded"}, nil
-	}
+// classify reads the stored policy and the key set of a home directory and
+// computes the state.
+func classify(home string, staleAfter time.Duration, now time.Time) (Status, *policy.Verified) {
 	rejected := func(format string, args ...any) (Status, *policy.Verified) {
 		return Status{State: Rejected, Detail: fmt.Sprintf(format, args...)}, nil
 	}
-	if storeProblem != nil {
-		return rejected("the stored policy cannot be read: %v", storeProblem)
+	stored, err := readStoredPolicy(home)
+	switch {
+	case err != nil:
+		return rejected("the stored policy cannot be read: %v", err)
+	case stored == nil:
+		return Status{State: Absent, Detail: "no policy is loaded"}, nil
 	}
-	if keysProblem != nil {
-		return rejected("the key set cannot be read: %v", keysProblem)
-	}
-	if keys == nil {
+	keys, err := readKeys(home)
+	switch {
+	case err != nil:
+		return rejected("the key set cannot be read: %v", err)
+	case keys == nil:
 		return rejected("no key set is configured, so the stored policy cannot be verified")
 	}
 	verified, err := policy.VerifySignedBundle(stored.Token, *keys)
