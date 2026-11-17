@@ -5,6 +5,7 @@ One file per user-facing feature. Each file says what the feature is, how a user
 | Feature | File | Journeys |
 |---|---|---|
 | CLI binaries | [binaries.md](binaries.md) | `build`, `binaries` |
+| Local policy gate | [gate.md](gate.md) | `build`, `gate` |
 | Repository checks | [checks.md](checks.md) | `check` |
 | Contracts for implementers | [contracts.md](contracts.md) | `spec-ajv`, `check` |
 | Reference comparison | [reference.md](reference.md) | `extract`, `inventory` |
