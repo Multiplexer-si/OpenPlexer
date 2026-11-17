@@ -30,9 +30,6 @@ func TestInProject(t *testing.T) {
 	}
 }
 
-// A command that the reference allows by reading its quotes is denied here,
-// because the policy refuses a `;` anywhere in a command and the adapter sends
-// the words of a command as the policy reads them.
 func TestQuotedSeparatorInAGrantedCommandIsDenied(t *testing.T) {
 	env := Env{Repo: "app", Member: "m", ExecGated: true}
 	bundle := &policy.Bundle{Roles: map[string]policy.Role{"r": {Exec: []string{"git commit"}}}, Members: map[string]string{"m": "r"}}

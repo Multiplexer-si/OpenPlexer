@@ -8,10 +8,6 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
 )
 
-// tools is the table of the tools that the hook gates. Write, Edit, and
-// NotebookEdit write the one file that their input names, and Bash runs a
-// shell command. Every other tool of Claude Code, such as Read or an MCP tool,
-// passes the hook unchecked.
 var tools = hook.Tools{
 	"Write":        hook.FileTool("file_path"),
 	"Edit":         hook.FileTool("file_path"),

@@ -11,10 +11,9 @@ import (
 // Env is what the caller knows and the hook input does not. The adapter builds
 // every policy query from it and from the tool call.
 type Env struct {
-	Repo   string
-	Member string
-	Now    policy.Timestamp
-	// AgentSessionID, MissionID, and Overrides reach each query as they are.
+	Repo           string
+	Member         string
+	Now            policy.Timestamp
 	AgentSessionID *string
 	MissionID      *string
 	Overrides      []policy.Override

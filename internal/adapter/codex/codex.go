@@ -9,9 +9,7 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
 )
 
-// tools is the table of the tools that the hook gates. A shell command reaches
-// the hook as `Bash`, and a file edit as `apply_patch`. Every other tool of
-// Codex, such as an MCP tool, passes the hook unchecked.
+// A shell command reaches the hook as `Bash`, and a file edit as `apply_patch`.
 var tools = hook.Tools{
 	"Bash":        hook.ShellTool,
 	"apply_patch": applyPatch,

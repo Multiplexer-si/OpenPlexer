@@ -4,18 +4,14 @@ import { fixtureFile, fixturePath, type Case, type FixtureFile } from "./format.
 
 const NOW = "2026-01-15T12:00:00.000Z";
 const CWD = "/fixture/repo";
-const SESSION_SOURCES = ["apps/daemon/src/adapters/claude-code/hooks/pre-tool.ts", "apps/daemon/src/adapters/claude-code/hook-runner.ts"];
-const EXEC_SOURCES = [...SESSION_SOURCES, "apps/daemon/src/adapters/claude-code/hooks/exec-filter.ts"];
+const HOOK_SOURCES = ["apps/daemon/src/adapters/claude-code/hooks/pre-tool.ts", "apps/daemon/src/adapters/claude-code/hook-runner.ts"];
+const EXEC_SOURCES = [...HOOK_SOURCES, "apps/daemon/src/adapters/claude-code/hooks/exec-filter.ts"];
 const PATCH_SOURCES = ["apps/daemon/src/adapters/codex/patch.ts"];
 
 type Authored = [name: string, why: string, input: { [key: string]: Json }];
 
 const role = (grants: { read?: string[]; write?: string[]; exec?: string[] }): Json => ({ read: [], write: [], exec: [], ...grants });
 
-/**
- * The policy that every `pre-tool` case runs against. `dev` may write `web` and `docs` and may run three commands. `builder` may
- * write `web` and has no exec list. `ops` may run one command and write nothing. `mem-ghost` has no role.
- */
 const BUNDLE: Json = {
   version: 1,
   project_id: "prj-fixture",
@@ -78,10 +74,9 @@ async function preTool(reference: Reference, agent: "claude-code" | "codex", nam
     const output = await reference.adapters.preTool({ agent, bundle: shared.bundle, member: input.member as string, repo: "app", now: NOW, hook: input.hook });
     cases.push({ name: caseName, why, input, expected: { decision: hookDecision(output) }, informational: { output } });
   }
-  return [fixturePath("adapter", name), fixtureFile({ contract: "adapter", operation: "pre-tool", description, sources: SESSION_SOURCES, shared, cases })];
+  return [fixturePath("adapter", name), fixtureFile({ contract: "adapter", operation: "pre-tool", description, sources: HOOK_SOURCES, shared, cases })];
 }
 
-/** The same shell cases run for both agents: the hook reads the command the same way. */
 function shellCases(hook: (tool: string, toolInput: Json) => Json): Authored[] {
   const as = (member: string, command: string) => ({ member, hook: hook("Bash", bash(command)) });
   return [
@@ -237,7 +232,7 @@ function bashTargets(reference: Reference): [string, FixtureFile] {
     cmd("a redirection that has no target ends the line", "A redirection operator at the end names no path.", "echo hi >"),
     cmd("an unclosed quote runs to the end of the line", "The word holds the rest of the line.", `echo hi > "web/a.ts`),
   ];
-  return pure("bash-targets", "bash-targets", "The paths that a shell command writes, read from the command text.", SESSION_SOURCES, authored, (input) => ({
+  return pure("bash-targets", "bash-targets", "The paths that a shell command writes, read from the command text.", HOOK_SOURCES, authored, (input) => ({
     targets: reference.adapters.bashTargets(input.command as string),
   }));
 }
