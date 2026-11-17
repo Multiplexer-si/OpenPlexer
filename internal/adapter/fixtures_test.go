@@ -7,7 +7,7 @@ import (
 	"slices"
 	"testing"
 
-	"github.com/multiplexer-si/openplexer/internal/adapter/claudecode"
+	"github.com/multiplexer-si/openplexer/internal/adapter"
 	"github.com/multiplexer-si/openplexer/internal/adapter/codex"
 	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
 	"github.com/multiplexer-si/openplexer/internal/policy"
@@ -30,11 +30,6 @@ type fixtureCase struct {
 	Name     string          `json:"name"`
 	Input    json.RawMessage `json:"input"`
 	Expected json.RawMessage `json:"expected"`
-}
-
-var handlers = map[string]func([]byte, hook.Env, hook.Judge) hook.Output{
-	"claude-code": claudecode.Handle,
-	"codex":       codex.Handle,
 }
 
 func readFixture(t *testing.T, path string) fixtureFile {
@@ -128,7 +123,7 @@ func runPatchTargets(t *testing.T, c fixtureCase) {
 }
 
 func preToolRunner(t *testing.T, file fixtureFile) func(*testing.T, fixtureCase) {
-	handle, ok := handlers[file.Shared.Agent]
+	agent, ok := adapter.Lookup(file.Shared.Agent)
 	if !ok {
 		t.Fatalf("no adapter for the agent %q", file.Shared.Agent)
 	}
@@ -154,7 +149,7 @@ func preToolRunner(t *testing.T, file fixtureFile) func(*testing.T, fixtureCase)
 			Now:       now,
 			ExecGated: hook.ExecGated(bundle, input.Member),
 		}
-		out := handle(input.Hook, env, hook.FirstDeny(func(q policy.Query) policy.Result { return policy.Evaluate(bundle, q) }))
+		out := agent.Handle(input.Hook, env, hook.FirstDeny(func(q policy.Query) policy.Result { return policy.Evaluate(bundle, q) }))
 		if got := decisionOf(t, out); got != want.Decision {
 			t.Fatalf("decision = %s, want %s (output %+v)", got, want.Decision, out)
 		}
