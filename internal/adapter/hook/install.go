@@ -195,9 +195,10 @@ func (l *layout) ownedBy(handler jsonedit.Node, agent string) (jsonedit.Node, st
 	return node, "", false
 }
 
+// isOpenplexer reports whether a word names an OpenPlexer binary: a file
+// whose name starts with openplexer, such as openplexer.exe.
 func isOpenplexer(word string) bool {
-	base := word[strings.LastIndexAny(word, `/\`)+1:]
-	return base == "openplexer" || base == "openplexer.exe"
+	return strings.HasPrefix(word[strings.LastIndexAny(word, `/\`)+1:], "openplexer")
 }
 
 // Install returns the text of a hook file that has h in it. It adds h as the
@@ -207,6 +208,9 @@ func isOpenplexer(word string) bool {
 func Install(text []byte, exists bool, h Handler) ([]byte, Change, error) {
 	if h.Agent == "" || h.Event == "" || h.Command == "" {
 		return nil, Unchanged, errors.New("handler needs an agent, an event, and a command")
+	}
+	if !canonical(h.Command, h.Agent) {
+		return nil, Unchanged, fmt.Errorf("the command %q does not run a binary named openplexer, so uninstall could not find the entry. Rename the binary to openplexer", h.Command)
 	}
 	if !exists || isBlank(text) {
 		return newFile(h), Added, nil
@@ -256,9 +260,6 @@ func canonical(command, agent string) bool {
 }
 
 func (l *layout) repoint(text []byte, h Handler) ([]byte, Change, error) {
-	if !canonical(h.Command, h.Agent) {
-		return text, Unchanged, nil
-	}
 	var edits []jsonedit.Edit
 	for _, o := range l.ours {
 		if o.commandText != h.Command && canonical(o.commandText, h.Agent) {
