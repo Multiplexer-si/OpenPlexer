@@ -1,0 +1,16 @@
+{
+  "agent": {
+    "id": "ses-ana-1",
+    "vendor": "claude-code"
+  },
+  "at": "2026-01-15T12:00:00.000Z",
+  "body": {
+    "claim_id": "evt-0002",
+    "outcome": "merged"
+  },
+  "id": "evt-0003",
+  "mission": "mis-checkout",
+  "on_behalf_of": "mem-ana",
+  "seq": 3,
+  "type": "release"
+}

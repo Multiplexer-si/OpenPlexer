@@ -1,0 +1,18 @@
+{
+  "agent": {
+    "id": "ses-ana-1",
+    "vendor": "claude-code"
+  },
+  "at": "2026-01-15T12:00:00.000Z",
+  "body": {
+    "needs": {
+      "decision": "evt-0004"
+    },
+    "reason": "The billing area is not writable by my role"
+  },
+  "id": "evt-0008",
+  "mission": "mis-checkout",
+  "on_behalf_of": "mem-ana",
+  "seq": 8,
+  "type": "blocked"
+}

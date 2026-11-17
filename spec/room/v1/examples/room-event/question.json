@@ -1,0 +1,17 @@
+{
+  "agent": {
+    "id": "ses-ana-1",
+    "vendor": "claude-code"
+  },
+  "at": "2026-01-15T12:00:00.000Z",
+  "body": {
+    "ack_required": true,
+    "addressed_to": "mem-lee",
+    "text": "Does the cart endpoint return the discount as a separate field?"
+  },
+  "id": "evt-0006",
+  "mission": "mis-checkout",
+  "on_behalf_of": "mem-ana",
+  "seq": 6,
+  "type": "question"
+}

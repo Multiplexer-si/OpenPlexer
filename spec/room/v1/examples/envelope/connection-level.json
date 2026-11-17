@@ -1,0 +1,11 @@
+{
+  "payload": {
+    "last_seq": 41
+  },
+  "sender": {
+    "id": "dmn-ana",
+    "kind": "daemon"
+  },
+  "type": "resume",
+  "v": 1
+}

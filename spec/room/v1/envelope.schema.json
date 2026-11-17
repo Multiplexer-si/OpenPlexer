@@ -1,0 +1,90 @@
+{
+  "$id": "urn:openplexer:spec:room:v1:envelope",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "description": "The object that wraps every WebSocket message between a daemon and the hub. Generated from the reference. The rule that ties `payload` to the type `event` is authored.",
+  "if": {
+    "properties": {
+      "type": {
+        "const": "event"
+      }
+    },
+    "required": [
+      "type"
+    ]
+  },
+  "properties": {
+    "event_id": {
+      "description": "The id of the event that the message carries, or of the event that an accepted post created.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "payload": {
+      "description": "The content of the message. For the type `event` it is a stored Room event."
+    },
+    "room": {
+      "description": "The Room that the message belongs to. Set on a message that carries an event, and on a message about the connection that concerns one Room.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "sender": {
+      "description": "Who the message is from. On a message with the type `event`, the poster of the event: its agent session with the kind `daemon`, or its member with the kind `dashboard`. On another message from the hub, the hub.",
+      "properties": {
+        "id": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "daemon",
+            "dashboard",
+            "server"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "type": "object"
+    },
+    "seq": {
+      "description": "The position of an event in its Room. The hub assigns it. Set on a message that carries an event, and on the answer to a post that the hub accepted.",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "ts": {
+      "description": "A time that the hub sets. On a message with the type `event`, the `at` of the event. On another message from the hub, the time that the hub sent it.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "type": {
+      "description": "The message type. It selects the schema of `payload`.",
+      "minLength": 1,
+      "type": "string"
+    },
+    "v": {
+      "description": "The version of the wire protocol. This contract describes version 1.",
+      "exclusiveMinimum": 0,
+      "maximum": 9007199254740991,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "v",
+    "type",
+    "sender",
+    "payload"
+  ],
+  "then": {
+    "properties": {
+      "payload": {
+        "$ref": "urn:openplexer:spec:room:v1:room-event"
+      }
+    }
+  },
+  "title": "Transport envelope",
+  "type": "object"
+}

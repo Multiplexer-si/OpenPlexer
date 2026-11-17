@@ -1,0 +1,10 @@
+{
+  "actions": [
+    "read",
+    "write"
+  ],
+  "area": "billing",
+  "id": "ovr-2",
+  "mission_id": "mis-checkout",
+  "scope": "mission"
+}

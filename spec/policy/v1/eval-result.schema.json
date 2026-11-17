@@ -1,0 +1,29 @@
+{
+  "$id": "urn:openplexer:spec:policy:v1:eval-result",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "The answer of the policy evaluator. Authored from a type of the reference.",
+  "properties": {
+    "area": {
+      "description": "The area that decided the result. Absent when no area matched, and for `exec` and `git.push`.",
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "allow",
+        "deny"
+      ],
+      "type": "string"
+    },
+    "rule": {
+      "description": "A sentence for a person. The wording is not part of the contract.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "decision",
+    "rule"
+  ],
+  "title": "Evaluation result",
+  "type": "object"
+}

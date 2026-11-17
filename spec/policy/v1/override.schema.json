@@ -1,0 +1,58 @@
+{
+  "$id": "urn:openplexer:spec:policy:v1:override",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "description": "A grant that a lead gives to open one area for an agent. Generated from the reference.",
+  "properties": {
+    "actions": {
+      "description": "The actions that the override allows. Only `read` and `write` have an effect.",
+      "items": {
+        "enum": [
+          "read",
+          "write",
+          "exec",
+          "git.push"
+        ],
+        "type": "string"
+      },
+      "type": "array"
+    },
+    "agent_session_id": {
+      "description": "If present, the override applies only to this agent session.",
+      "type": "string"
+    },
+    "area": {
+      "description": "The name of the area that the override opens.",
+      "type": "string"
+    },
+    "expires_at": {
+      "description": "If present, the override is inactive from this time on. A value that is not a timestamp in the form that the policy contract defines makes the override inactive.",
+      "type": "string"
+    },
+    "id": {
+      "description": "The id of the override.",
+      "type": "string"
+    },
+    "mission_id": {
+      "description": "If present, the override applies only to this mission.",
+      "type": "string"
+    },
+    "scope": {
+      "description": "`once` needs `agent_session_id`. `mission` needs `mission_id`. `until` needs `expires_at`.",
+      "enum": [
+        "once",
+        "mission",
+        "until"
+      ],
+      "type": "string"
+    }
+  },
+  "required": [
+    "id",
+    "area",
+    "actions",
+    "scope"
+  ],
+  "title": "Override",
+  "type": "object"
+}

@@ -1,0 +1,24 @@
+{
+  "agent": {
+    "id": "mem-lee",
+    "vendor": "human"
+  },
+  "at": "2026-01-15T12:00:00.000Z",
+  "body": {
+    "actions": [
+      "write"
+    ],
+    "agent": "ses-ana-1",
+    "areas": [
+      "billing"
+    ],
+    "lead": "mem-lee",
+    "reason": "The discount work needs one change to the invoice total",
+    "scope": "mission"
+  },
+  "id": "evt-0011",
+  "mission": "mis-checkout",
+  "on_behalf_of": "mem-lee",
+  "seq": 11,
+  "type": "policy.override"
+}

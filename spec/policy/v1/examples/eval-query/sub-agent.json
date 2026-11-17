@@ -1,0 +1,13 @@
+{
+  "action": "write",
+  "agent_session_id": "ses-ana-1-sub",
+  "member": "mem-ana",
+  "mission_id": "mis-other",
+  "now": "2026-01-15T12:00:00.000Z",
+  "parent": {
+    "agent_session_id": "ses-ana-1",
+    "mission_id": "mis-checkout"
+  },
+  "path": "src/billing/invoice.ts",
+  "repo": "api"
+}

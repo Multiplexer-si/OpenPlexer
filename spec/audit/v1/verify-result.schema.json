@@ -1,0 +1,42 @@
+{
+  "$id": "urn:openplexer:spec:audit:v1:verify-result",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "description": "The result of a chain verification. `entries` is the number of records checked. `broken_at` is the `id` of the first record that fails. Generated from the reference.",
+  "oneOf": [
+    {
+      "properties": {
+        "entries": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ok": {
+          "const": true,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "entries"
+      ],
+      "type": "object"
+    },
+    {
+      "properties": {
+        "broken_at": {
+          "type": "string"
+        },
+        "ok": {
+          "const": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "ok",
+        "broken_at"
+      ],
+      "type": "object"
+    }
+  ],
+  "title": "Chain verification result"
+}

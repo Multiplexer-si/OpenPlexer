@@ -1,0 +1,33 @@
+{
+  "event_id": "evt-0002",
+  "payload": {
+    "agent": {
+      "id": "ses-ana-1",
+      "vendor": "claude-code"
+    },
+    "at": "2026-01-15T12:00:00.000Z",
+    "body": {
+      "intent": "Add percentage discounts to the cart total",
+      "item": "Cart discount calculation",
+      "paths": [
+        "src/orders/cart.ts",
+        "src/orders/discount/**"
+      ],
+      "ttl_seconds": 1800
+    },
+    "id": "evt-0002",
+    "mission": "mis-checkout",
+    "on_behalf_of": "mem-ana",
+    "seq": 2,
+    "type": "claim"
+  },
+  "room": "mis-checkout",
+  "sender": {
+    "id": "ses-ana-1",
+    "kind": "daemon"
+  },
+  "seq": 2,
+  "ts": "2026-01-15T12:00:00.000Z",
+  "type": "event",
+  "v": 1
+}

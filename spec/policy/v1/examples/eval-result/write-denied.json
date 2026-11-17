@@ -1,0 +1,5 @@
+{
+  "area": "frontend",
+  "decision": "deny",
+  "rule": "area \"frontend\" is writable by role lead only"
+}
