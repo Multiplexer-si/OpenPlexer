@@ -31,31 +31,19 @@ func ExecGated(bundle *policy.Bundle, member string) bool {
 	return len(bundle.Roles[bundle.Members[member]].Exec) > 0
 }
 
-// Intent is one thing that a tool call does and that the policy judges: a
-// write to a path of the project, or the run of a command.
-type Intent struct {
-	Action  policy.Action
-	Path    string
-	Command string
-}
-
-func (e Env) query(i Intent) policy.Query {
+func (e Env) query(action policy.Action, path, command string) policy.Query {
 	return policy.Query{
 		Repo:           e.Repo,
-		Path:           i.Path,
-		Action:         i.Action,
+		Path:           path,
+		Action:         action,
 		Member:         e.Member,
-		Command:        i.Command,
+		Command:        command,
 		AgentSessionID: e.AgentSessionID,
 		MissionID:      e.MissionID,
 		Overrides:      e.Overrides,
 		Now:            e.Now,
 	}
 }
-
-// Evaluator answers one policy query. The caller supplies it, so that the gate
-// of the daemon decides what a query is judged against.
-type Evaluator func(policy.Query) policy.Result
 
 // Call is the part of a hook input that every agent sends.
 type Call struct {
@@ -94,90 +82,100 @@ func (c Call) Text(field string) (string, error) {
 	return text, nil
 }
 
-// Translate turns the call to one tool into its intents. An error means that
-// the call names a target that the adapter cannot read.
-type Translate func(env Env, call Call) ([]Intent, error)
+// Effect is what one tool call does, as the call names it and before any
+// policy: the paths that it is clear to write, and the commands that it runs.
+type Effect struct {
+	Writes   []string
+	Commands []string
+}
+
+// Translate reads what a call to one tool does. An error means that the
+// call names a target that the adapter cannot read.
+type Translate func(call Call) (Effect, error)
 
 // Tools maps a tool name to the translation of its calls. A tool that the map
 // does not name is not gated.
 type Tools map[string]Translate
 
-// WriteIntents makes a write intent of each path that is inside the project.
-func (e Env) WriteIntents(call Call, paths ...string) []Intent {
-	var out []Intent
-	for _, path := range paths {
+// FileTool translates a call to a tool that writes the one file that an input
+// field names.
+func FileTool(field string) Translate {
+	return func(call Call) (Effect, error) {
+		path, err := call.Text(field)
+		if err != nil {
+			return Effect{}, err
+		}
+		return Effect{Writes: []string{path}}, nil
+	}
+}
+
+// ShellTool translates a call to a tool that runs the command in the input
+// field `command`. It writes the paths that the command is clear to write.
+// It runs the whole line, if the line holds a substitution that no grant can
+// cover, and otherwise each command of the line that is not a bare `tee`.
+func ShellTool(call Call) (Effect, error) {
+	command, err := call.Text("command")
+	if err != nil {
+		return Effect{}, err
+	}
+	effect := Effect{Writes: WriteTargets(command)}
+	if substitution.MatchString(command) {
+		effect.Commands = []string{command}
+		return effect, nil
+	}
+	for _, words := range Segments(command) {
+		if !bareTee(words) {
+			effect.Commands = append(effect.Commands, strings.Join(words, " "))
+		}
+	}
+	return effect, nil
+}
+
+// queries are what the policy judges of an effect: each write to a path of
+// the project, and, for a member whose role lists commands, each command.
+func (e Env) queries(call Call, effect Effect) []policy.Query {
+	var out []policy.Query
+	for _, path := range effect.Writes {
 		if rel := normalizeTarget(path, call.Cwd, e.ProjectRoot); inProject(rel) {
-			out = append(out, Intent{Action: policy.Write, Path: rel})
+			out = append(out, e.query(policy.Write, rel, ""))
+		}
+	}
+	if e.ExecGated {
+		for _, command := range effect.Commands {
+			out = append(out, e.query(policy.Exec, "", command))
 		}
 	}
 	return out
 }
 
-// FileTool translates a call to a tool that writes the one file that an input
-// field names.
-func FileTool(field string) Translate {
-	return func(env Env, call Call) ([]Intent, error) {
-		path, err := call.Text(field)
-		if err != nil {
-			return nil, err
+// Judge decides the queries of one tool call, in the order that the call
+// makes them. The adapter calls it only for a call that makes a query.
+type Judge func(first policy.Query, rest ...policy.Query) Verdict
+
+// FirstDeny judges each query with evaluate, and denies the call at the first
+// query that evaluate denies.
+func FirstDeny(evaluate func(policy.Query) policy.Result) Judge {
+	return func(first policy.Query, rest ...policy.Query) Verdict {
+		for _, q := range append([]policy.Query{first}, rest...) {
+			if result := evaluate(q); result.Decision == policy.Deny {
+				return Denied(q, result)
+			}
 		}
-		return env.WriteIntents(call, path), nil
+		return Verdict{}
 	}
 }
 
-// ShellTool translates a call to a tool that runs the command in the input
-// field `command`. The intents are the writes that the command is clear to
-// make. For a member whose role lists commands, they also hold the commands.
-// That is the whole line, if it holds a substitution that no grant can cover,
-// and otherwise each command of the line that is not a bare `tee`.
-func ShellTool(env Env, call Call) ([]Intent, error) {
-	command, err := call.Text("command")
-	if err != nil {
-		return nil, err
-	}
-	intents := env.WriteIntents(call, WriteTargets(command)...)
-	if !env.ExecGated {
-		return intents, nil
-	}
-	if substitution.MatchString(command) {
-		return append(intents, Intent{Action: policy.Exec, Command: command}), nil
-	}
-	for _, words := range Segments(command) {
-		if !bareTee(words) {
-			intents = append(intents, Intent{Action: policy.Exec, Command: strings.Join(words, " ")})
-		}
-	}
-	return intents, nil
-}
-
-// Denial is the first intent that the policy denies, with its result.
-type Denial struct {
-	Intent Intent
-	Result policy.Result
-}
-
-// Reason is the sentence that the coding agent shows. It names the intent and
-// the rule that denied it.
-func (d Denial) Reason() string {
+// Denied is the verdict for a call whose query q the policy denied with
+// result. The reason names the action and the rule that denied it.
+func Denied(q policy.Query, result policy.Result) Verdict {
 	where := ""
-	if d.Result.Area != nil {
-		where = fmt.Sprintf(" in area %q", *d.Result.Area)
+	if result.Area != nil {
+		where = fmt.Sprintf(" in area %q", *result.Area)
 	}
-	if d.Intent.Action == policy.Exec {
-		return fmt.Sprintf("OpenPlexer policy denied the command %q%s: %s. Ask the owner of the policy to grant it.", d.Intent.Command, where, d.Result.Rule)
+	if q.Action == policy.Exec {
+		return Verdict{Deny, fmt.Sprintf("OpenPlexer policy denied the command %q%s: %s. Ask the owner of the policy to grant it.", q.Command, where, result.Rule)}
 	}
-	return fmt.Sprintf("OpenPlexer policy denied a write to %s%s: %s. Ask the owner of the policy to grant it.", d.Intent.Path, where, d.Result.Rule)
-}
-
-// Check asks the evaluator about each intent in order and returns the first
-// denial, or nil if every intent is allowed.
-func (e Env) Check(intents []Intent, evaluate Evaluator) *Denial {
-	for _, i := range intents {
-		if result := evaluate(e.query(i)); result.Decision == policy.Deny {
-			return &Denial{Intent: i, Result: result}
-		}
-	}
-	return nil
+	return Verdict{Deny, fmt.Sprintf("OpenPlexer policy denied a write to %s%s: %s. Ask the owner of the policy to grant it.", q.Path, where, result.Rule)}
 }
 
 // Outcome is what an adapter does with a tool call.
@@ -200,8 +198,9 @@ type Verdict struct {
 
 // Decide reads one hook input and judges it. An event other than PreToolUse,
 // and a tool that the table does not name, are allowed. Input that is not JSON,
-// and a call to a gated tool that cannot be read, are refused.
-func Decide(stdin []byte, env Env, evaluate Evaluator, tools Tools) Verdict {
+// and a call to a gated tool that cannot be read, are refused. A call that
+// makes no query is allowed without asking judge.
+func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	call, err := ParseCall(stdin)
 	if err != nil {
 		return Verdict{Refuse, err.Error()}
@@ -213,14 +212,15 @@ func Decide(stdin []byte, env Env, evaluate Evaluator, tools Tools) Verdict {
 	if call.Cwd == "" {
 		return Verdict{Refuse, "the hook input has no cwd, so the paths of the call cannot be placed in the project"}
 	}
-	intents, err := translate(env, call)
+	effect, err := translate(call)
 	if err != nil {
 		return Verdict{Refuse, err.Error()}
 	}
-	if denial := env.Check(intents, evaluate); denial != nil {
-		return Verdict{Deny, denial.Reason()}
+	queries := env.queries(call, effect)
+	if len(queries) == 0 {
+		return Verdict{}
 	}
-	return Verdict{}
+	return judge(queries[0], queries[1:]...)
 }
 
 // Output is what the adapter makes the hook process do.

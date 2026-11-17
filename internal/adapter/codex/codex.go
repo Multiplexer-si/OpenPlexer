@@ -23,20 +23,20 @@ func Matcher() string {
 
 var errUnreadablePatch = errors.New("this apply_patch could not be checked: it is not a patch that the gate can read (*** Begin Patch, then Add, Update, or Delete File hunks, then *** End Patch)")
 
-func applyPatch(env hook.Env, call hook.Call) ([]hook.Intent, error) {
+func applyPatch(call hook.Call) (hook.Effect, error) {
 	text, err := call.Text("command")
 	if err != nil {
-		return nil, err
+		return hook.Effect{}, err
 	}
 	paths, ok := ParsePatch(text)
 	if !ok {
-		return nil, errUnreadablePatch
+		return hook.Effect{}, errUnreadablePatch
 	}
-	return env.WriteIntents(call, paths...), nil
+	return hook.Effect{Writes: paths}, nil
 }
 
 // Handle reads the PreToolUse input that Codex writes to the hook and returns
 // what the hook process writes and its exit status.
-func Handle(stdin []byte, env hook.Env, evaluate hook.Evaluator) hook.Output {
-	return hook.Render(hook.Decide(stdin, env, evaluate, tools))
+func Handle(stdin []byte, env hook.Env, judge hook.Judge) hook.Output {
+	return hook.Render(hook.Decide(stdin, env, judge, tools))
 }

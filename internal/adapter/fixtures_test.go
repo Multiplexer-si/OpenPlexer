@@ -32,7 +32,7 @@ type fixtureCase struct {
 	Expected json.RawMessage `json:"expected"`
 }
 
-var handlers = map[string]func([]byte, hook.Env, hook.Evaluator) hook.Output{
+var handlers = map[string]func([]byte, hook.Env, hook.Judge) hook.Output{
 	"claude-code": claudecode.Handle,
 	"codex":       codex.Handle,
 }
@@ -154,7 +154,7 @@ func preToolRunner(t *testing.T, file fixtureFile) func(*testing.T, fixtureCase)
 			Now:       now,
 			ExecGated: hook.ExecGated(bundle, input.Member),
 		}
-		out := handle(input.Hook, env, func(q policy.Query) policy.Result { return policy.Evaluate(bundle, q) })
+		out := handle(input.Hook, env, hook.FirstDeny(func(q policy.Query) policy.Result { return policy.Evaluate(bundle, q) }))
 		if got := decisionOf(t, out); got != want.Decision {
 			t.Fatalf("decision = %s, want %s (output %+v)", got, want.Decision, out)
 		}

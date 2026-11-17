@@ -23,6 +23,6 @@ func Matcher() string {
 
 // Handle reads the PreToolUse input that Claude Code writes to the hook and returns
 // what the hook process writes and its exit status.
-func Handle(stdin []byte, env hook.Env, evaluate hook.Evaluator) hook.Output {
-	return hook.Render(hook.Decide(stdin, env, evaluate, tools))
+func Handle(stdin []byte, env hook.Env, judge hook.Judge) hook.Output {
+	return hook.Render(hook.Decide(stdin, env, judge, tools))
 }

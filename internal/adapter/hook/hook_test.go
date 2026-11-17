@@ -33,9 +33,9 @@ func TestInProject(t *testing.T) {
 func TestQuotedSeparatorInAGrantedCommandIsDenied(t *testing.T) {
 	env := Env{Repo: "app", Member: "m", ExecGated: true}
 	bundle := &policy.Bundle{Roles: map[string]policy.Role{"r": {Exec: []string{"git commit"}}}, Members: map[string]string{"m": "r"}}
-	evaluate := func(q policy.Query) policy.Result { return policy.Evaluate(bundle, q) }
+	judge := FirstDeny(func(q policy.Query) policy.Result { return policy.Evaluate(bundle, q) })
 	call := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"/p","tool_input":{"command":"git commit -m \"fix; tidy\""}}`)
-	v := Decide(call, env, evaluate, Tools{"Bash": ShellTool})
+	v := Decide(call, env, judge, Tools{"Bash": ShellTool})
 	if v.Outcome != Deny || !strings.Contains(v.Reason, `"git commit -m fix; tidy"`) {
 		t.Fatalf("verdict = %+v, want a denial that names the command", v)
 	}
@@ -43,7 +43,7 @@ func TestQuotedSeparatorInAGrantedCommandIsDenied(t *testing.T) {
 
 func TestDecideRefusesWhatItCannotRead(t *testing.T) {
 	tools := Tools{"Write": FileTool("file_path")}
-	allow := func(policy.Query) policy.Result { return policy.Result{Decision: policy.Allow} }
+	allow := FirstDeny(func(policy.Query) policy.Result { return policy.Result{Decision: policy.Allow} })
 	for name, input := range map[string]string{
 		"input that is not JSON":     `not json`,
 		"a call with no cwd":         `{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/p/a"}}`,
@@ -61,7 +61,7 @@ func TestDecideRefusesWhatItCannotRead(t *testing.T) {
 
 func TestDecideAllowsWhatItDoesNotGate(t *testing.T) {
 	tools := Tools{"Write": FileTool("file_path")}
-	deny := func(policy.Query) policy.Result { return policy.Result{Decision: policy.Deny, Rule: "no"} }
+	deny := FirstDeny(func(policy.Query) policy.Result { return policy.Result{Decision: policy.Deny, Rule: "no"} })
 	for name, input := range map[string]string{
 		"a tool that is not in the table": `{"hook_event_name":"PreToolUse","tool_name":"Read","cwd":"/p","tool_input":{"file_path":"/p/a"}}`,
 		"an event other than PreToolUse":  `{"hook_event_name":"PostToolUse","tool_name":"Write","cwd":"/p","tool_input":{"file_path":"/p/a"}}`,
