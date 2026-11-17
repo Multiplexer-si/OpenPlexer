@@ -15,6 +15,26 @@ Anything that is not one of these parts is not part of this repository. Building
 
 The repository holds the contracts for all four parts today. It holds no implementation of them yet. The [roadmap](roadmap.md) gives the order of the work.
 
+## What stays outside this repository
+
+The existing implementation has more features than the four parts. The following features stay outside this repository, and no issue in this repository plans them:
+
+- The dashboard.
+- The TUI.
+- The GitHub App and the server check.
+- The write ledger.
+- Sign-up.
+- Invitations, and workspaces with more than one team.
+- Notifications.
+- Metrics.
+- Attention.
+- History search.
+- Retention.
+
+The inventory of the existing implementation lists the same features in its table of components that are out of scope.
+
+Anyone can use this repository in a commercial product under the terms of Apache-2.0. A feature that such a product adds becomes part of this repository only through a pull request here, under the same license.
+
 ## Where the material comes from
 
 The design ports the behavior of an existing TypeScript implementation. That implementation is not public.
