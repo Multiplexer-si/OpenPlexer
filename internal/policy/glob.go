@@ -4,7 +4,6 @@ import (
 	"errors"
 	"slices"
 	"strings"
-	"unicode"
 	"unicode/utf16"
 )
 
@@ -15,18 +14,11 @@ import (
 type tokenKind int
 
 const (
-	// literal matches its unit without case.
 	literal tokenKind = iota
-	// oneOfClass matches one unit of its class.
 	oneOfClass
-	// oneInSegment is `?`.
 	oneInSegment
-	// runInSegment is `*`.
 	runInSegment
-	// runOfDirectories is `**` at the start of a segment and before `/`. It
-	// takes the `/` after it.
 	runOfDirectories
-	// runAcrossSegments is every other run of two or more `*`.
 	runAcrossSegments
 )
 
@@ -36,9 +28,6 @@ type token struct {
 	class class
 }
 
-// class matches a unit that one of its spans holds, or that none holds if
-// the class is negated. A class with no span and no negation matches
-// nothing.
 type class struct {
 	negated bool
 	spans   []span
@@ -48,7 +37,6 @@ type span struct{ low, high uint16 }
 
 var errRangeOutOfOrder = errors.New("a class range has its ends out of order")
 
-// normalizeGlob makes the separators of a glob those of a canonical path.
 func normalizeGlob(glob string) string {
 	glob = strings.ReplaceAll(glob, `\`, "/")
 	for strings.HasPrefix(glob, "./") {
@@ -140,23 +128,11 @@ func readClass(text []uint16) (class, error) {
 }
 
 func (c class) holds(unit uint16) bool {
-	return c.negated != (c.spansHold(unit) || c.spansHoldAnotherCaseOf(unit))
+	return c.negated != slices.ContainsFunc(sameLetters(unit), c.spansHold)
 }
 
 func (c class) spansHold(unit uint16) bool {
 	return slices.ContainsFunc(c.spans, func(s span) bool { return s.low <= unit && unit <= s.high })
-}
-
-// A span holds a letter if it holds the same letter in another case. The
-// letters that fold together are the candidates, and canonical decides which
-// of them the reference counts as the same letter.
-func (c class) spansHoldAnotherCaseOf(unit uint16) bool {
-	for other := unicode.SimpleFold(rune(unit)); other != rune(unit); other = unicode.SimpleFold(other) {
-		if other <= 0xFFFF && canonical(uint16(other)) == canonical(unit) && c.spansHold(uint16(other)) {
-			return true
-		}
-	}
-	return false
 }
 
 func isSlash(unit uint16) bool { return unit == '/' }
@@ -177,9 +153,6 @@ func (t token) takes(unit uint16) bool {
 	}
 }
 
-// globMatches reports whether the tokens match the whole path. It tracks
-// the set of positions in the path that the tokens so far can end at, so the
-// time is the number of tokens times the length of the path.
 func globMatches(tokens []token, path []uint16) bool {
 	at := make([]bool, len(path)+1)
 	next := make([]bool, len(path)+1)
@@ -215,8 +188,6 @@ func globMatches(tokens []token, path []uint16) bool {
 	return at[len(path)]
 }
 
-// spread marks every position that a run can reach from a marked position
-// without a unit that stops the run.
 func spread(at, next []bool, path []uint16, stops func(uint16) bool) {
 	inRun := false
 	for i := range at {

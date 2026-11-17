@@ -77,9 +77,6 @@ func TestTimestampPatternIsThePatternOfTheSchemas(t *testing.T) {
 	}
 }
 
-// variants returns copies of value, each with one change: a member removed,
-// a member added, or one value replaced by a value of another type or by a
-// near miss of itself. Most of them are invalid.
 func variants(value any) []any {
 	out := []any{nil, true, 1.0, 1.5, "", "x", []any{}, map[string]any{}}
 	switch value := value.(type) {
@@ -114,10 +111,6 @@ func variants(value any) []any {
 	return out
 }
 
-// The validators of this package are written by hand, and no fixture has an
-// invalid query. This test holds them to the published schemas: for each
-// example and each fixture input, and for each variant of them, a parser
-// accepts the document exactly when the schema does.
 func TestParsersAgreeWithTheSchemas(t *testing.T) {
 	schemas := compileSchemas(t)
 	parsers := map[string]func([]byte) error{

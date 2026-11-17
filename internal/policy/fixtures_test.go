@@ -61,9 +61,6 @@ var validators = map[string]func(text []byte) error{
 	"urn:openplexer:spec:policy:v1:override": func(text []byte) error { _, err := ParseOverride(text); return err },
 }
 
-// Every case of every fixture file runs, and a failure names the file and
-// the case. A file with an operation that the switch does not know fails, so
-// that a new fixture file cannot go unread.
 func TestFixtures(t *testing.T) {
 	ran := 0
 	for _, path := range fixturePaths(t) {
@@ -126,8 +123,6 @@ func requireReasons(t *testing.T, err error) {
 	}
 }
 
-// The whole result is compared with expected, except rule, whose wording is
-// not part of the contract. Every result still has a rule.
 func runEvaluate(t *testing.T, bundle *Bundle, c fixtureCase) {
 	query, err := ParseQuery(c.Input)
 	if err != nil {

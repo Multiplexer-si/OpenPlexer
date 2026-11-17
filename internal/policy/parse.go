@@ -84,8 +84,6 @@ func parse[T any](text []byte, read func(*reader, any) T) (T, error) {
 	return value, nil
 }
 
-// reader turns decoded JSON into the model and collects every issue on the
-// way. A value that is read after an issue is not used.
 type reader struct {
 	issues []Issue
 }
@@ -106,8 +104,6 @@ const (
 	optional = false
 )
 
-// field reads the member key of object with read. It reports whether the
-// member is present, and records an issue if a required member is absent.
 func field[T any](r *reader, path string, object map[string]any, key string, need bool, read func(path string, value any) T) (T, bool) {
 	value, present := object[key]
 	if !present {
@@ -135,9 +131,7 @@ func (r *reader) object(path string, value any) (map[string]any, bool) {
 	return object, ok
 }
 
-// closed records an issue for each member of object that allowed does not
-// name.
-func (r *reader) closed(path string, object map[string]any, allowed ...string) {
+func (r *reader) rejectUnknownFields(path string, object map[string]any, allowed ...string) {
 	for _, key := range slices.Sorted(maps.Keys(object)) {
 		if !slices.Contains(allowed, key) {
 			r.fail(member(path, key), "is not a field of this object")
@@ -307,7 +301,7 @@ func (r *reader) temporaryGrant(path string, value any) TemporaryGrant {
 	default:
 		fields = append(fields, "mission_id", "expires_at")
 	}
-	r.closed(path, object, fields...)
+	r.rejectUnknownFields(path, object, fields...)
 	return g
 }
 
@@ -345,7 +339,7 @@ func (r *reader) query(doc any) Query {
 		q.Parent = &parent
 	}
 	q.Overrides, _ = field(r, "", object, "overrides", optional, list(r, r.override))
-	r.closed("", object, "repo", "path", "action", "member", "now", "command", "agent_session_id", "mission_id", "parent", "overrides")
+	r.rejectUnknownFields("", object, "repo", "path", "action", "member", "now", "command", "agent_session_id", "mission_id", "parent", "overrides")
 	return q
 }
 
@@ -357,6 +351,6 @@ func (r *reader) parent(path string, value any) Parent {
 	}
 	p.AgentSessionID, _ = field(r, path, object, "agent_session_id", required, r.text)
 	p.MissionID = optionalText(r, path, object, "mission_id")
-	r.closed(path, object, "agent_session_id", "mission_id")
+	r.rejectUnknownFields(path, object, "agent_session_id", "mission_id")
 	return p
 }
