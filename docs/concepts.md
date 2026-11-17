@@ -70,7 +70,7 @@ The gate stops the actions that it sees. It does not see an action that a coding
 
 ## What is not decided yet
 
-Phase 0 of the [roadmap](roadmap.md) settles these questions before any implementation starts.
+Phase 0 of the [roadmap](roadmap.md) recorded the questions that are still open. Later phases settle them.
 
-- The open questions of the contracts. The contracts for policies, Room events, claims, decisions, and audit records now exist in [`spec/`](../spec/README.md). See [issue 9](https://github.com/Multiplexer-si/OpenPlexer/issues/9). The fixtures that define the expected behavior of the policy evaluator, the claim overlap rules, canonical JSON, and the audit chain exist there too. See [issue 10](https://github.com/Multiplexer-si/OpenPlexer/issues/10). Each contract README ends with the questions that the owner has not decided.
-- The trust model: what data leaves the developer's machine, what the gate can and cannot prevent, and how the verifier obtains a trusted checkpoint. See [issue 11](https://github.com/Multiplexer-si/OpenPlexer/issues/11).
+- The open questions of the contracts. Each contract README in [`spec/`](../spec/README.md) ends with the questions that the owner has not decided.
+- The compatibility and trust decisions. The [open decisions of the trust model](trust-model.md#open-decisions) list each one with the issue that it belongs to.

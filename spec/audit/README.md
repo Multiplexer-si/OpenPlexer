@@ -70,7 +70,7 @@ A chain shows that the records in it agree with each other. It cannot show these
 - That `result` or `agent_member_id` of an export entry is the original one. The hash covers neither field. A verifier does not trust `result`. It computes `result` from `action`, which is hashed. A verifier cannot compute `agent_member_id`, because the hub reads it from its list of agent sessions when it writes the export.
 - That an unknown field of a record or of an export entry is the original one. The hash covers only the nine hashed fields.
 
-To detect a shortened or rewritten log, a verifier needs a hash that it got from a source that it trusts, and compares it with the hash at the same position of the chain. The trust model, which is tracked in [issue 11](https://github.com/Multiplexer-si/OpenPlexer/issues/11), decides where that hash comes from.
+To detect a shortened or rewritten log, a verifier needs a hash that it got from a source that it trusts, and compares it with the hash at the same position of the chain. The [trust model](../../docs/trust-model.md#how-a-verifier-obtains-a-trusted-checkpoint) recommends where that hash comes from, and [issue 23](https://github.com/Multiplexer-si/OpenPlexer/issues/23) decides it.
 
 ## Compatibility
 
