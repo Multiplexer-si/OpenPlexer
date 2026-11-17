@@ -378,6 +378,27 @@ func TestInstallFile(t *testing.T) {
 		}
 	})
 
+	t.Run("a linked file that held only our entry is emptied, not deleted", func(t *testing.T) {
+		dir := t.TempDir()
+		target := filepath.Join(dir, "dotfiles", "settings.json")
+		link := filepath.Join(dir, "settings.json")
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(target, link); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := InstallFile(link, h); err != nil {
+			t.Fatal(err)
+		}
+		if change, err := UninstallFile(link, "claude-code"); err != nil || change != Removed {
+			t.Fatalf("UninstallFile = %v, %v", change, err)
+		}
+		if got, err := os.ReadFile(link); err != nil || string(got) != "{}\n" {
+			t.Fatalf("the linked file holds %q (%v), want an empty object", got, err)
+		}
+	})
+
 	t.Run("a dangling symlink gets its target created", func(t *testing.T) {
 		dir := t.TempDir()
 		link := filepath.Join(dir, "settings.json")

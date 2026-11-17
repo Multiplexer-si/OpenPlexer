@@ -366,6 +366,11 @@ func editFile(path string, edit transform) (Change, error) {
 	if err != nil {
 		return Unchanged, fmt.Errorf("%s: %w", path, err)
 	}
+	if info, err := os.Lstat(path); remove && err == nil && info.Mode()&fs.ModeSymlink != 0 {
+		// Deleting the target would leave the link dangling, for example in
+		// a dotfiles repository.
+		out, remove = []byte("{}\n"), false
+	}
 	if change == Unchanged || (exists && !remove && bytes.Equal(out, text)) {
 		return Unchanged, nil
 	}
