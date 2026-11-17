@@ -34,3 +34,4 @@ The documentation uses each of these terms with one meaning. [Concepts](concepts
 | Sub-agent | An agent session that another agent session started, which gets the grants of its parent and no others. |
 | Temporary grant | A grant in a policy bundle that gives one member read or write access to one area, for one mission or until a time. |
 | Verifier | The separate program that checks an exported audit log. |
+
