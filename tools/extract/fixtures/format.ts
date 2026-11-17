@@ -14,7 +14,7 @@ export interface Case {
 }
 
 export interface FixtureFile {
-  contract: "policy" | "room" | "audit" | "canonical-json";
+  contract: "policy" | "room" | "audit" | "canonical-json" | "adapter";
   version: 1;
   operation: string;
   description: string;
@@ -97,6 +97,37 @@ const OPERATIONS: Record<string, Operation> = {
     expected: { $ref: schemaId("audit", "verify-result") },
     informational: strict({ hash_inputs: { type: "array", items: { type: "string" } } }),
   },
+  "bash-targets": {
+    contract: ["adapter"],
+    description: "List the paths that the shell command in `input.command` writes, in the order that the command names them.",
+    input: strict({ command: { type: "string" } }),
+    expected: strict({ targets: { type: "array", items: { type: "string" } } }),
+  },
+  "exec-segments": {
+    contract: ["adapter"],
+    description: "Split the shell command in `input.command` into its commands, and list the words of each.",
+    input: strict({ command: { type: "string" } }),
+    expected: strict({ segments: { type: "array", items: { type: "array", items: { type: "string" } } } }),
+  },
+  "patch-targets": {
+    contract: ["adapter"],
+    description: "List the paths that the Codex patch in `input.patch` adds, updates, deletes, or moves, or null if Codex would not accept the patch.",
+    input: strict({ patch: { type: "string" } }),
+    expected: strict({ targets: { oneOf: [{ type: "array", items: { type: "string" } }, { type: "null" }] } }),
+  },
+  "pre-tool": {
+    contract: ["adapter"],
+    description: "Run the PreToolUse hook of the agent that `shared.agent` names on the hook input in `input.hook`, for the member in `input.member`, against the bundle in `shared`.",
+    shared: strict({
+      agent: { enum: ["claude-code", "codex"] },
+      bundle: { $ref: schemaId("policy", "bundle") },
+      repo: { type: "string" },
+      now: { type: "string" },
+    }),
+    input: strict({ member: { type: "string" }, hook: { type: "object" } }),
+    expected: strict({ decision: { enum: ["allow", "deny"] } }),
+    informational: strict({ output: { type: "string" } }),
+  },
   "verify-signed-bundle": {
     contract: ["policy"],
     description: "Verify the compact JWS in `input.signature` against the key set in `shared`.",
@@ -135,7 +166,7 @@ export function fixtureFileSchema(): Json {
     description: "A list of cases for one operation of one contract. Each case pairs an input with the result that the reference gives.",
     type: "object",
     properties: {
-      contract: { enum: ["policy", "room", "audit", "canonical-json"], description: "The contract directory that the file belongs to." },
+      contract: { enum: ["policy", "room", "audit", "canonical-json", "adapter"], description: "The contract directory that the file belongs to." },
       version: { const: 1, description: "The version of the contract." },
       operation: { enum: Object.keys(OPERATIONS), description: "What an implementation does with each case." },
       description: { type: "string", minLength: 1 },

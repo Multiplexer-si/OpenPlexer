@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import type { webcrypto } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
 import type { Json } from "./output.ts";
@@ -34,6 +35,15 @@ export interface Jose {
   };
 }
 
+export interface PreToolRun {
+  agent: "claude-code" | "codex";
+  bundle: Json;
+  member: string;
+  repo: string;
+  now: string;
+  hook: Json;
+}
+
 export interface Reference {
   toJsonSchema(schema: ZodSchema): Record<string, Json>;
   protocol: {
@@ -61,6 +71,13 @@ export interface Reference {
   policyJwsTyp: string;
   verifyBundleJws(signature: string, jwks: unknown): Promise<BundleVerification>;
   jose: Jose;
+  adapters: {
+    bashTargets(command: string): string[];
+    commandSegments(command: string): string[][];
+    parsePatch(text: string): string[] | null;
+    /** Runs the `pre-tool` hook of the agent against a stored bundle and returns what the hook writes to standard output. */
+    preTool(run: PreToolRun): Promise<string>;
+  };
 }
 
 function git(root: string, args: string[]): string {
@@ -106,6 +123,7 @@ export async function loadReference(root: string): Promise<Reference> {
   const overlap = await load(join(root, "apps/hub/src/claims/overlap.ts"));
   const audit = await load(join(root, "apps/hub/src/audit/log.ts"));
   const store = await load(join(root, "apps/daemon/src/policy/store.ts"));
+  const adapters = await loadAdapters(root, load, store.PolicyStore);
   return {
     toJsonSchema,
     protocol,
@@ -117,5 +135,57 @@ export async function loadReference(root: string): Promise<Reference> {
     policyJwsTyp: store.POLICY_JWS_TYP,
     verifyBundleJws: store.verifyBundleJws,
     jose: await load(esmEntry(root, "apps/daemon", "jose")),
+    adapters,
+  };
+}
+
+type Load = (path: string) => Promise<any>;
+
+const OFFLINE_PORT = {
+  ready: async () => true,
+  digest: async () => null,
+  claims: () => [],
+  claim: async () => {
+    throw new Error("the fixtures make no claim");
+  },
+  post: async () => ({ status: "queued", clientEventId: "fixture" }),
+  close: async () => undefined,
+};
+
+async function loadAdapters(root: string, load: Load, PolicyStore: new (dir: string) => { applyVerified(bundle: unknown): unknown }): Promise<Reference["adapters"]> {
+  const dir = join(root, "apps/daemon/src/adapters");
+  const runner = await load(join(dir, "claude-code/hook-runner.ts"));
+  const preTool = await load(join(dir, "claude-code/hooks/pre-tool.ts"));
+  const execFilter = await load(join(dir, "claude-code/hooks/exec-filter.ts"));
+  const patch = await load(join(dir, "codex/patch.ts"));
+  const agents = { "claude-code": (await load(join(dir, "claude-code/runtime.ts"))).CLAUDE_AGENT, codex: (await load(join(dir, "codex/agent.ts"))).CODEX_AGENT };
+  return {
+    bashTargets: preTool.bashTargets,
+    commandSegments: execFilter.commandSegments,
+    parsePatch: patch.parsePatch,
+    async preTool(run) {
+      const work = mkdtempSync(join(tmpdir(), "extract-hook-"));
+      try {
+        const home = join(work, "home");
+        const hookDir = join(work, "hooks");
+        mkdirSync(home, { recursive: true });
+        mkdirSync(hookDir, { recursive: true });
+        writeFileSync(join(home, "config.json"), JSON.stringify({ repo: run.repo }));
+        new PolicyStore(home).applyVerified(run.bundle);
+        let stdout = "";
+        await runner.runAgentHook(
+          "pre-tool",
+          { stdin: JSON.stringify(run.hook), env: {}, stdout: (text: string) => (stdout += text), stderr: () => undefined },
+          {
+            agent: agents[run.agent],
+            now: () => Date.parse(run.now),
+            makeConn: async () => ({ room: "mission-fixture", sessionId: "session-fixture", dir: hookDir, mpDir: home, memberId: run.member, port: OFFLINE_PORT }),
+          },
+        );
+        return stdout;
+      } finally {
+        rmSync(work, { recursive: true, force: true });
+      }
+    },
   };
 }

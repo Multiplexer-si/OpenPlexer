@@ -1,0 +1,378 @@
+package hook
+
+import (
+	"regexp"
+	"strings"
+)
+
+type tokenKind int
+
+const (
+	wordToken tokenKind = iota
+	sepToken
+	redirToken
+	dupToken
+)
+
+type token struct {
+	kind  tokenKind
+	text  string
+	reads bool
+}
+
+var dynamic = regexp.MustCompile("[$`()]")
+
+// isSpace is the white space of ECMA-262, the set that the reference splits on.
+func isSpace(r rune) bool {
+	switch r {
+	case '\t', '\n', '\v', '\f', '\r', ' ', 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff:
+		return true
+	}
+	return r >= 0x2000 && r <= 0x200a
+}
+
+func isWordEnd(r rune) bool {
+	return isSpace(r) || strings.ContainsRune(";&|<>", r)
+}
+
+func isDigit(r rune) bool { return r >= '0' && r <= '9' }
+
+func startsWith(s []rune, i int, text string) bool {
+	return i+len([]rune(text)) <= len(s) && string(s[i:i+len([]rune(text))]) == text
+}
+
+func matchDup(s []rune, i int) int {
+	j := i
+	for j < len(s) && isDigit(s[j]) {
+		j++
+	}
+	if j+1 >= len(s) || (s[j] != '<' && s[j] != '>') || s[j+1] != '&' {
+		return 0
+	}
+	j += 2
+	switch {
+	case j < len(s) && isDigit(s[j]):
+		for j < len(s) && isDigit(s[j]) {
+			j++
+		}
+	case j < len(s) && s[j] == '-':
+		j++
+	default:
+		return 0
+	}
+	if j < len(s) && !isWordEnd(s[j]) {
+		return 0
+	}
+	return j - i
+}
+
+var redirOperators = []string{">>", ">&", ">|", "<<<", "<<-", "<<", "<>", ">", "<"}
+
+func matchRedir(s []rune, i int) int {
+	for _, op := range []string{"&>>", "&>"} {
+		if startsWith(s, i, op) {
+			return len(op)
+		}
+	}
+	j := i
+	for j < len(s) && isDigit(s[j]) {
+		j++
+	}
+	for _, op := range redirOperators {
+		if startsWith(s, j, op) {
+			return j - i + len(op)
+		}
+	}
+	return 0
+}
+
+func matchSep(s []rune, i int) int {
+	for _, op := range []string{"&&", "||", "|&"} {
+		if startsWith(s, i, op) {
+			return len(op)
+		}
+	}
+	if strings.ContainsRune(";|&\n", s[i]) {
+		return 1
+	}
+	return 0
+}
+
+func readWord(s []rune, i int) (string, int) {
+	var text strings.Builder
+	for i < len(s) && !isWordEnd(s[i]) {
+		switch c := s[i]; {
+		case c == '\'' || c == '"':
+			j := i + 1
+			for j < len(s) && s[j] != c {
+				if c == '"' && s[j] == '\\' && j+1 < len(s) {
+					j++
+				}
+				text.WriteRune(s[j])
+				j++
+			}
+			i = j + 1
+		case c == '\\' && i+1 < len(s):
+			if s[i+1] != '\n' {
+				text.WriteRune(s[i+1])
+			}
+			i += 2
+		default:
+			text.WriteRune(c)
+			i++
+		}
+	}
+	return text.String(), i
+}
+
+type heredoc struct {
+	delimiter string
+	tabs      bool
+}
+
+func skipBodies(s []rune, i int, docs []heredoc) int {
+	for _, d := range docs {
+		for i < len(s) {
+			end := i
+			for end < len(s) && s[end] != '\n' {
+				end++
+			}
+			line := strings.TrimSuffix(string(s[i:end]), "\r")
+			i = end + 1
+			if d.tabs {
+				line = strings.TrimLeft(line, "\t")
+			}
+			if line == d.delimiter {
+				break
+			}
+		}
+	}
+	return min(i, len(s))
+}
+
+var (
+	heredocOperator = regexp.MustCompile(`^[0-9]*<<-?$`)
+	readOperator    = regexp.MustCompile(`^[0-9]*<`)
+	readWriteOp     = regexp.MustCompile(`^[0-9]*<>`)
+)
+
+func tokens(command string) []token {
+	s := []rune(command)
+	var out []token
+	var pending []heredoc
+	heredocOp := ""
+	for i := 0; i < len(s); {
+		if isSpace(s[i]) && s[i] != '\n' {
+			i++
+		} else if n := matchDup(s, i); n > 0 {
+			out = append(out, token{kind: dupToken, text: string(s[i : i+n])})
+			i += n
+		} else if n := matchRedir(s, i); n > 0 {
+			text := string(s[i : i+n])
+			out = append(out, token{kind: redirToken, text: text, reads: readOperator.MatchString(text) && !readWriteOp.MatchString(text)})
+			heredocOp = ""
+			if heredocOperator.MatchString(text) {
+				heredocOp = text
+			}
+			i += n
+		} else if n := matchSep(s, i); n > 0 {
+			out = append(out, token{kind: sepToken, text: string(s[i : i+n])})
+			heredocOp = ""
+			i += n
+			if s[i-1] == '\n' && len(pending) > 0 {
+				i = skipBodies(s, i, pending)
+				pending = nil
+			}
+		} else {
+			word, end := readWord(s, i)
+			out = append(out, token{kind: wordToken, text: word})
+			if heredocOp != "" {
+				pending = append(pending, heredoc{delimiter: word, tabs: strings.HasSuffix(heredocOp, "-")})
+			}
+			heredocOp = ""
+			i = end
+		}
+	}
+	return out
+}
+
+// Segments splits a shell line into its commands, at && || ; | |& & and line
+// feeds outside quotes, and lists the words of each. A redirection operator and
+// its one target word are not words of the command, and an fd duplication is
+// dropped.
+func Segments(command string) [][]string {
+	var out [][]string
+	var words []string
+	skipTarget := false
+	flush := func() {
+		if len(words) > 0 {
+			out = append(out, words)
+		}
+		words, skipTarget = nil, false
+	}
+	for _, t := range tokens(command) {
+		switch t.kind {
+		case sepToken:
+			flush()
+		case redirToken:
+			skipTarget = true
+		case wordToken:
+			if skipTarget {
+				skipTarget = false
+			} else {
+				words = append(words, t.text)
+			}
+		}
+	}
+	flush()
+	return out
+}
+
+var (
+	mutatingVerbs = map[string]bool{"tee": true, "touch": true, "rm": true, "mkdir": true, "rmdir": true, "truncate": true}
+	destLastVerbs = map[string]bool{"mv": true, "cp": true, "ln": true, "install": true}
+	valueOptions  = map[string]*regexp.Regexp{
+		"touch":    regexp.MustCompile(`^(-[dtr]|--date|--reference)$`),
+		"truncate": regexp.MustCompile(`^(-[sr]|--size|--reference)$`),
+		"mkdir":    regexp.MustCompile(`^(-m|--mode|--context)$`),
+		"install":  regexp.MustCompile(`^(-[mogS]|--mode|--owner|--group|--suffix)$`),
+		"cp":       regexp.MustCompile(`^(-S|--suffix)$`),
+		"mv":       regexp.MustCompile(`^(-S|--suffix)$`),
+		"ln":       regexp.MustCompile(`^(-S|--suffix)$`),
+	}
+	sedInPlace   = regexp.MustCompile(`^(--in-place|-[a-zA-Z]*i)`)
+	sedScriptOpt = regexp.MustCompile(`^(-[a-zA-Z]*[ef]|--expression|--file)$`)
+	sedScriptEq  = regexp.MustCompile(`^--(expression|file)=`)
+	targetDirEq  = regexp.MustCompile(`^--target-directory=(.+)$`)
+	targetDirOpt = regexp.MustCompile(`^(-t|--target-directory)$`)
+	installDirs  = regexp.MustCompile(`^-[a-zA-Z]*d`)
+)
+
+func argTargets(verb string, args []string) []string {
+	valueOpt := valueOptions[verb]
+	var operands []string
+	inPlace, hasScript, dirsOnly, ended := false, false, false, false
+	var dirTarget *string
+	for k := 0; k < len(args); k++ {
+		a := args[k]
+		if !ended && a == "--" {
+			ended = true
+			continue
+		}
+		if ended || !strings.HasPrefix(a, "-") || len(a) == 1 {
+			operands = append(operands, a)
+			continue
+		}
+		switch {
+		case verb == "sed":
+			inPlace = inPlace || sedInPlace.MatchString(a)
+			if sedScriptOpt.MatchString(a) {
+				hasScript = true
+				k++
+			} else if sedScriptEq.MatchString(a) {
+				hasScript = true
+			}
+		case destLastVerbs[verb]:
+			if m := targetDirEq.FindStringSubmatch(a); m != nil {
+				dirTarget = &m[1]
+			} else if targetDirOpt.MatchString(a) {
+				k++
+				dirTarget = nil
+				if k < len(args) {
+					dirTarget = &args[k]
+				}
+			} else if verb == "install" && installDirs.MatchString(a) {
+				dirsOnly = true
+			} else if valueOpt != nil && valueOpt.MatchString(a) {
+				k++
+			}
+		default:
+			if valueOpt != nil && valueOpt.MatchString(a) {
+				k++
+			}
+		}
+	}
+	var written []string
+	switch {
+	case verb == "sed" && inPlace && hasScript:
+		written = operands
+	case verb == "sed" && inPlace && len(operands) > 0:
+		written = operands[1:]
+	case verb == "sed":
+	case destLastVerbs[verb] && dirTarget != nil:
+		written = []string{*dirTarget}
+	case destLastVerbs[verb] && dirsOnly:
+		written = operands
+	case destLastVerbs[verb] && len(operands) >= 2:
+		written = []string{operands[len(operands)-1]}
+	case destLastVerbs[verb]:
+	default:
+		written = operands
+	}
+	var kept []string
+	for _, path := range written {
+		if path != "" && !dynamic.MatchString(path) {
+			kept = append(kept, path)
+		}
+	}
+	return kept
+}
+
+// WriteTargets lists the paths that a shell command is clear to write, in the
+// order that the command names them, with no repeat. They are the targets of
+// redirections, the arguments of the commands that create or remove files, the
+// destination of mv, cp, ln, and install, and the file operands of sed -i.
+func WriteTargets(command string) []string {
+	var targets []string
+	seen := map[string]bool{}
+	add := func(path string) {
+		if !seen[path] {
+			seen[path] = true
+			targets = append(targets, path)
+		}
+	}
+	verb, hasVerb := "", false
+	var args []string
+	var redirect *token
+	flush := func() {
+		if hasVerb && (mutatingVerbs[verb] || destLastVerbs[verb] || verb == "sed") {
+			for _, path := range argTargets(verb, args) {
+				add(path)
+			}
+		}
+		verb, hasVerb, args, redirect = "", false, nil, nil
+	}
+	for _, t := range tokens(command) {
+		switch {
+		case t.kind == sepToken:
+			flush()
+		case t.kind == redirToken:
+			redirect = &token{kind: t.kind, text: t.text, reads: t.reads}
+		case t.kind == wordToken && redirect != nil:
+			if !redirect.reads && !dynamic.MatchString(t.text) {
+				add(t.text)
+			}
+			redirect = nil
+		case t.kind == wordToken && !hasVerb:
+			verb, hasVerb = t.text[strings.LastIndexAny(t.text, `\/`)+1:], true
+		case t.kind == wordToken:
+			args = append(args, t.text)
+		}
+	}
+	flush()
+	return targets
+}
+
+var substitution = regexp.MustCompile("\\$\\(|`|[<>]\\(")
+
+func bareTee(words []string) bool {
+	if words[0] != "tee" {
+		return false
+	}
+	for _, w := range words {
+		if dynamic.MatchString(w) {
+			return false
+		}
+	}
+	return true
+}

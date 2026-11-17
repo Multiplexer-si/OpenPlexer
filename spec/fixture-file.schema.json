@@ -430,6 +430,295 @@
       "if": {
         "properties": {
           "operation": {
+            "const": "bash-targets"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "List the paths that the shell command in `input.command` writes, in the order that the command names them.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "targets": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "targets"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "command": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "command"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "adapter"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "exec-segments"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Split the shell command in `input.command` into its commands, and list the words of each.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "segments": {
+                      "items": {
+                        "items": {
+                          "type": "string"
+                        },
+                        "type": "array"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "segments"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "command": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "command"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "adapter"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "patch-targets"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "List the paths that the Codex patch in `input.patch` adds, updates, deletes, or moves, or null if Codex would not accept the patch.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "targets": {
+                      "oneOf": [
+                        {
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "targets"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "patch": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "patch"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "adapter"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "pre-tool"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Run the PreToolUse hook of the agent that `shared.agent` names on the hook input in `input.hook`, for the member in `input.member`, against the bundle in `shared`.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "decision": {
+                      "enum": [
+                        "allow",
+                        "deny"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "decision"
+                  ],
+                  "type": "object"
+                },
+                "informational": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "output": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "output"
+                  ],
+                  "type": "object"
+                },
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "hook": {
+                      "type": "object"
+                    },
+                    "member": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "member",
+                    "hook"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "adapter"
+            ]
+          },
+          "schema": false,
+          "shared": {
+            "additionalProperties": false,
+            "properties": {
+              "agent": {
+                "enum": [
+                  "claude-code",
+                  "codex"
+                ]
+              },
+              "bundle": {
+                "$ref": "urn:openplexer:spec:policy:v1:bundle"
+              },
+              "now": {
+                "type": "string"
+              },
+              "repo": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "agent",
+              "bundle",
+              "repo",
+              "now"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "shared"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
             "const": "verify-signed-bundle"
           }
         },
@@ -542,7 +831,8 @@
         "policy",
         "room",
         "audit",
-        "canonical-json"
+        "canonical-json",
+        "adapter"
       ]
     },
     "description": {
@@ -558,6 +848,10 @@
         "path-sets-overlap",
         "canonicalize",
         "verify-chain",
+        "bash-targets",
+        "exec-segments",
+        "patch-targets",
+        "pre-tool",
         "verify-signed-bundle"
       ]
     },

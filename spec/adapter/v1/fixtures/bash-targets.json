@@ -1,0 +1,556 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "command": "echo hi > web/a.ts"
+      },
+      "name": "a redirection target is a write",
+      "why": "The word after `>` is a write target."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/log.txt"
+        ]
+      },
+      "input": {
+        "command": "echo hi >> web/log.txt"
+      },
+      "name": "an append is a write",
+      "why": "The word after `>>` is a write target."
+    },
+    {
+      "expected": {
+        "targets": []
+      },
+      "input": {
+        "command": "cat web/a.ts"
+      },
+      "name": "a command with no write has no target",
+      "why": "A command that only reads names no target."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/out.txt"
+        ]
+      },
+      "input": {
+        "command": "sort < web/in.txt > web/out.txt"
+      },
+      "name": "an input redirection is not a write",
+      "why": "The word after `<` is read."
+    },
+    {
+      "expected": {
+        "targets": [
+          "o.txt",
+          "q"
+        ]
+      },
+      "input": {
+        "command": "cat <<< hi > o.txt\nrm q"
+      },
+      "name": "a here-string is not a write",
+      "why": "The word after `<<<` is data."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "command": "git commit -m \"a; rm x\" && touch web/a.ts"
+      },
+      "name": "quoted separators do not split a command",
+      "why": "A `;` inside quotes belongs to the word."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/b.ts"
+        ]
+      },
+      "input": {
+        "command": "echo a\nrm web/b.ts"
+      },
+      "name": "a line feed splits a command",
+      "why": "A line feed starts the next command."
+    },
+    {
+      "expected": {
+        "targets": [
+          "out.txt",
+          "all.log"
+        ]
+      },
+      "input": {
+        "command": "npm test 2>&1 >out.txt 2>&- &>all.log"
+      },
+      "name": "fd duplication and closing are not targets",
+      "why": "`2>&1` and `2>&-` name a descriptor."
+    },
+    {
+      "expected": {
+        "targets": [
+          "notes.md"
+        ]
+      },
+      "input": {
+        "command": "cat > notes.md <<'EOF'\nrm src/core/a.ts\nmkdir build\n> quoted line\nEOF"
+      },
+      "name": "a heredoc with a quoted delimiter has a body that is data",
+      "why": "No line of the body is a command."
+    },
+    {
+      "expected": {
+        "targets": [
+          "s.sh"
+        ]
+      },
+      "input": {
+        "command": "cat > s.sh <<EOF\ntouch web/x\nEOF"
+      },
+      "name": "a heredoc with an unquoted delimiter has a body that is data",
+      "why": "No line of the body is a command."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/setup.sh",
+          "web/after.txt"
+        ]
+      },
+      "input": {
+        "command": "cat > web/setup.sh <<'EOF'\nmkdir -p build\nrm -rf dist\nEOF\ntouch web/after.txt"
+      },
+      "name": "a command after a heredoc is read",
+      "why": "The body ends at the delimiter line."
+    },
+    {
+      "expected": {
+        "targets": [
+          "a.txt",
+          "b"
+        ]
+      },
+      "input": {
+        "command": "cat <<-EOF > a.txt\n\trm x\n\tEOF\nrm b"
+      },
+      "name": "<<- strips the tabs of the delimiter line",
+      "why": "With `<<-` the delimiter line may start with tabs."
+    },
+    {
+      "expected": {
+        "targets": [
+          "a.txt",
+          "b"
+        ]
+      },
+      "input": {
+        "command": "cat <<EOF > a.txt\nrm x\n\tEOF\nEOF\nrm b"
+      },
+      "name": "<< does not strip the tabs of the delimiter line",
+      "why": "With `<<` a delimiter line that starts with a tab is part of the body."
+    },
+    {
+      "expected": {
+        "targets": [
+          "a.txt",
+          "b.txt",
+          "z"
+        ]
+      },
+      "input": {
+        "command": "cat <<A >a.txt; cat <<\"B\" >b.txt\nrm x\nA\nrm y\nB\nrm z"
+      },
+      "name": "two heredocs on one line have their bodies in order",
+      "why": "Each body ends at its own delimiter."
+    },
+    {
+      "expected": {
+        "targets": [
+          "y"
+        ]
+      },
+      "input": {
+        "command": "cat <<EOF\r\nrm x\r\nEOF\r\nrm y"
+      },
+      "name": "a heredoc body with carriage returns ends at its delimiter",
+      "why": "A carriage return before the line feed is not part of the delimiter."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "command": "sed -i 's/foo/bar/' web/a.ts"
+      },
+      "name": "sed -i writes its file operand and not its script",
+      "why": "The first operand of `sed -i` with no `-e` is the script."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts",
+          "web/b.ts"
+        ]
+      },
+      "input": {
+        "command": "sed -i.bak 's/foo/bar/' web/a.ts web/b.ts"
+      },
+      "name": "sed -i with a backup suffix writes every file operand",
+      "why": "`-i.bak` is in-place with a suffix."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "command": "sed -i -e 's/foo/bar/' -e 's/x/y/' web/a.ts"
+      },
+      "name": "sed -i with -e writes every operand",
+      "why": "With `-e` the operands are all files."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "command": "sed -n -i -f script.sed web/a.ts"
+      },
+      "name": "sed -i with -f writes every operand",
+      "why": "With `-f` the operands are all files."
+    },
+    {
+      "expected": {
+        "targets": []
+      },
+      "input": {
+        "command": "sed 's/foo/bar/' web/a.ts"
+      },
+      "name": "sed with no -i writes nothing",
+      "why": "Without `-i` the operands are read."
+    },
+    {
+      "expected": {
+        "targets": []
+      },
+      "input": {
+        "command": "awk '{print $1}' web/a.ts"
+      },
+      "name": "an awk program is not a path",
+      "why": "Awk writes nothing unless it redirects."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/x.md"
+        ]
+      },
+      "input": {
+        "command": "cp README.md web/x.md"
+      },
+      "name": "cp writes its destination",
+      "why": "The last operand of `cp` is the destination."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/"
+        ]
+      },
+      "input": {
+        "command": "cp -r a b web/"
+      },
+      "name": "cp with many sources writes the last operand",
+      "why": "The last operand of `cp` is the destination."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "command": "mv src/core/a.ts web/a.ts"
+      },
+      "name": "mv writes its destination",
+      "why": "The last operand of `mv` is the destination."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/link"
+        ]
+      },
+      "input": {
+        "command": "ln -s src/core/a.ts web/link"
+      },
+      "name": "ln writes its destination",
+      "why": "The last operand of `ln` is the destination."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/"
+        ]
+      },
+      "input": {
+        "command": "cp -t web/ src/core/a.ts src/core/b.ts"
+      },
+      "name": "cp -t names the destination directory",
+      "why": "`-t` gives the destination before the sources."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/tool"
+        ]
+      },
+      "input": {
+        "command": "install -m 755 build/tool web/tool"
+      },
+      "name": "install writes its destination and skips the mode",
+      "why": "`-m` takes a value that is not a path."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a",
+          "web/b"
+        ]
+      },
+      "input": {
+        "command": "install -d web/a web/b"
+      },
+      "name": "install -d writes every operand",
+      "why": "`-d` makes directories."
+    },
+    {
+      "expected": {
+        "targets": []
+      },
+      "input": {
+        "command": "cp onlyone"
+      },
+      "name": "cp with one operand has no target",
+      "why": "The gate does not guess a target."
+    },
+    {
+      "expected": {
+        "targets": [
+          "src/core/a.ts",
+          "web/old.ts",
+          "web/n.ts"
+        ]
+      },
+      "input": {
+        "command": "echo hi > src/core/a.ts && rm web/old.ts; touch -d yesterday web/n.ts"
+      },
+      "name": "several commands each name their targets",
+      "why": "Redirections and commands on one line all count."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/log.txt"
+        ]
+      },
+      "input": {
+        "command": "truncate -s 0 web/log.txt"
+      },
+      "name": "truncate writes its file",
+      "why": "`-s` takes a value that is not a path."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/log.txt"
+        ]
+      },
+      "input": {
+        "command": "tee -a web/log.txt"
+      },
+      "name": "tee writes its operands",
+      "why": "Every operand of `tee` is a file."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/fixed.txt"
+        ]
+      },
+      "input": {
+        "command": "touch web/$NAME web/fixed.txt"
+      },
+      "name": "a target with a variable is left out",
+      "why": "A word that the shell decides at run time cannot be judged."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/x"
+        ]
+      },
+      "input": {
+        "command": "rm $(ls) web/x"
+      },
+      "name": "a target with a command substitution is left out",
+      "why": "A word that the shell decides at run time cannot be judged."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "command": "/bin/rm web/a.ts"
+      },
+      "name": "a program named by its path is read by its last segment",
+      "why": "`/bin/rm` is `rm`."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "command": "touch web/a.ts web/a.ts"
+      },
+      "name": "the same target twice is listed once",
+      "why": "The list has no repeats."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "command": "touch -d 2020-01-01 web/a.ts"
+      },
+      "name": "a flag that takes a value skips the value",
+      "why": "`touch -d` takes a date."
+    },
+    {
+      "expected": {
+        "targets": [
+          "-weird"
+        ]
+      },
+      "input": {
+        "command": "rm -- -weird"
+      },
+      "name": "an option terminator makes the rest operands",
+      "why": "After `--` a word that starts with `-` is a path."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/new"
+        ]
+      },
+      "input": {
+        "command": "mkdir -m 755 web/new"
+      },
+      "name": "mkdir skips the mode",
+      "why": "`-m` takes a value that is not a path."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a b.txt"
+        ]
+      },
+      "input": {
+        "command": "echo hi > \"web/a b.txt\""
+      },
+      "name": "a quoted target is read without its quotes",
+      "why": "Quotes and escapes are removed from a word."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a b.txt"
+        ]
+      },
+      "input": {
+        "command": "touch web/a\\ b.txt"
+      },
+      "name": "an escaped space joins a word",
+      "why": "A backslash before a space keeps the word together."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/b.ts"
+        ]
+      },
+      "input": {
+        "command": "cat web/a.ts | tee web/b.ts"
+      },
+      "name": "a pipe starts a new command",
+      "why": "The command after `|` has its own targets."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/c.ts"
+        ]
+      },
+      "input": {
+        "command": "sleep 1 & rm web/c.ts"
+      },
+      "name": "a background marker starts a new command",
+      "why": "The command after `&` has its own targets."
+    },
+    {
+      "expected": {
+        "targets": []
+      },
+      "input": {
+        "command": "echo hi >"
+      },
+      "name": "a redirection that has no target ends the line",
+      "why": "A redirection operator at the end names no path."
+    },
+    {
+      "expected": {
+        "targets": [
+          "web/a.ts"
+        ]
+      },
+      "input": {
+        "command": "echo hi > \"web/a.ts"
+      },
+      "name": "an unclosed quote runs to the end of the line",
+      "why": "The word holds the rest of the line."
+    }
+  ],
+  "contract": "adapter",
+  "description": "The paths that a shell command writes, read from the command text.",
+  "operation": "bash-targets",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/daemon/src/adapters/claude-code/hooks/pre-tool.ts",
+      "apps/daemon/src/adapters/claude-code/hook-runner.ts"
+    ]
+  },
+  "version": 1
+}

@@ -1,0 +1,89 @@
+package hook
+
+import (
+	"strings"
+	"testing"
+
+	"github.com/multiplexer-si/openplexer/internal/policy"
+)
+
+func TestNormalizeTargetWithProjectRoot(t *testing.T) {
+	for _, c := range []struct{ name, path, cwd, want string }{
+		{"a relative path is under the root, not under cwd", "src/a.go", "/p/sub", "sub/src/a.go"},
+		{"an absolute path in the root", "/p/web/a.ts", "/p/sub", "web/a.ts"},
+		{"a path that leaves the root stays absolute", "../x", "/p", "/x"},
+		{"an absolute path outside the root", "/home/u/.claude/x", "/p", "/home/u/.claude/x"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if got := normalizeTarget(c.path, c.cwd, "/p"); got != c.want {
+				t.Fatalf("normalizeTarget(%q, %q) = %q, want %q", c.path, c.cwd, got, c.want)
+			}
+		})
+	}
+}
+
+func TestInProject(t *testing.T) {
+	for path, want := range map[string]bool{"web/a.ts": true, "": true, "/etc/x": false, "C:/x": false, "..": false, "../x": false, "..x": true} {
+		if got := inProject(path); got != want {
+			t.Errorf("inProject(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
+func TestQuotedSeparatorInAGrantedCommandIsDenied(t *testing.T) {
+	env := Env{Repo: "app", Member: "m", ExecGated: true}
+	bundle := &policy.Bundle{Roles: map[string]policy.Role{"r": {Exec: []string{"git commit"}}}, Members: map[string]string{"m": "r"}}
+	evaluate := func(q policy.Query) policy.Result { return policy.Evaluate(bundle, q) }
+	call := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"/p","tool_input":{"command":"git commit -m \"fix; tidy\""}}`)
+	v := Decide(call, env, evaluate, Tools{"Bash": ShellTool})
+	if v.Outcome != Deny || !strings.Contains(v.Reason, `"git commit -m fix; tidy"`) {
+		t.Fatalf("verdict = %+v, want a denial that names the command", v)
+	}
+}
+
+func TestDecideRefusesWhatItCannotRead(t *testing.T) {
+	tools := Tools{"Write": FileTool("file_path")}
+	allow := func(policy.Query) policy.Result { return policy.Result{Decision: policy.Allow} }
+	for name, input := range map[string]string{
+		"input that is not JSON":     `not json`,
+		"a call with no cwd":         `{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/p/a"}}`,
+		"a call with no file_path":   `{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"/p","tool_input":{}}`,
+		"a file_path that is a list": `{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"/p","tool_input":{"file_path":["a"]}}`,
+		"a tool_input that is text":  `{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"/p","tool_input":"x"}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if v := Decide([]byte(input), Env{}, allow, tools); v.Outcome != Refuse || v.Reason == "" {
+				t.Fatalf("verdict = %+v, want a refusal with a reason", v)
+			}
+		})
+	}
+}
+
+func TestDecideAllowsWhatItDoesNotGate(t *testing.T) {
+	tools := Tools{"Write": FileTool("file_path")}
+	deny := func(policy.Query) policy.Result { return policy.Result{Decision: policy.Deny, Rule: "no"} }
+	for name, input := range map[string]string{
+		"a tool that is not in the table": `{"hook_event_name":"PreToolUse","tool_name":"Read","cwd":"/p","tool_input":{"file_path":"/p/a"}}`,
+		"an event other than PreToolUse":  `{"hook_event_name":"PostToolUse","tool_name":"Write","cwd":"/p","tool_input":{"file_path":"/p/a"}}`,
+		"a write outside the project":     `{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"/p","tool_input":{"file_path":"/tmp/a"}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			if v := Decide([]byte(input), Env{}, deny, tools); v.Outcome != Allow {
+				t.Fatalf("verdict = %+v, want allow", v)
+			}
+		})
+	}
+}
+
+func TestRender(t *testing.T) {
+	if out := Render(Verdict{}); out != (Output{}) {
+		t.Errorf("an allowed call has output %+v", out)
+	}
+	deny := Render(Verdict{Outcome: Deny, Reason: `a "quoted" reason`})
+	if deny.ExitCode != 0 || !strings.Contains(deny.Stdout, `"permissionDecision":"deny"`) || !strings.Contains(deny.Stdout, `a \"quoted\" reason`) {
+		t.Errorf("a denied call has output %+v", deny)
+	}
+	if refuse := Render(Verdict{Outcome: Refuse, Reason: "x"}); refuse.ExitCode != 2 || refuse.Stdout != "" || refuse.Stderr == "" {
+		t.Errorf("a refused call has output %+v", refuse)
+	}
+}

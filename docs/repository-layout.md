@@ -29,7 +29,7 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 
 ## Packages
 
-The first three packages hold code. `internal/room`, the two adapter packages, and `internal/hub` each hold a `doc.go` file with a package comment and no other code. The last three packages hold only tests.
+`internal/policy`, `internal/audit`, and `internal/daemon` hold the policy evaluator and the verification of a signed bundle, the audit record, and the local gate. The three adapter packages hold the hook adapters. `internal/room` and `internal/hub` each hold a `doc.go` file with a package comment and no other code. The last four packages hold only tests.
 
 | Package | Owns |
 |---|---|
@@ -37,10 +37,12 @@ The first three packages hold code. `internal/room`, the two adapter packages, a
 | `internal/audit` | Canonical JSON, the hash of an audit record, and the verification of a chain. Pure, no I/O. Its tests run every fixture of `spec/canonical-json` and `spec/audit`. |
 | `internal/daemon` | The local gate: the policy source, the store of the last verified bundle, the state of the policy, local identity, and the audit log of each decision. It reads and writes one home directory. |
 | `internal/room` | The Room protocol: events, claims, decisions, and their validation. Pure, no I/O. |
-| `internal/adapter/claudecode` | The hook adapter for Claude Code. |
-| `internal/adapter/codex` | The hook adapter for Codex. |
+| `internal/adapter/hook` | What both hook adapters share: the hook call, the reading of a shell command and of a path, the translation of a tool call into policy intents, and the verdict. It imports `internal/policy`. |
+| `internal/adapter/claudecode` | The hook adapter for Claude Code: its table of gated tools and its `Handle` function. |
+| `internal/adapter/codex` | The hook adapter for Codex: its table of gated tools, the reader of `apply_patch` patches, and its `Handle` function. |
 | `internal/hub` | The single-team hub server. |
 | `internal/layering` | The tests that enforce the dependency rules, and the rule that only a test may import another module. |
+| `internal/adapter` | The test that runs every case of `spec/adapter` against the adapters of Claude Code and Codex. The directory holds no other file. |
 | `internal/doclinks` | The test that checks the relative links in the documentation. |
 | `internal/spectest` | The tests that check the contracts: every file under `spec/` is in its place, every schema compiles, every example validates against its schema, every fixture file validates against the fixture-file schema, and every hash follows from its rule. |
 
@@ -62,7 +64,7 @@ A trailing `/...` matches the package and every package under it. The last row i
 
 ## Contracts
 
-Each directory under `spec/` holds one contract: a README with the rules, and a `v1/` directory with the schemas, the examples, and the fixtures. Canonical JSON defines text and not a shape, so it has no schema, and its `v1/` holds only fixtures. [The contracts in `spec/`](../spec/README.md) describes the layout and the format of a fixture file.
+Each directory under `spec/` holds one contract: a README with the rules, and a `v1/` directory with the schemas, the examples, and the fixtures. Canonical JSON defines text and not a shape, so it has no schema, and its `v1/` holds only fixtures. The adapter contract also has no schema, because the hook input is the format of each coding agent. [The contracts in `spec/`](../spec/README.md) describes the layout and the format of a fixture file.
 
 | Directory | Contract |
 |---|---|
@@ -70,6 +72,7 @@ Each directory under `spec/` holds one contract: a README with the rules, and a 
 | `spec/policy` | The policy bundle, overrides, policy evaluation, and the signed bundle |
 | `spec/room` | Room events, which include claims and decisions, the transport envelope, and the overlap rules for claims |
 | `spec/audit` | The audit record, its hash, chain verification, and the JSON export |
+| `spec/adapter` | How an adapter reads the hook input of a coding agent into policy queries, and answers the hook. It has fixtures and no schema. |
 
 ## Tools
 

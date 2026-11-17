@@ -30,6 +30,8 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 | See how the parts connect, and why the code is split the way it is | [Architecture](docs/architecture.md) |
 | Decide whether to trust the hooks on your machine | [Trust model](docs/trust-model.md) |
 | Load a signed policy on your machine and check an action against it | [Local policy gate](docs/local-policy.md) |
+| Connect Claude Code to the gate by hand, or see what its hook cannot see | [Claude Code hooks](docs/hooks-claude-code.md) |
+| Connect Codex to the gate by hand, or see what its hook cannot see | [Codex hooks](docs/hooks-codex.md) |
 | Find a binary, a package, or a make target | [Repository layout](docs/repository-layout.md) |
 | Look up a term | [Glossary](docs/glossary.md) |
 | See what is planned, and in what order | [Roadmap](docs/roadmap.md) |
