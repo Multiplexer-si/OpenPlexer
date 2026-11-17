@@ -1,0 +1,354 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "segments": [
+          [
+            "npm",
+            "test"
+          ]
+        ]
+      },
+      "input": {
+        "command": "npm test"
+      },
+      "name": "one command is one segment",
+      "why": "A command with no separator is one segment."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "npm",
+            "test"
+          ],
+          [
+            "tee",
+            "out.txt"
+          ]
+        ]
+      },
+      "input": {
+        "command": "npm test 2>&1 | tee out.txt"
+      },
+      "name": "a pipe and a redirection",
+      "why": "The redirection and its target are set aside, and the pipe splits."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "a"
+          ],
+          [
+            "b"
+          ],
+          [
+            "c"
+          ],
+          [
+            "d"
+          ],
+          [
+            "e"
+          ],
+          [
+            "f"
+          ],
+          [
+            "g"
+          ],
+          [
+            "h"
+          ]
+        ]
+      },
+      "input": {
+        "command": "a && b || c; d | e |& f & g\nh"
+      },
+      "name": "separators of every kind split",
+      "why": "`&&`, `||`, `;`, `|`, `|&`, `&`, and a line feed all split."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "npm",
+            "test"
+          ],
+          [
+            "git",
+            "status"
+          ],
+          [
+            "ls"
+          ]
+        ]
+      },
+      "input": {
+        "command": "npm test < input.txt && git status > s.txt\nls &"
+      },
+      "name": "an input redirection is set aside with its target",
+      "why": "The target of `<` is not a word of the command."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "git",
+            "commit",
+            "-m",
+            "fix; tidy"
+          ],
+          [
+            "npm",
+            "test",
+            "--",
+            "--grep",
+            "a|b"
+          ]
+        ]
+      },
+      "input": {
+        "command": "git commit -m \"fix; tidy\" && npm test -- --grep 'a|b'"
+      },
+      "name": "quoted separators stay in the word",
+      "why": "A separator inside quotes belongs to the word."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "npm",
+            "test",
+            "extra"
+          ]
+        ]
+      },
+      "input": {
+        "command": "npm test >x extra 2>&- &> log"
+      },
+      "name": "redirections in the middle are set aside",
+      "why": "An operator and its target can come anywhere in the command."
+    },
+    {
+      "expected": {
+        "segments": []
+      },
+      "input": {
+        "command": " ; && "
+      },
+      "name": "an empty line has no segment",
+      "why": "A line that holds only separators has no command."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "cat"
+          ],
+          [
+            "ls"
+          ]
+        ]
+      },
+      "input": {
+        "command": "cat <<EOF\nrm -rf x\nEOF\nls"
+      },
+      "name": "a heredoc body is not a segment",
+      "why": "The body of a heredoc is data."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "cat"
+          ]
+        ]
+      },
+      "input": {
+        "command": "cat <<'EOF' > out.txt\nbody\nEOF"
+      },
+      "name": "the delimiter of a heredoc is not a word",
+      "why": "The delimiter is the target of `<<`."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "cat"
+          ]
+        ]
+      },
+      "input": {
+        "command": "cat <<< hello"
+      },
+      "name": "a here-string target is not a word",
+      "why": "The target of `<<<` is data."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "echo",
+            "a\\b"
+          ]
+        ]
+      },
+      "input": {
+        "command": "echo 'a\\b'"
+      },
+      "name": "single quotes keep a backslash",
+      "why": "Inside single quotes a backslash is a character."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "echo",
+            "a\"b"
+          ]
+        ]
+      },
+      "input": {
+        "command": "echo \"a\\\"b\""
+      },
+      "name": "double quotes drop the backslash of an escape",
+      "why": "A backslash in double quotes escapes the next character."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "echo",
+            "a;b"
+          ]
+        ]
+      },
+      "input": {
+        "command": "echo a\\;b"
+      },
+      "name": "an escaped separator stays in the word",
+      "why": "A backslash before `;` keeps it in the word."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "npm",
+            "test"
+          ]
+        ]
+      },
+      "input": {
+        "command": "npm \\\ntest"
+      },
+      "name": "an escaped line feed joins the lines",
+      "why": "A backslash before a line feed continues the line."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "/usr/bin/npm",
+            "test"
+          ]
+        ]
+      },
+      "input": {
+        "command": "/usr/bin/npm test"
+      },
+      "name": "a path as the command word is kept",
+      "why": "The command word is not shortened to its last segment."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "NODE_ENV=test",
+            "npm",
+            "test"
+          ]
+        ]
+      },
+      "input": {
+        "command": "NODE_ENV=test npm test"
+      },
+      "name": "an environment assignment is the first word",
+      "why": "The assignment is a word of the command."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "npm",
+            "test",
+            "$HOME"
+          ]
+        ]
+      },
+      "input": {
+        "command": "npm test $HOME"
+      },
+      "name": "a word with a variable is kept as written",
+      "why": "The gate does not expand a variable."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "echo",
+            "$(whoami)"
+          ]
+        ]
+      },
+      "input": {
+        "command": "echo $(whoami)"
+      },
+      "name": "a command substitution is kept as written",
+      "why": "The gate does not run a substitution."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "npm",
+            "test"
+          ]
+        ]
+      },
+      "input": {
+        "command": "npm test 2>&1"
+      },
+      "name": "an fd duplication is dropped",
+      "why": "`2>&1` is not a word."
+    },
+    {
+      "expected": {
+        "segments": [
+          [
+            "npm",
+            "test"
+          ]
+        ]
+      },
+      "input": {
+        "command": "npm test >& out.txt"
+      },
+      "name": "a bare >& is a redirection with a target",
+      "why": "`>&` followed by a name redirects to a file."
+    }
+  ],
+  "contract": "adapter",
+  "description": "The commands of a shell line, split the way the exec check reads it.",
+  "operation": "exec-segments",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/daemon/src/adapters/claude-code/hooks/pre-tool.ts",
+      "apps/daemon/src/adapters/claude-code/hook-runner.ts",
+      "apps/daemon/src/adapters/claude-code/hooks/exec-filter.ts"
+    ]
+  },
+  "version": 1
+}

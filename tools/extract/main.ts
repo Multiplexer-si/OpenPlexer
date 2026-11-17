@@ -1,6 +1,7 @@
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { examples, signedExample } from "./examples.ts";
+import { adapterHookFixtures } from "./fixtures/adapter-hooks.ts";
 import { auditChainFixtures } from "./fixtures/audit-chain.ts";
 import { canonicalJsonFixtures } from "./fixtures/canonical-json.ts";
 import { claimsOverlapFixtures } from "./fixtures/claims-overlap.ts";
@@ -30,8 +31,11 @@ interface Plan {
   sealed: SealedFiles[];
 }
 
-function plan(reference: Reference): Plan {
-  const fixtures = [policyEvaluateFixtures, validationFixtures, claimsOverlapFixtures, canonicalJsonFixtures, auditChainFixtures].flatMap((build) => build(reference));
+async function plan(reference: Reference): Promise<Plan> {
+  const fixtures = [
+    ...[policyEvaluateFixtures, validationFixtures, claimsOverlapFixtures, canonicalJsonFixtures, auditChainFixtures].flatMap((build) => build(reference)),
+    ...(await adapterHookFixtures(reference)),
+  ];
   const values = new Map<string, Json>([
     ...contractSchemas(reference),
     ...examples(reference),
@@ -92,7 +96,7 @@ async function main(): Promise<number> {
     console.error(USAGE);
     return 2;
   }
-  const p = plan(await loadReference(resolve(referenceDir)));
+  const p = await plan(await loadReference(resolve(referenceDir)));
   const problems = mode === "generate" ? await generate(p, newSignatures) : await check(p);
   for (const problem of problems) console.error(problem);
   const count = p.files.size + p.sealed.reduce((n, unit) => n + unit.paths.length, 0);
