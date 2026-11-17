@@ -1,0 +1,16 @@
+{
+    "model": "opus",
+    "hooks": {
+        "Stop": [
+            {
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "say done"
+                    }
+                ]
+            }
+        ]
+    },
+    "includeCoAuthoredBy": false
+}
