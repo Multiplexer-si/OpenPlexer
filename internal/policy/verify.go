@@ -29,19 +29,26 @@ type KeySet struct {
 // spec/policy/v1/jwks.schema.json. It does not check that a key is usable.
 // VerifySignedBundle checks the one key that it chooses.
 func ParseKeySet(text []byte) (KeySet, error) {
-	var doc struct {
-		Keys *[]map[string]any `json:"keys"`
-	}
+	// A plain value, not a struct: a struct field also takes a member whose
+	// name differs in case, such as Keys.
+	var doc any
 	if err := json.Unmarshal(text, &doc); err != nil {
 		return KeySet{}, fmt.Errorf("the key set is not valid: %w", err)
 	}
-	if doc.Keys == nil {
+	object, _ := doc.(map[string]any)
+	list, isList := object["keys"].([]any)
+	if !isList {
 		return KeySet{}, errors.New("the key set has no keys list")
 	}
-	if slices.ContainsFunc(*doc.Keys, func(key map[string]any) bool { return key == nil }) {
-		return KeySet{}, errors.New("a key of the key set is not an object")
+	keys := make([]map[string]any, len(list))
+	for i, item := range list {
+		key, isObject := item.(map[string]any)
+		if !isObject {
+			return KeySet{}, errors.New("a key of the key set is not an object")
+		}
+		keys[i] = key
 	}
-	return KeySet{keys: *doc.Keys}, nil
+	return KeySet{keys: keys}, nil
 }
 
 // Verified is a bundle whose signature verified.
