@@ -56,24 +56,26 @@ func (e Env) query(action policy.Action, path, command string) policy.Query {
 
 // Call is the part of a hook input that every agent sends.
 type Call struct {
-	Event string
-	Tool  string
-	Cwd   string
-	Input map[string]json.RawMessage
+	Event   string
+	Tool    string
+	Cwd     string
+	Session string
+	Input   map[string]json.RawMessage
 }
 
 // ParseCall reads the JSON that a coding agent writes to a hook.
 func ParseCall(stdin []byte) (Call, error) {
 	var raw struct {
-		Event string          `json:"hook_event_name"`
-		Tool  string          `json:"tool_name"`
-		Cwd   string          `json:"cwd"`
-		Input json.RawMessage `json:"tool_input"`
+		Event   string          `json:"hook_event_name"`
+		Tool    string          `json:"tool_name"`
+		Cwd     string          `json:"cwd"`
+		Session string          `json:"session_id"`
+		Input   json.RawMessage `json:"tool_input"`
 	}
 	if err := json.Unmarshal(stdin, &raw); err != nil {
 		return Call{}, fmt.Errorf("the hook input is not a JSON object: %w", err)
 	}
-	call := Call{Event: raw.Event, Tool: raw.Tool, Cwd: raw.Cwd}
+	call := Call{Event: raw.Event, Tool: raw.Tool, Cwd: raw.Cwd, Session: raw.Session}
 	if len(raw.Input) > 0 {
 		if err := json.Unmarshal(raw.Input, &call.Input); err != nil {
 			return Call{}, fmt.Errorf("tool_input is not a JSON object: %w", err)
@@ -143,6 +145,9 @@ func ShellTool(call Call) (Effect, error) {
 // queries are what the policy judges of an effect: each write to a path of
 // the project, and, for a member whose role lists commands, each command.
 func (e Env) queries(call Call, root string, effect Effect) []policy.Query {
+	if e.AgentSessionID == nil && call.Session != "" {
+		e.AgentSessionID = &call.Session
+	}
 	var out []policy.Query
 	for _, path := range effect.Writes {
 		if rel := normalizeTarget(path, call.Cwd, root); inProject(rel) {
