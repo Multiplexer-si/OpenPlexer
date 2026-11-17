@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -150,21 +151,38 @@ func TestJudge(t *testing.T) {
 	if silent.Pass {
 		t.Fatal("a run in which no hook fired must fail")
 	}
-	escape := scenario{target: "outside/x"}
-	confined := &result{PreToolUse: []preToolCall{{Decision: "allow"}}}
+	escape := scenario{target: "outside/x", targetTools: 2}
+	bothTools := []preToolCall{{Tool: "Write", NamesTarget: true, Decision: "allow"}, {Tool: "Bash", NamesTarget: true, Decision: "allow"}}
+	confined := &result{PreToolUse: bothTools}
 	judge(confined, escape)
 	if !confined.Pass {
-		t.Fatalf("an allowed call whose file is absent must pass: %v", confined.Problems)
+		t.Fatalf("two tools that tried the target and an absent file must pass: %v", confined.Problems)
 	}
-	escaped := &result{PreToolUse: []preToolCall{{Decision: "allow"}}, TargetOnDisk: true}
+	escaped := &result{PreToolUse: bothTools, TargetOnDisk: true}
 	judge(escaped, escape)
 	if escaped.Pass {
 		t.Fatal("a file outside the project must fail the escape scenario")
 	}
-	stubDenied := &result{PreToolUse: []preToolCall{{Decision: "deny"}}}
+	oneTool := &result{PreToolUse: []preToolCall{{Tool: "Bash", Decision: "allow"}, {Tool: "Write", NamesTarget: true, Decision: "allow"}}}
+	judge(oneTool, escape)
+	if oneTool.Pass {
+		t.Fatal("an escape run in which only one tool tried the target proves nothing about the other")
+	}
+	stubDenied := &result{PreToolUse: []preToolCall{{Tool: "Write", NamesTarget: true, Decision: "deny"}, {Tool: "Bash", NamesTarget: true, Decision: "allow"}}}
 	judge(stubDenied, escape)
 	if stubDenied.Pass {
 		t.Fatal("an escape run that the stub denied proves nothing about the sandbox")
+	}
+}
+
+func TestSummarizeSeesTheTargetInTheToolInput(t *testing.T) {
+	r := record{Event: "PreToolUse", Decision: "allow", Input: json.RawMessage(`{"tool_name":"Bash","tool_input":{"command":"python3 -c 'open(\"../outside/escaped.txt\")'","description":"d"}}`)}
+	got := summarize(r, "escaped.txt")
+	if got.Tool != "Bash" || !got.NamesTarget || !slices.Equal(got.Fields, []string{"command", "description"}) {
+		t.Fatalf("got %+v", got)
+	}
+	if summarize(r, "other.txt").NamesTarget {
+		t.Fatal("a tool input without the target must not name it")
 	}
 }
 

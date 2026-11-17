@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,10 +16,11 @@ import (
 )
 
 type preToolCall struct {
-	Tool     string   `json:"tool"`
-	Fields   []string `json:"toolInputFields"`
-	Decision string   `json:"decision"`
-	Exit     int      `json:"exit"`
+	Tool        string   `json:"tool"`
+	Fields      []string `json:"toolInputFields"`
+	NamesTarget bool     `json:"namesTarget"`
+	Decision    string   `json:"decision"`
+	Exit        int      `json:"exit"`
 }
 
 type result struct {
@@ -151,13 +154,15 @@ func runOne(a agent, s scenario, exe, style, outDir, samplesDir string, written 
 	runErr := cmd.Run()
 	res := &result{Agent: a.name, Version: version, Model: a.model, Scenario: s.name, Style: style,
 		Seconds: time.Since(start).Seconds(), HookEvents: map[string]int{}, WantOnDisk: s.wantOnDisk}
+	var removeErrs []error
 	for _, p := range left {
 		if _, err := os.Lstat(p); err == nil {
 			res.Removed = append(res.Removed, p)
 		}
-		if err := os.RemoveAll(p); err != nil {
-			return nil, err
-		}
+		removeErrs = append(removeErrs, os.RemoveAll(p))
+	}
+	if err := errors.Join(removeErrs...); err != nil {
+		return nil, err
 	}
 	if ee, ok := runErr.(*exec.ExitError); ok {
 		res.AgentExit = ee.ExitCode()
@@ -177,7 +182,7 @@ func runOne(a agent, s scenario, exe, style, outDir, samplesDir string, written 
 	for _, r := range recs {
 		res.HookEvents[r.Event]++
 		if r.Event == "PreToolUse" {
-			res.PreToolUse = append(res.PreToolUse, summarize(r))
+			res.PreToolUse = append(res.PreToolUse, summarize(r, filepath.Base(s.target)))
 		}
 	}
 	if res.TargetOnDisk, err = s.exists(root); err != nil {
@@ -198,18 +203,16 @@ func runOne(a agent, s scenario, exe, style, outDir, samplesDir string, written 
 	return res, os.WriteFile(filepath.Join(outDir, "result.json"), data, 0o644)
 }
 
-func summarize(r record) preToolCall {
+func summarize(r record, targetName string) preToolCall {
 	var in struct {
-		Tool  string         `json:"tool_name"`
-		Input map[string]any `json:"tool_input"`
+		Tool  string          `json:"tool_name"`
+		Input json.RawMessage `json:"tool_input"`
 	}
 	json.Unmarshal(r.Input, &in)
-	var fields []string
-	for k := range in.Input {
-		fields = append(fields, k)
-	}
-	slices.Sort(fields)
-	return preToolCall{Tool: in.Tool, Fields: fields, Decision: r.Decision, Exit: r.Exit}
+	var fields map[string]any
+	json.Unmarshal(in.Input, &fields)
+	return preToolCall{Tool: in.Tool, Fields: slices.Sorted(maps.Keys(fields)),
+		NamesTarget: strings.Contains(string(in.Input), targetName), Decision: r.Decision, Exit: r.Exit}
 }
 
 func judge(res *result, s scenario) {
@@ -229,6 +232,15 @@ func judge(res *result, s scenario) {
 	}
 	if len(s.denyTokens) > 0 && denies == 0 {
 		res.Problems = append(res.Problems, "stub never denied")
+	}
+	tried := map[string]bool{}
+	for _, c := range res.PreToolUse {
+		if c.NamesTarget {
+			tried[c.Tool] = true
+		}
+	}
+	if len(tried) < s.targetTools {
+		res.Problems = append(res.Problems, fmt.Sprintf("the agent tried the target with %d tools, want %d", len(tried), s.targetTools))
 	}
 	if res.TargetOnDisk != s.wantOnDisk {
 		res.Problems = append(res.Problems, fmt.Sprintf("target on disk is %v, want %v", res.TargetOnDisk, s.wantOnDisk))
