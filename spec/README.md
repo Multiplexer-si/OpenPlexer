@@ -137,7 +137,7 @@ To run a case, do the operation on `shared` and `input`, and compare the whole r
 
 | Operation | Contract | `shared` | `input` | `expected` |
 |---|---|---|---|---|
-| `evaluate` | policy | `bundle` | An evaluation query | `decision`, and `area` if an area decided |
+| `evaluate` | policy | `bundle` | An evaluation query | `decision`, and `area` if an area decided. Or `throws`, see below |
 | `verify-signed-bundle` | policy | `jwks` | `signature`, a compact JWS | `ok`, and `bundle` if `ok` is true |
 | `validate` | policy, room | None | Any JSON value | `valid` |
 | `patterns-overlap` | room | None | Two patterns, `a` and `b` | `overlap` |
@@ -150,6 +150,8 @@ To run a case, do the operation on `shared` and `input`, and compare the whole r
 | `pre-tool` | adapter | `agent`, `bundle`, `repo`, `now` | `member` and `hook`, the JSON that the agent writes to the hook | `decision`, `allow` or `deny` |
 
 For `validate`, validate `input` against the schema that `schema` names, and compare the verdict with `expected.valid`.
+
+For `evaluate`, an `expected` of `{"throws": true}` means that the reference throws an error and returns no result. The contract does not define a result for such a case, so there is no value to compare. `informational.error` holds the message of the reference. The [second open question of the policy contract](policy/README.md#open-questions) lists the inputs, and the fixture `evaluate-class-syntax` holds the cases.
 
 The fixture-file schema refers to the contract schemas. A fixture file that validates against it therefore has a valid `shared`, a valid `input`, and a valid `expected` in every case. `validate` is the exception, because its inputs are invalid on purpose.
 

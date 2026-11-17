@@ -1,0 +1,893 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "area": "star",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"star\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a]",
+        "repo": "star"
+      },
+      "name": "[]*] matches a lone ]",
+      "why": "The reference reads `[]*` as a class that matches nothing, any number of times, so `a[]*]` matches `a]`. The second open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a",
+        "repo": "star"
+      },
+      "name": "[]*] needs the ]",
+      "why": "The `]` that closes the class is a literal character."
+    },
+    {
+      "expected": {
+        "area": "optional",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"optional\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a]",
+        "repo": "optional"
+      },
+      "name": "[]?] matches a lone ]",
+      "why": "`[]?` is a class that matches nothing, zero or one time, so the role may write `a]`. The second open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a]",
+        "repo": "plus"
+      },
+      "name": "[]+] matches no path",
+      "why": "`[]+` needs the class that matches nothing at least once."
+    },
+    {
+      "expected": {
+        "area": "count",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"count\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a]",
+        "repo": "count"
+      },
+      "name": "[]{0}] matches a lone ]",
+      "why": "`{0}` is a count of zero."
+    },
+    {
+      "expected": {
+        "area": "count-of-letter",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"count-of-letter\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "abb]",
+        "repo": "count-of-letter"
+      },
+      "name": "a count applies to the letter before it",
+      "why": "`[]|b{2}]` matches a path that ends in `bb]`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "aaa]",
+        "repo": "count-large"
+      },
+      "name": "a count above the length of the path matches no path",
+      "why": "`[]|a{4000000000}]` needs four thousand million times `a`."
+    },
+    {
+      "expected": {
+        "area": "brace",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"brace\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "{x}]",
+        "repo": "brace"
+      },
+      "name": "a { that starts no count is a literal character",
+      "why": "`{x}` is not a count, so `a[]|{x}]` matches a path that ends in `{x}]`."
+    },
+    {
+      "expected": {
+        "area": "alternative",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"alternative\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "foo/x]",
+        "repo": "alternative"
+      },
+      "name": "[]|x] matches a path that ends in x]",
+      "why": "The `|` splits the whole glob in two alternatives, and the second one is not held to the start of the path. The second open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "foo/x]y",
+        "repo": "alternative"
+      },
+      "name": "[]|x] does not match another path",
+      "why": "The second alternative is held to the end of the path."
+    },
+    {
+      "expected": {
+        "area": "alternative-below",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"alternative-below\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "other/x]",
+        "repo": "alternative-below"
+      },
+      "name": "[]|x] after a directory matches outside the directory",
+      "why": "The text of the glob before the class belongs to the first alternative, which matches nothing."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "secret/y",
+        "repo": "alternative-below"
+      },
+      "name": "[]|x] after a directory does not match inside the directory by name",
+      "why": "The first alternative holds a class that matches nothing."
+    },
+    {
+      "expected": {
+        "area": "literal-after",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"literal-after\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "keys/a]b.pem",
+        "repo": "literal-after"
+      },
+      "name": "the glob after the class belongs to the last alternative",
+      "why": "`[]|]*.pem` matches a path that ends in `]`, a run of characters except `/`, and `.pem`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a]b/c.pem",
+        "repo": "literal-after"
+      },
+      "name": "the * after the class does not cross a slash",
+      "why": "The glob after the class keeps its glob meaning."
+    },
+    {
+      "expected": {
+        "area": "dot",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"dot\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "xab]",
+        "repo": "dot"
+      },
+      "name": "a . in the rest of the class matches any character",
+      "why": "`[]|a.]` matches a path that ends in `a`, one character, and `]`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "xa\n]",
+        "repo": "dot"
+      },
+      "name": "a . in the rest of the class does not match a line feed",
+      "why": "The `.` of a regular expression matches no line terminator."
+    },
+    {
+      "expected": {
+        "area": "inner-class",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"inner-class\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/B",
+        "repo": "inner-class"
+      },
+      "name": "a [ in the rest of the class opens a class that the last ] closes",
+      "why": "`[]|[ab]` matches a path that ends in `a` or `b`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/c",
+        "repo": "inner-class"
+      },
+      "name": "a class in the rest of the class does not match another character",
+      "why": "`[]|[ab]` matches a path that ends in `a` or `b`."
+    },
+    {
+      "expected": {
+        "area": "group",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"group\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "xbc]",
+        "repo": "group"
+      },
+      "name": "a group in the rest of the class holds alternatives",
+      "why": "`[]|(a|b)c]` matches a path that ends in `ac]` or `bc]`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "xcc]",
+        "repo": "group"
+      },
+      "name": "a group does not match a character outside its alternatives",
+      "why": "`[]|(a|b)c]` matches a path that ends in `ac]` or `bc]`."
+    },
+    {
+      "expected": {
+        "area": "two-classes",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"two-classes\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a]",
+        "repo": "two-classes"
+      },
+      "name": "a group can open in one class and close in the next",
+      "why": "`[]|(]x[])?]` holds two classes. The group opens in the first and closes in the second, and it is optional, so the glob matches a path that ends in `]`."
+    },
+    {
+      "expected": {
+        "area": "ahead",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"ahead\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "b]",
+        "repo": "ahead"
+      },
+      "name": "a negative lookahead holds when its text does not follow",
+      "why": "`[]|(?!a).]` matches a path that ends in a character other than `a`, and then `]`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a]",
+        "repo": "ahead"
+      },
+      "name": "a negative lookahead fails when its text follows",
+      "why": "`[]|(?!a).]` does not match `a]`."
+    },
+    {
+      "expected": {
+        "area": "behind",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"behind\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a]",
+        "repo": "behind"
+      },
+      "name": "a lookbehind holds when its text comes before",
+      "why": "`[]|(?<=a)]` matches a path that ends in `a]`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "b]",
+        "repo": "behind"
+      },
+      "name": "a lookbehind fails when its text does not come before",
+      "why": "`[]|(?<=a)]` does not match `b]`."
+    },
+    {
+      "expected": {
+        "area": "edges",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"edges\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "A",
+        "repo": "edges"
+      },
+      "name": "^ and $ in the rest of the class hold a middle alternative to the whole path",
+      "why": "`[]|^a$|]` matches the path `a`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "ba",
+        "repo": "edges"
+      },
+      "name": "^ in the rest of the class does not match inside the path",
+      "why": "`[]|^a$|]` does not match `ba`."
+    },
+    {
+      "expected": {
+        "area": "named",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"named\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "xa]",
+        "repo": "named"
+      },
+      "name": "a group with a name matches as a group without a name",
+      "why": "`[]|(?<n>a)]` matches a path that ends in `a]`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "b]",
+        "repo": "named"
+      },
+      "name": "a group with a name does not match another character",
+      "why": "`[]|(?<n>a)]` does not match `b]`."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[]|(?<n>a)(?<n>b)]$/i: Duplicate capture group name"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "x",
+        "repo": "named-twice"
+      },
+      "name": "two groups with the same name make the reference fail on a read",
+      "why": "`[]|(?<n>a)(?<n>b)]` becomes a regular expression that gives one name to two groups."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[]|(?<1>a)]$/i: Invalid capture group name"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "x",
+        "repo": "named-digit"
+      },
+      "name": "a group name that starts with a digit makes the reference fail on a read",
+      "why": "`[]|(?<1>a)]` becomes a regular expression whose group name is not a name."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[](]$/i: Unterminated group"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "x",
+        "repo": "open-group"
+      },
+      "name": "a group that is not closed makes the reference fail on a read",
+      "why": "`[](]` becomes a regular expression with a group that is not closed. The second open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[])]$/i: Unmatched ')'"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "x",
+        "repo": "close-group"
+      },
+      "name": "a ) that closes no group makes the reference fail on a read",
+      "why": "`[])]` becomes a regular expression with a `)` that closes no group."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[]**]$/i: Nothing to repeat"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "x",
+        "repo": "repeat"
+      },
+      "name": "a second * makes the reference fail on a read",
+      "why": "`[]**]` becomes a regular expression with a `*` that has nothing to repeat."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[]{2,1}]$/i: numbers out of order in {} quantifier"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "x",
+        "repo": "count-order"
+      },
+      "name": "a count that is out of order makes the reference fail on a read",
+      "why": "`[]{2,1}]` becomes a regular expression whose count has a minimum above its maximum."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^src\\/[z-a]\\/.*$/i: Range out of order in character class"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/x",
+        "repo": "range-order"
+      },
+      "name": "a range that is out of order makes the reference fail on a read",
+      "why": "`[z-a]` is a range whose ends are out of order. The second open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^src\\/[z-a]\\/.*$/i: Range out of order in character class"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "lib/x",
+        "repo": "range-order"
+      },
+      "name": "a range that is out of order makes the reference fail on a write",
+      "why": "The reference fails on every read and write in a repository that the pattern applies to."
+    },
+    {
+      "expected": {
+        "area": "range-order",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"range-order\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/[z-a]",
+        "repo": "range-order"
+      },
+      "name": "the directory rule does not read the glob",
+      "why": "The path is the text of the pattern before `/**`, so the reference matches it without the regular expression, and it does not fail."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/x",
+        "repo": "api"
+      },
+      "name": "a pattern that fails has no effect in another repository",
+      "why": "A pattern is read only for a repository that it applies to."
+    }
+  ],
+  "contract": "policy",
+  "description": "A class whose first character is `]` and whose rest holds a syntax character of a regular expression, and a class range that is out of order. Each pattern applies only to the repository that has the name of its area, because a pattern that the reference fails on fails every read and write in its repository. Every area except `optional` is private, so for a read, deny with an area means that the pattern matched, and allow means that it did not.",
+  "operation": "evaluate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/evaluate.ts",
+      "packages/protocol/src/policy/glob.ts"
+    ]
+  },
+  "shared": {
+    "bundle": {
+      "areas": [
+        {
+          "name": "optional",
+          "patterns": [
+            "optional:a[]?]"
+          ]
+        },
+        {
+          "name": "star",
+          "patterns": [
+            "star:a[]*]"
+          ],
+          "private": true
+        },
+        {
+          "name": "alternative",
+          "patterns": [
+            "alternative:[]|x]"
+          ],
+          "private": true
+        },
+        {
+          "name": "alternative-below",
+          "patterns": [
+            "alternative-below:secret/[]|x]"
+          ],
+          "private": true
+        },
+        {
+          "name": "plus",
+          "patterns": [
+            "plus:a[]+]"
+          ],
+          "private": true
+        },
+        {
+          "name": "count",
+          "patterns": [
+            "count:a[]{0}]"
+          ],
+          "private": true
+        },
+        {
+          "name": "count-of-letter",
+          "patterns": [
+            "count-of-letter:[]|b{2}]"
+          ],
+          "private": true
+        },
+        {
+          "name": "count-large",
+          "patterns": [
+            "count-large:[]|a{4000000000}]"
+          ],
+          "private": true
+        },
+        {
+          "name": "brace",
+          "patterns": [
+            "brace:a[]|{x}]"
+          ],
+          "private": true
+        },
+        {
+          "name": "dot",
+          "patterns": [
+            "dot:[]|a.]"
+          ],
+          "private": true
+        },
+        {
+          "name": "inner-class",
+          "patterns": [
+            "inner-class:[]|[ab]"
+          ],
+          "private": true
+        },
+        {
+          "name": "group",
+          "patterns": [
+            "group:[]|(a|b)c]"
+          ],
+          "private": true
+        },
+        {
+          "name": "two-classes",
+          "patterns": [
+            "two-classes:[]|(]x[])?]"
+          ],
+          "private": true
+        },
+        {
+          "name": "ahead",
+          "patterns": [
+            "ahead:[]|(?!a).]"
+          ],
+          "private": true
+        },
+        {
+          "name": "behind",
+          "patterns": [
+            "behind:[]|(?<=a)]"
+          ],
+          "private": true
+        },
+        {
+          "name": "edges",
+          "patterns": [
+            "edges:[]|^a$|]"
+          ],
+          "private": true
+        },
+        {
+          "name": "named",
+          "patterns": [
+            "named:[]|(?<n>a)]"
+          ],
+          "private": true
+        },
+        {
+          "name": "named-twice",
+          "patterns": [
+            "named-twice:[]|(?<n>a)(?<n>b)]"
+          ],
+          "private": true
+        },
+        {
+          "name": "named-digit",
+          "patterns": [
+            "named-digit:[]|(?<1>a)]"
+          ],
+          "private": true
+        },
+        {
+          "name": "literal-after",
+          "patterns": [
+            "literal-after:[]|]*.pem"
+          ],
+          "private": true
+        },
+        {
+          "name": "open-group",
+          "patterns": [
+            "open-group:[](]"
+          ],
+          "private": true
+        },
+        {
+          "name": "close-group",
+          "patterns": [
+            "close-group:[])]"
+          ],
+          "private": true
+        },
+        {
+          "name": "repeat",
+          "patterns": [
+            "repeat:[]**]"
+          ],
+          "private": true
+        },
+        {
+          "name": "count-order",
+          "patterns": [
+            "count-order:[]{2,1}]"
+          ],
+          "private": true
+        },
+        {
+          "name": "range-order",
+          "patterns": [
+            "range-order:src/[z-a]/**"
+          ],
+          "private": true
+        }
+      ],
+      "members": {
+        "mem-ana": "dev"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "api",
+        "web"
+      ],
+      "roles": {
+        "dev": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "optional"
+          ]
+        }
+      },
+      "version": 1
+    }
+  },
+  "version": 1
+}

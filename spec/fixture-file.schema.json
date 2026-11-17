@@ -49,40 +49,72 @@
         ]
       },
       "then": {
-        "description": "Evaluate the query in `input` against the bundle in `shared`.",
+        "description": "Evaluate the query in `input` against the bundle in `shared`. An `expected` of `throws` means that the reference returns no result, and the contract does not define one.",
         "properties": {
           "cases": {
             "items": {
               "properties": {
                 "expected": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "area": {
-                      "type": "string"
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "area": {
+                          "type": "string"
+                        },
+                        "decision": {
+                          "enum": [
+                            "allow",
+                            "deny"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "decision"
+                      ],
+                      "type": "object"
                     },
-                    "decision": {
-                      "enum": [
-                        "allow",
-                        "deny"
-                      ]
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "throws": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "throws"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "decision"
-                  ],
-                  "type": "object"
+                  ]
                 },
                 "informational": {
-                  "additionalProperties": false,
-                  "properties": {
-                    "rule": {
-                      "type": "string"
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "rule": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "rule"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "error": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "error"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "rule"
-                  ],
-                  "type": "object"
+                  ]
                 },
                 "input": {
                   "$ref": "urn:openplexer:spec:policy:v1:eval-query"
