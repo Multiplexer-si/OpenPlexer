@@ -1,0 +1,16 @@
+{
+  "background_tasks": [],
+  "cwd": "<PROJECT>",
+  "effort": {
+    "level": "low"
+  },
+  "hook_event_name": "Stop",
+  "last_assistant_message": "done",
+  "permission_mode": "acceptEdits",
+  "prompt_id": "<PROMPT_ID>",
+  "scratchpad_dir": "/private/tmp/claude-<UID>/<PROJECT_SLUG>/<UUID>/scratchpad",
+  "session_crons": [],
+  "session_id": "<SESSION_ID>",
+  "stop_hook_active": false,
+  "transcript_path": "<HOME>/.claude/projects/<PROJECT_SLUG>/<UUID>.jsonl"
+}

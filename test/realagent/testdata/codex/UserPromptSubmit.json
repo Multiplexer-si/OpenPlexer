@@ -1,0 +1,10 @@
+{
+  "cwd": "<PROJECT>",
+  "hook_event_name": "UserPromptSubmit",
+  "model": "gpt-6-luna",
+  "permission_mode": "bypassPermissions",
+  "prompt": "Use your file editing tool, not the shell, to create a file named allowed.txt in the current directory that contains the single word ok. Then reply with the word done.",
+  "session_id": "<SESSION_ID>",
+  "transcript_path": null,
+  "turn_id": "<TURN_ID>"
+}
