@@ -34,8 +34,6 @@ func (r Result) in(area *Area) Result {
 	return r
 }
 
-// roleOf returns the role of a member. The role is nil unless members maps
-// the member to a role name that roles defines.
 func (b *Bundle) roleOf(member string) (string, *Role) {
 	name, ok := b.Members[member]
 	if !ok {
@@ -117,9 +115,6 @@ func evaluateFile(bundle *Bundle, q Query, roleName string, role *Role) Result {
 		}
 	}
 
-	// A later area replaces the winner if it is more specific, or if it ties
-	// and turns an allow into a deny. A private area that denies wins over
-	// every other area.
 	var winner *verdict
 	for _, m := range matched {
 		v := verdict{match: m}
@@ -128,7 +123,7 @@ func evaluateFile(bundle *Bundle, q Query, roleName string, role *Role) Result {
 			winner = &v
 			break
 		}
-		if winner == nil || m.specificity.moreThan(winner.specificity) || (m.specificity == winner.specificity && winner.allowed && !v.allowed) {
+		if winner == nil || v.replaces(*winner) {
 			winner = &v
 		}
 	}
@@ -144,9 +139,6 @@ func evaluateFile(bundle *Bundle, q Query, roleName string, role *Role) Result {
 	return deny(bundle.denyRule(winner.area, q, roleName, role)).in(winner.area)
 }
 
-// canonicalPath makes a path relative to the root of the repository, with
-// `/` separators and no `.` or `..` segment. It rejects an absolute path, a
-// path with a drive letter, and a path that leaves the root.
 func canonicalPath(raw string) (string, bool) {
 	path := strings.ReplaceAll(raw, `\`, "/")
 	if strings.HasPrefix(path, "/") || (len(path) >= 2 && isASCIILetter(path[0]) && path[1] == ':') {
@@ -172,9 +164,6 @@ func isASCIILetter(b byte) bool {
 	return 'a' <= b && b <= 'z' || 'A' <= b && b <= 'Z'
 }
 
-// specificity orders the patterns that match one path: first the number of
-// UTF-16 code units of the glob before its first `*`, `?`, or `[`, and then
-// the number of segments of the glob.
 type specificity struct {
 	literalPrefix int
 	segments      int
@@ -192,16 +181,11 @@ func (s specificity) moreThan(other specificity) bool {
 	return s.literalPrefix > other.literalPrefix || (s.literalPrefix == other.literalPrefix && s.segments > other.segments)
 }
 
-// match is an area that holds the path, with the specificity of its most
-// specific matching pattern.
 type match struct {
 	area *Area
 	specificity
 }
 
-// matchAreas returns the areas that hold a canonical path, in the order of
-// the bundle. It fails on a pattern that applies to the repository and is
-// not a glob of the dialect.
 func (b *Bundle) matchAreas(repo, path string) ([]match, error) {
 	repoLower, pathLower := lowercase(repo), lowercase(path)
 	units := utf16.Encode([]rune(path))
@@ -239,12 +223,15 @@ func (b *Bundle) matchAreas(repo, path string) ([]match, error) {
 	return matched, nil
 }
 
-// verdict is what one matching area says about the action. source names
-// what allows it.
 type verdict struct {
 	match
 	allowed bool
 	source  string
+}
+
+func (v verdict) replaces(winner verdict) bool {
+	deniesOnTie := v.specificity == winner.specificity && winner.allowed && !v.allowed
+	return v.specificity.moreThan(winner.specificity) || deniesOnTie
 }
 
 const (
@@ -254,11 +241,7 @@ const (
 	byOverride       = "override"
 )
 
-// grantFor reports whether an area allows the action of the query, and what
-// allows it. A temporary grant and an override open an area only for a
-// member with a role, and never open a system area.
 func (b *Bundle) grantFor(area *Area, q Query, role *Role) (source string, allowed bool) {
-	holder := holderOf(q)
 	switch {
 	case q.Action == Write && role != nil && slices.Contains(role.Write, area.Name):
 		return byRole, true
@@ -266,8 +249,13 @@ func (b *Bundle) grantFor(area *Area, q Query, role *Role) (source string, allow
 		return byDefault, true
 	case q.Action == Read && role != nil && slices.Contains(role.Read, area.Name):
 		return byRole, true
-	case role == nil || area.System:
+	}
+	canBeOpened := role != nil && !area.System
+	if !canBeOpened {
 		return "", false
+	}
+	holder := holderOf(q)
+	switch {
 	case slices.ContainsFunc(b.TemporaryGrants, func(g TemporaryGrant) bool { return g.applies(area.Name, q, holder) }):
 		return byTemporaryGrant, true
 	case slices.ContainsFunc(q.Overrides, func(o Override) bool { return o.applies(area.Name, q, holder) }):
@@ -276,9 +264,6 @@ func (b *Bundle) grantFor(area *Area, q Query, role *Role) (source string, allow
 	return "", false
 }
 
-// holder is the session and the mission that grants and overrides are
-// matched against: those of the parent for a sub-agent, and those of the
-// query otherwise.
 type holder struct {
 	session *string
 	mission *string
@@ -308,8 +293,6 @@ func (g TemporaryGrant) applies(area string, q Query, h holder) bool {
 	return false
 }
 
-// applies fails closed: an override that lacks the field of its scope, or
-// whose expires_at is not a timestamp, is inactive.
 func (o Override) applies(area string, q Query, h holder) bool {
 	if o.Area != area || !slices.Contains(o.Actions, q.Action) {
 		return false

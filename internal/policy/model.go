@@ -1,9 +1,5 @@
 package policy
 
-// The types in this file are the shapes of spec/policy/v1. A value that
-// ParseBundle, ParseOverride, or ParseQuery returns is valid against its
-// schema. Evaluate also accepts values that a caller builds by hand.
-
 type Action string
 
 const (
