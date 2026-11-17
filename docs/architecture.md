@@ -73,7 +73,7 @@ Nothing checks a rule that is written only in a document. These rules are in a t
 
 Go does not let code outside this module import a package under `internal/`. No outside project can depend on these packages, so the packages can change shape freely while the design settles.
 
-A package moves out of `internal/` when an outside importer needs it, and not before. A public package is a promise to keep its API stable, and the project cannot make that promise before the contracts exist.
+A package moves out of `internal/` when an outside importer needs it, and not before. A public package is a promise to keep its API stable, and the project cannot make that promise before the Go code that implements the contracts exists.
 
 ## Why the contracts live in `spec/`
 
