@@ -1,7 +1,7 @@
 # Concepts
 
 > [!NOTE]
-> This page describes the design. Nothing on it is implemented yet. The present tense describes how the finished system is meant to work. [What is not decided yet](#what-is-not-decided-yet) lists the open questions.
+> This page describes the design. Of the parts on it, the policy evaluator and the gate are implemented, and the gate has no adapter that calls it yet ([Local policy gate](local-policy.md)). The present tense describes how the finished system is meant to work. [What is not decided yet](#what-is-not-decided-yet) lists the open questions.
 
 ## Why agents on a team need coordination
 

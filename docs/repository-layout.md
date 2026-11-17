@@ -21,24 +21,24 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 
 | Directory | Binary | Role |
 |---|---|---|
-| `apps/openplexer` | `openplexer` | The CLI and daemon on a developer's machine |
+| `apps/openplexer` | `openplexer` | The CLI on a developer's machine |
 | `apps/openplexer-hub` | `openplexer-hub` | The hub server |
 | `apps/openplexer-verify` | `openplexer-verify` | The standalone verifier for audit logs |
 
-Each binary prints "not implemented yet" to standard error and exits with status 1.
+`openplexer` configures the local gate, loads a signed policy bundle, reports the state of the policy, and checks one action. [Local policy gate](local-policy.md) lists its commands. It has no `hook` and no `install` command yet. The other two binaries print "not implemented yet" to standard error and exit with status 1.
 
 ## Packages
 
-`internal/policy` holds the policy model, the validation of a bundle, an override, and a query, and the evaluator. It does not verify a signed bundle yet. The next six packages each hold a `doc.go` file with a package comment and no other code. The last three packages hold only tests.
+The first three packages hold code. `internal/room`, the two adapter packages, and `internal/hub` each hold a `doc.go` file with a package comment and no other code. The last three packages hold only tests.
 
 | Package | Owns |
 |---|---|
-| `internal/policy` | The policy model and the policy evaluator. Pure, no I/O. Its tests run the `validate` and `evaluate` fixtures of `spec/policy`. |
+| `internal/policy` | The policy model, the policy evaluator, and the verification of a signed bundle against a key set. Pure, no I/O. Its tests run every fixture of `spec/policy`. |
+| `internal/audit` | Canonical JSON, the hash of an audit record, and the verification of a chain. Pure, no I/O. Its tests run every fixture of `spec/canonical-json` and `spec/audit`. |
+| `internal/daemon` | The local gate: the policy source, the store of the last verified bundle, the state of the policy, local identity, and the audit log of each decision. It reads and writes one home directory. |
 | `internal/room` | The Room protocol: events, claims, decisions, and their validation. Pure, no I/O. |
-| `internal/audit` | The record format of the audit hash chain, appending, and verification. |
 | `internal/adapter/claudecode` | The hook adapter for Claude Code. |
 | `internal/adapter/codex` | The hook adapter for Codex. |
-| `internal/daemon` | The runtime on a developer's machine: the gate, local identity, the policy source, and offline behavior. |
 | `internal/hub` | The single-team hub server. |
 | `internal/layering` | The tests that enforce the dependency rules, and the rule that only a test may import another module. |
 | `internal/doclinks` | The test that checks the relative links in the documentation. |
@@ -91,4 +91,4 @@ The workflow in `.github/workflows/ci.yml` runs on every pull request and on eve
 
 The module is `github.com/multiplexer-si/openplexer`. It needs Go 1.27 or later.
 
-The three binaries use only the standard library. A test in `internal/layering` fails if a file that is not a test imports another module. The tests in `internal/spectest` and `internal/policy` use `github.com/santhosh-tekuri/jsonschema/v6` to compile and run the JSON Schemas, so `go.mod` requires that module.
+The three binaries use only the standard library. A test in `internal/layering` fails if a file that is not a test imports another module. The tests in `internal/spectest`, `internal/policy`, and `internal/daemon` use `github.com/santhosh-tekuri/jsonschema/v6` to compile and run the JSON Schemas, so `go.mod` requires that module.
