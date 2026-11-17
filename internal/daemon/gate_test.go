@@ -614,6 +614,30 @@ func TestTheGateOwnsTheMemberAndTheOverridesOfAQuery(t *testing.T) {
 	}
 }
 
+func TestExecGatedFollowsTheExecGrantsOfTheMemberRole(t *testing.T) {
+	keys := newSigner(t)
+	bundle := []byte(`{"version": 1, "project_id": "p", "repos": ["api"], "areas": [], "roles": {"runner": {"read": [], "write": [], "exec": ["npm test"]}, "reader": {"read": [], "write": [], "exec": []}}, "members": {"mem-ana": "runner", "mem-wu": "reader"}}`)
+	for member, want := range map[string]bool{"mem-ana": true, "mem-wu": false, "mem-unknown": false, "": false} {
+		home := t.TempDir()
+		configure(t, home, Settings{KeySet: keys.keySet(t), MemberID: member})
+		gate := open(t, home, loadedAt)
+		if gate.ExecGated() {
+			t.Errorf("member %q with no policy: ExecGated is true, want false", member)
+		}
+		load(t, gate, keys.sign(t, bundle))
+		if got := gate.ExecGated(); got != want {
+			t.Errorf("member %q after a load: ExecGated is %t, want %t", member, got, want)
+		}
+		if got := open(t, home, loadedAt).ExecGated(); got != want {
+			t.Errorf("member %q in a new process: ExecGated is %t, want %t", member, got, want)
+		}
+		stale := open(t, home, loadedAt.Add(15*24*time.Hour))
+		if got := stale.ExecGated(); stale.Status().State != Stale || got != want {
+			t.Errorf("member %q with a %s policy: ExecGated is %t, want %t with a stale policy", member, stale.Status().State, got, want)
+		}
+	}
+}
+
 func TestAnExecRecordHoldsNoCommandText(t *testing.T) {
 	keys := newSigner(t)
 	home := t.TempDir()

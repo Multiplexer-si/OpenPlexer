@@ -54,6 +54,14 @@ func (g *Gate) Status() Status {
 	return g.status
 }
 
+// ExecGated reports whether the policy in force gives the role of the
+// configured member an exec grant. A caller asks it to choose whether a
+// shell command is also judged as an exec action. It reports false when no
+// verified policy is in force.
+func (g *Gate) ExecGated() bool {
+	return g.bundle != nil && len(g.bundle.Roles[g.status.Role].Exec) > 0
+}
+
 // ErrRejected is the error of a Load whose bundle the gate refuses.
 var ErrRejected = errors.New("the bundle is rejected")
 
