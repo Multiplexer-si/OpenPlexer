@@ -22,4 +22,6 @@ Phase 3 follows Phase 2 because the hub writes the audit log that the verifier c
 
 ## What exists today
 
-The repository has its structure, its license, the dependency rules, and CI. No phase is complete.
+Phase 0 is complete. The repository has its structure, its license, the dependency rules, and CI. It also has the [trust model](trust-model.md), the [inventory](inventory.md) of the existing implementation, and the contracts and fixtures in [`spec/`](../spec/README.md).
+
+No Go implementation exists yet. Phase 1 is next.
