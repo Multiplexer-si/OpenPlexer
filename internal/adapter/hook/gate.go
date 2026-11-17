@@ -23,6 +23,12 @@ type Env struct {
 	// path is read as a path under the working directory, as the reference
 	// reads it when it finds no root.
 	Root func(cwd string) (string, bool)
+	// Guards are the paths that no agent may write through a gated tool,
+	// whatever the policy says.
+	Guards []Guard
+	// Home is the home directory of the developer. A guard reads a leading ~
+	// of a path as it.
+	Home string
 	// ExecGated is set when the role of the member lists commands. A shell
 	// command is then also judged as `exec`. Otherwise the commands of the
 	// member are not limited, and the command is judged by its write targets.
@@ -219,15 +225,18 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	if err != nil {
 		return Verdict{Refuse, err.Error()}
 	}
-	root := ""
+	root, found := "", env.Root == nil
 	if env.Root != nil {
-		var found bool
-		if root, found = env.Root(call.Cwd); !found {
-			if len(effect.Writes) > 0 || env.ExecGated && len(effect.Commands) > 0 {
-				return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked this call because it found no project root above %s: no directory there holds .git, .claude, .codex, or .mcp.json, so the paths of the call cannot be placed in a project. Run the agent inside the project.", call.Cwd)}
-			}
-			return Verdict{}
+		root, found = env.Root(call.Cwd)
+	}
+	if v, guarded := env.guard(call.Cwd, root, effect.Writes); guarded {
+		return v
+	}
+	if !found {
+		if len(effect.Writes) > 0 || env.ExecGated && len(effect.Commands) > 0 {
+			return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked this call because it found no project root above %s: no directory there holds .git, .claude, .codex, or .mcp.json, so the paths of the call cannot be placed in a project. Run the agent inside the project.", call.Cwd)}
 		}
+		return Verdict{}
 	}
 	queries := env.queries(call, root, effect)
 	if len(queries) == 0 {
