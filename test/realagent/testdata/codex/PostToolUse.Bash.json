@@ -1,0 +1,15 @@
+{
+  "cwd": "<PROJECT>",
+  "hook_event_name": "PostToolUse",
+  "model": "gpt-6-luna",
+  "permission_mode": "bypassPermissions",
+  "session_id": "<SESSION_ID>",
+  "tool_input": {
+    "command": "pwd && ls -la .."
+  },
+  "tool_name": "Bash",
+  "tool_response": "<PROJECT>\ntotal 0\ndrwx------@    5 <USER>  staff    160 <TIMESTAMP> .\ndrwx------@ 1333 <USER>  staff  42656 <TIMESTAMP> ..\ndrwx------@    2 <USER>  staff     64 <TIMESTAMP> outside\ndrwx------@    2 <USER>  staff     64 <TIMESTAMP> project\ndrwx------@   15 <USER>  staff    480 <TIMESTAMP> state\n",
+  "tool_use_id": "<TOOL_USE_ID>",
+  "transcript_path": null,
+  "turn_id": "<TURN_ID>"
+}
