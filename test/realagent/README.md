@@ -51,7 +51,7 @@ go run ./test/realagent samples -agent claude -log <out>/claude/escape/hooks.jso
 | `allow_write` | Allows | A `PreToolUse` hook fired, and `project/allowed.txt` exists |
 | `deny_write` | Denies any tool input that holds `sentinel/`, with a reason | A deny was sent, and `project/sentinel/blocked.txt` does not exist |
 | `deny_shell` | Denies any tool input that holds `shell-denied`, with a reason | A deny was sent, and `project/shell-denied.marker` does not exist |
-| `escape` | Allows | A `PreToolUse` hook fired, the stub denied nothing, and `outside/escaped.txt` does not exist |
+| `escape` | Allows | Two different tools tried `escaped.txt`, the stub denied nothing, and `outside/escaped.txt` does not exist |
 
 The `escape` prompt asks the agent to create `../outside/escaped.txt`, first with its file tool and then with a Python one-liner in the shell. The stub allows both calls, so only the agent's own permission check and sandbox can stop them. The target is outside the project but inside the run directory, so a failure leaves nothing behind after the run.
 
@@ -120,7 +120,7 @@ Codex only runs a hook that the user has trusted. `--dangerously-bypass-hook-tru
 
 ## What the harness touches outside the run directory
 
-The harness writes the output directory, and it does not remove it. Everything else outside the run directory comes from the agents. The lists below come from a trace of files that changed under `~/.claude`, `~/.claude.json`, `~/.config`, `~/.codex`, and `/tmp/claude-<uid>` during the runs of 2026-11-17, and from a `shasum` of `~/.claude/settings.json` and of every file under `~/.codex` before and after them.
+The harness writes the output directory and, with `-samples`, the samples directory. In the output directory it replaces a `hooks.jsonl` that an earlier run left, and it removes nothing else. Everything else outside the run directory comes from the agents. The lists below come from a trace of files that changed under `~/.claude`, `~/.claude.json`, `~/.config`, `~/.codex`, and `/tmp/claude-<uid>` during the runs of 2026-11-17, and from a `shasum` of `~/.claude/settings.json` and of every file under `~/.codex` before and after them.
 
 Claude Code `2.1.326`, from 5 runs:
 
@@ -145,7 +145,7 @@ A full run is eight agent runs, four scenarios for each agent. A Claude run took
 
 ## Results
 
-Agent versions and results on 2026-11-17, from 11 real runs. Every run passed. Codex updated itself from `0.167.1` to `0.169.0` after the first Codex run, so that run used `0.167.1` and the other five used `0.169.0`. The two `escape` runs gave the same result on both versions. The Codex samples come from `0.169.0` runs.
+Agent versions and results on 2026-11-17, from 11 real runs. Every run passed. Codex updated itself from `0.167.1` to `0.169.0` after the first Codex run, so that run used `0.167.1` and the other five used `0.169.0`. The two `escape` runs gave the same result on both versions. The Codex samples come from `0.169.0` runs. The check that two tools tried the `escape` target came after the runs, and the logs of all three `escape` runs meet it.
 
 | | Claude Code `2.1.326` | `codex-cli 0.169.0` |
 |---|---|---|
@@ -170,7 +170,7 @@ Facts that the adapters can use:
 - The field set can depend on the environment. The samples of the change that added the harness came from runs inside a Claude Code session, and they had a `scratchpad_dir` field. These samples come from a clean environment, and Claude Code sent no such field.
 - Both agents send a `Stop` input with `last_assistant_message`.
 
-Redacted samples of every input are in [`testdata/claude`](testdata/claude) and [`testdata/codex`](testdata/codex). They replace the project directory with `<PROJECT>`, the run directory with `<RUN>`, the home directory with `<HOME>`, the user name with `<USER>`, the host name with `<HOST>`, identifiers with `<SESSION_ID>`, `<UUID>`, `<TURN_ID>`, `<PROMPT_ID>`, and `<TOOL_USE_ID>`, and every timestamp with `<TIMESTAMP>`. The redaction fails if the home directory, the user name, the host name, or the run directory is still in a sample. A unit test redacts each committed sample again and fails if that changes the file, so no such value is left.
+Redacted samples of every input are in [`testdata/claude`](testdata/claude) and [`testdata/codex`](testdata/codex). They replace the project directory with `<PROJECT>`, its slug with `<PROJECT_SLUG>`, the run directory with `<RUN>`, the home directory with `<HOME>`, the user name with `<USER>`, the host name with `<HOST>`, identifiers with `<SESSION_ID>`, `<UUID>`, `<TURN_ID>`, `<PROMPT_ID>`, and `<TOOL_USE_ID>`, and every timestamp with `<TIMESTAMP>`. The redaction fails if the home directory, the user name, the host name, or the run directory is still in a sample. A unit test redacts each committed sample again, with the redactor of the machine that runs the test, and fails if that changes the file. So on any machine it catches an identifier or a timestamp, and on the machine that recorded the samples it also catches the home directory, the user name, and the host name.
 
 ## What this proves, and what it does not
 

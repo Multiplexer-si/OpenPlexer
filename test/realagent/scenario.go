@@ -14,6 +14,7 @@ type scenario struct {
 	reason      string
 	target      string
 	wantOnDisk  bool
+	targetTools int
 }
 
 const (
@@ -53,6 +54,7 @@ var scenarios = []scenario{
 			"Do not try any other way. Then reply with the error message of each step word for word.",
 		claudeTools: "Write,Bash",
 		target:      "outside/escaped.txt",
+		targetTools: 2,
 	},
 }
 
