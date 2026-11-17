@@ -1,8 +1,8 @@
 # Claude Code hooks
 
-This page is for a developer who connects Claude Code to OpenPlexer by hand, and for a reviewer who needs to know what the connection does not see. The Claude Code adapter in `internal/adapter/claudecode` reads the `PreToolUse` hook input and answers it. [The adapter contract](../spec/adapter/README.md) gives the rules, and the [trust model](trust-model.md) explains why the limits matter.
+This page is for a developer who connects Claude Code to OpenPlexer, and for a reviewer who needs to know what the connection does not see. The Claude Code adapter in `internal/adapter/claudecode` reads the `PreToolUse` hook input and answers it. [The adapter contract](../spec/adapter/README.md) gives the rules, and the [trust model](trust-model.md) explains why the limits matter.
 
-> This page describes a connection that does not run yet. The adapter exists and passes its fixtures. The `openplexer hook` command that calls it, and the `install` command that writes the settings, belong to [issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15), and the `openplexer` binary still prints "not implemented yet". The command line below is the one that issue is to ship. A real run of Claude Code against the hook belongs to [issue 17](https://github.com/Multiplexer-si/OpenPlexer/issues/17).
+> `openplexer install claude-code` writes the hook entry, and the entry runs `openplexer hook claude-code pre-tool`. Tests run both commands against a temporary home. A run of a real Claude Code session against the hook belongs to [issue 17](https://github.com/Multiplexer-si/OpenPlexer/issues/17).
 
 ## Supported version
 
@@ -29,49 +29,68 @@ The hook runs in a subagent too. Claude Code runs the hooks of the settings file
 
 A denial reaches Claude Code as the `deny` verdict of `PreToolUse` with the reason, and Claude reads the reason. A call that the adapter cannot read is blocked with exit status 2.
 
-## Set up by hand
+## Set up
 
-1. Install the `openplexer` binary. Put a signed policy where the binary reads it. [Issue 16](https://github.com/Multiplexer-si/OpenPlexer/issues/16) defines where.
-2. Add this entry to `.claude/settings.json` in the project. Keep the other hooks of the file.
+1. Install the `openplexer` binary, configure the gate, and load a signed policy, as [Local policy gate](local-policy.md) describes. Until a verified policy is in force, the hook blocks every shell command and every write in a project.
+2. Add the hook to your user settings.
 
-   ```json
-   {
-     "hooks": {
-       "PreToolUse": [
-         {
-           "matcher": "Bash|Edit|NotebookEdit|Write",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "openplexer hook claude-code pre-tool",
-               "timeout": 3,
-               "onFailure": "block"
-             }
-           ]
-         }
-       ]
-     }
-   }
+   ```sh
+   openplexer install claude-code
    ```
 
-   The matcher is the value of `claudecode.Matcher()`. A test pins it to the tools that the adapter gates.
-3. Start Claude Code in the project and accept the workspace trust dialog. Claude Code holds back every hook until you do.
+   The command adds one entry to `~/.claude/settings.json`, or to `$CLAUDE_CONFIG_DIR/settings.json` if that variable is set. It keeps every other byte of the file. To connect one project only, run `openplexer install claude-code --scope project` in the project, or pass `--project <dir>`. That writes `.claude/settings.json` of the project. `--file <path>` writes another file, such as `.claude/settings.local.json`.
+3. For a project file, start Claude Code in the project and accept the workspace trust dialog. Claude Code holds back the hooks of a project until you do. It reads a change to a settings file while it runs.
 4. Type `/hooks` and check that the entry is listed under `PreToolUse`.
 
-`onFailure` set to `block` makes Claude Code block the call when the hook cannot start, exits with a code other than 0 or 2, prints output that is not valid, or runs past `timeout`. Without it, a failed hook lets the call run. With it, a hook that takes more than three seconds on a slow machine blocks the call. Raise `timeout` if that happens.
+The entry looks like this. The command is the absolute path of the binary that ran `install`.
 
-## Remove by hand
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|Edit|NotebookEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/openplexer hook claude-code pre-tool",
+            "timeout": 5,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}
+```
 
-1. Delete the entry from `.claude/settings.json`, and delete the `hooks` key if nothing else is in it.
-2. Claude Code reads the change from the file. Type `/hooks` to check that the entry is gone.
+The matcher is the value of `claudecode.Agent.Matcher()`, and a test pins the entry to the install goldens. A second `install` changes nothing. After you move the binary, `install` points the entry at the new path. An entry that you edited keeps your edit.
 
-Removing the entry changes nothing else. The adapter writes no other file.
+`onFailure` set to `block` makes Claude Code block the call when the hook cannot start, exits with a code other than 0 or 2, prints output that is not valid, or runs past `timeout`. The hook also ends itself after 4 seconds with exit status 2, which blocks the call with a reason.
+
+A project file is often committed. The entry names the binary on your machine, so a teammate who has no binary at that path gets every matched call blocked. In a shared repository, use the user scope, or `--file .claude/settings.local.json`.
+
+`install` refuses a file that is not valid JSON, a file whose `hooks` or `hooks.PreToolUse` has another type, and a file in which a key on the path of the entry appears twice. It leaves the file unchanged, names the line and column, and exits with status 1. Claude Code reads settings files as strict JSON, so a file with a comment or a trailing comma is refused.
+
+## Remove
+
+1. Run `openplexer uninstall claude-code`, with the same `--scope`, `--project`, or `--file` as the install.
+2. Type `/hooks` to check that the entry is gone.
+
+`uninstall` removes every entry whose command runs a binary named `openplexer` with `hook claude-code`, also after you moved the entry, changed its timeout or matcher, or added your own hooks next to it. It removes the group, the event list, and the `hooks` object that held nothing but that entry. It deletes the file if the file held nothing else, and it leaves a file that a symbolic link names as `{}`. A second `uninstall` changes nothing.
+
+What `uninstall` cannot keep:
+
+- An empty `hooks` object or an empty `PreToolUse` list that the file held before `install` goes with the entry.
+- A file that held only `{}` is deleted.
+
+Every other byte stays as it was, including key order, indentation, line endings, the spelling of numbers and escapes, and a missing final newline. The goldens in `internal/adapter/hook/testdata/install` pin this.
 
 ## What the hook does not see
 
 Each item is an action that Claude Code can take and the hook cannot see, or a way to switch the hook off. The policy does not apply to any of them.
 
-**Reads.** No hook runs for `Read`, `Grep`, or `Glob`, and the matcher does not name them. A file that you reference with `@` in a prompt is added without a tool call, so no hook fires for it. A private area is therefore readable. The existing implementation covers the `Read` tool with a native deny rule that its `install` writes. This adapter has none, and [issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15) decides whether the new `install` does.
+**Reads.** No hook runs for `Read`, `Grep`, or `Glob`, and the matcher does not name them. A file that you reference with `@` in a prompt is added without a tool call, so no hook fires for it. A private area is therefore readable. The existing implementation covers the `Read` tool with a native deny rule that its `install` writes. This `install` writes none, and [the trust model](trust-model.md#open-decisions) records why.
 
 **Tools that the matcher does not name.** An MCP tool, a tool that a plugin adds, and the `PowerShell` tool on Windows can write a file, and the hook does not run for them. The adapter reads a command with the rules of a POSIX shell, so the matcher does not name `PowerShell`. On Windows without Git Bash, Claude Code registers no `Bash` tool, and the hook never fires.
 
@@ -91,10 +110,14 @@ There is no check after the command. A write that the hook did not name stays un
 
 **Commands that the policy matches by their first words.** A granted `npm test` allows whatever script `npm test` runs. A granted command with a quoted `;`, `|`, `&`, `<`, or `>` is denied, as [the open questions of the adapter contract](../spec/adapter/README.md#open-questions) say.
 
-**A hook that does not run.** The hook does not run before you accept the workspace trust dialog. A session started with `claude -p` or the SDK treats the folder as trusted. A person or a program that can write `.claude/settings.json`, or that passes `--settings '{"disableAllHooks": true}'`, can switch the hook off. A write to `.claude/settings.json` through `Write`, `Edit`, or `Bash` is denied if the policy puts that path in a system area. A write by anything else is not.
+**A hook that does not run.** The hook does not run before you accept the workspace trust dialog. A session started with `claude -p` or the SDK treats the folder as trusted. A person or a program that can write a settings file, or that passes `--settings '{"disableAllHooks": true}'`, can switch the hook off. The hook denies a write through `Write`, `Edit`, `NotebookEdit`, or `Bash` to the user and project settings files of Claude Code and Codex, and to the OpenPlexer home, whatever the policy says. A write by anything else is not seen.
 
-**A failed hook.** Without `onFailure` set to `block`, a hook that crashes, times out, or exits with a code other than 0 or 2 lets the call run.
+**A failed hook.** The entry that `install` writes sets `onFailure` to `block`. If you remove that field, a hook that crashes, times out, or exits with a code other than 0 or 2 lets the call run.
 
 **Changes while a session runs.** The adapter has no `ConfigChange` hook and no check of the settings file against its own last write. [The trust model](trust-model.md) records the decision.
 
-**No policy.** The adapter judges what the caller's policy says. What the command does when it finds no verified policy is decided in [issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15).
+**No policy.** With no verified policy, the hook denies every call that it judges, and it judges every `Bash` command as a command. The reason says how to load a policy. A tool that the matcher does not name still runs.
+
+**No project root.** The hook reads the paths of a call from the project root, which is the nearest directory at or above `cwd` that holds `.git`, or else `.claude`, `.codex`, or `.mcp.json`. Your home directory is never the root. If the hook finds no root, it denies every write and every judged command. A `.git` that an agent creates in a subdirectory moves the root there.
+
+**The repository.** The hook does not know which repository of the bundle the project is. The gate then allows a write only when every repository of the bundle allows it, as [Local policy gate](local-policy.md) describes.

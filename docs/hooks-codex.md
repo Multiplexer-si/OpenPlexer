@@ -1,8 +1,8 @@
 # Codex hooks
 
-This page is for a developer who connects Codex to OpenPlexer by hand, and for a reviewer who needs to know what the connection does not see. The Codex adapter in `internal/adapter/codex` reads the `PreToolUse` hook input and answers it. [The adapter contract](../spec/adapter/README.md) gives the rules, and the [trust model](trust-model.md) explains why the limits matter.
+This page is for a developer who connects Codex to OpenPlexer, and for a reviewer who needs to know what the connection does not see. The Codex adapter in `internal/adapter/codex` reads the `PreToolUse` hook input and answers it. [The adapter contract](../spec/adapter/README.md) gives the rules, and the [trust model](trust-model.md) explains why the limits matter.
 
-> This page describes a connection that does not run yet. The adapter exists and passes its fixtures. The `openplexer hook` command that calls it, and the `install` command that writes the hook file, belong to [issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15), and the `openplexer` binary still prints "not implemented yet". The command line below is the one that issue is to ship. A real run of Codex against the hook belongs to [issue 17](https://github.com/Multiplexer-si/OpenPlexer/issues/17).
+> `openplexer install codex` writes the hook entry, and the entry runs `openplexer hook codex pre-tool`. Tests run both commands against a temporary home. A run of a real Codex session against the hook, including the trust step, belongs to [issue 17](https://github.com/Multiplexer-si/OpenPlexer/issues/17).
 
 ## Supported version
 
@@ -21,40 +21,59 @@ The patch grammar that the adapter reads is the grammar of Codex 0.164.0, which 
 
 A denial reaches Codex as the `deny` verdict of `PreToolUse` with the reason. A call that the adapter cannot read is blocked with exit status 2, and Codex shows the reason from standard error.
 
-## Set up by hand
+## Set up
 
-1. Install the `openplexer` binary. Put a signed policy where the binary reads it. [Issue 16](https://github.com/Multiplexer-si/OpenPlexer/issues/16) defines where.
-2. Add this entry to `.codex/hooks.json` in the project. Keep the other hooks of the file.
+1. Install the `openplexer` binary, configure the gate, and load a signed policy, as [Local policy gate](local-policy.md) describes. Until a verified policy is in force, the hook blocks every shell command and every write in a project.
+2. Add the hook to your user hook file.
 
-   ```json
-   {
-     "hooks": {
-       "PreToolUse": [
-         {
-           "matcher": "Bash|apply_patch",
-           "hooks": [
-             {
-               "type": "command",
-               "command": "openplexer hook codex pre-tool",
-               "timeout": 3
-             }
-           ]
-         }
-       ]
-     }
-   }
+   ```sh
+   openplexer install codex
    ```
 
-   The matcher is the value of `codex.Matcher()`. A test pins it to the tools that the adapter gates.
-3. Start `codex` in the project and trust the project. Codex loads the hooks of a project only when the project is trusted.
-4. Type `/hooks`, review the new hook, and trust it. Codex records the trust against the hash of the hook, skips a new or changed hook until you trust it, and marks an edited hook as modified.
+   The command adds one entry to `~/.codex/hooks.json`, or to `$CODEX_HOME/hooks.json` if that variable is set. It keeps every other byte of the file, and it never edits `config.toml`. To connect one project only, run `openplexer install codex --scope project` in the project, or pass `--project <dir>`. That writes `.codex/hooks.json` of the project. `--file <path>` writes another file.
+3. Start `codex`. For a project file, trust the project. Codex loads the hooks of a project only when the project is trusted.
+4. Type `/hooks`, review the new hook, and trust it. Codex records the trust against the hash of the hook in `config.toml`, skips a new or changed hook until you trust it, and marks an edited hook as modified.
 
-## Remove by hand
+The entry looks like this. The command is the absolute path of the binary that ran `install`.
 
-1. Delete the entry from `.codex/hooks.json`, and delete the `hooks` key if nothing else is in it.
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|apply_patch",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/openplexer hook codex pre-tool",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+The matcher is the value of `codex.Agent.Matcher()`, and a test pins the entry to the install goldens. A second `install` changes nothing. After you move the binary, `install` points the entry at the new path, and Codex asks you to trust the changed hook again. An entry that you edited keeps your edit.
+
+Codex also reads hooks written inline in `config.toml`. If the same layer has both, Codex merges them and warns at startup. `install` does not read or write `config.toml`.
+
+`install` refuses a file that is not valid JSON, a file whose `hooks` or `hooks.PreToolUse` has another type, and a file in which a key on the path of the entry appears twice. It leaves the file unchanged, names the line and column, and exits with status 1.
+
+## Remove
+
+1. Run `openplexer uninstall codex`, with the same `--scope`, `--project`, or `--file` as the install.
 2. Start Codex and type `/hooks` to check that the entry is gone.
 
-The adapter writes no other file.
+`uninstall` removes every entry whose command runs a binary named `openplexer` with `hook codex`, also after you moved the entry, changed its timeout or matcher, or added your own hooks next to it. It removes the group, the event list, and the `hooks` object that held nothing but that entry. It deletes the file if the file held nothing else, and it leaves a file that a symbolic link names as `{}`. The trust record that Codex wrote in `config.toml` stays there, because `uninstall` does not edit that file.
+
+What `uninstall` cannot keep:
+
+- An empty `hooks` object or an empty `PreToolUse` list that the file held before `install` goes with the entry.
+- A file that held only `{}` is deleted.
+
+Every other byte stays as it was, including key order, a top-level `description`, indentation, line endings, and the spelling of numbers and escapes.
 
 ## What the hook does not see
 
@@ -81,10 +100,14 @@ There is no check after the command. A write that the hook did not name stays un
 
 **Commands that the policy matches by their first words.** A granted `npm test` allows whatever script `npm test` runs. A granted command with a quoted `;`, `|`, `&`, `<`, or `>` is denied, as [the open questions of the adapter contract](../spec/adapter/README.md#open-questions) say.
 
-**A hook that does not run.** Codex runs no hook of a project until the project is trusted and the hook is trusted, and it skips a changed hook until you trust it again. A person who sets `hooks = false` under `[features]` in `config.toml` turns every hook off. A write to `.codex/hooks.json` through `apply_patch` or `Bash` is denied if the policy puts that path in a system area. A write by anything else is not.
+**A hook that does not run.** Codex runs no hook of a project until the project is trusted and the hook is trusted, and it skips a changed hook until you trust it again. A person who sets `hooks = false` under `[features]` in `config.toml` turns every hook off. The hook denies a write through `apply_patch` or `Bash` to `hooks.json` and `config.toml` of the user and of the project, to the settings files of Claude Code, and to the OpenPlexer home, whatever the policy says. A write by anything else is not seen.
 
-**A failed hook.** The Codex documentation says that a `PreToolUse` error, a timeout, or a malformed response can let the tool run. Codex has no option that blocks the call when a hook fails, so a hook that crashes or runs past its `timeout` lets the call run. The adapter blocks on its own errors with exit status 2, but it cannot block when the process never answers.
+**A failed hook.** The Codex documentation says that a `PreToolUse` error, a timeout, or a malformed response can let the tool run. Codex has no option that blocks the call when a hook fails, so a hook that cannot start, is killed, or runs past its `timeout` lets the call run. The hook blocks on its own errors with exit status 2, and it ends itself with exit status 2 after 4 seconds, before the `timeout` of 5 seconds. It cannot block when the binary is missing or the process never starts.
 
 **Changes while a session runs.** Codex has no `ConfigChange` event, and the adapter has no check of the hook file against its own last write.
 
-**No policy.** The adapter judges what the caller's policy says. What the command does when it finds no verified policy is decided in [issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15).
+**No policy.** With no verified policy, the hook denies every call that it judges, and it judges every `Bash` command as a command. The reason says how to load a policy.
+
+**No project root.** The hook reads the paths of a call from the project root, which is the nearest directory at or above `cwd` that holds `.git`, or else `.codex`, `.claude`, or `.mcp.json`. Your home directory is never the root. If the hook finds no root, it denies every write and every judged command. A `.git` that an agent creates in a subdirectory moves the root there.
+
+**The repository.** The hook does not know which repository of the bundle the project is. The gate then allows a write only when every repository of the bundle allows it, as [Local policy gate](local-policy.md) describes.

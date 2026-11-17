@@ -25,11 +25,11 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 | `apps/openplexer-hub` | `openplexer-hub` | The hub server |
 | `apps/openplexer-verify` | `openplexer-verify` | The standalone verifier for audit logs |
 
-`openplexer` configures the local gate, loads a signed policy bundle, reports the state of the policy, and checks one action. [Local policy gate](local-policy.md) lists its commands. It has no `hook` and no `install` command yet. The other two binaries print "not implemented yet" to standard error and exit with status 1.
+`openplexer` configures the local gate, loads a signed policy bundle, reports the state of the policy, and checks one action. [Local policy gate](local-policy.md) lists those commands. It also installs and removes the hook of Claude Code and Codex, and it is the command that each hook runs. [Claude Code hooks](hooks-claude-code.md) and [Codex hooks](hooks-codex.md) give those commands. The other two binaries print "not implemented yet" to standard error and exit with status 1.
 
 ## Packages
 
-`internal/policy`, `internal/audit`, and `internal/daemon` hold the policy evaluator and the verification of a signed bundle, the audit record, and the local gate. The three adapter packages hold the hook adapters. `internal/room` and `internal/hub` each hold a `doc.go` file with a package comment and no other code. The last four packages hold only tests.
+`internal/policy`, `internal/audit`, and `internal/daemon` hold the policy evaluator and the verification of a signed bundle, the audit record, and the local gate. The four adapter packages hold the hook adapters and their list, and `internal/jsonedit` edits a JSON file in place. `internal/room` and `internal/hub` each hold a `doc.go` file with a package comment and no other code. The last three packages hold only tests.
 
 | Package | Owns |
 |---|---|
@@ -37,12 +37,13 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 | `internal/audit` | Canonical JSON, the hash of an audit record, and the verification of a chain. Pure, no I/O. Its tests run every fixture of `spec/canonical-json` and `spec/audit`. |
 | `internal/daemon` | The local gate: the policy source, the store of the last verified bundle, the state of the policy, local identity, and the audit log of each decision. It reads and writes one home directory. |
 | `internal/room` | The Room protocol: events, claims, decisions, and their validation. Pure, no I/O. |
-| `internal/adapter/hook` | What both hook adapters share: the hook call, the reading of a shell command and of a path, the translation of a tool call into policy intents, and the verdict. It imports `internal/policy`. |
-| `internal/adapter/claudecode` | The hook adapter for Claude Code: its table of gated tools and its `Handle` function. |
-| `internal/adapter/codex` | The hook adapter for Codex: its table of gated tools, the reader of `apply_patch` patches, and its `Handle` function. |
+| `internal/adapter` | The list of the adapters, and the test that runs every case of `spec/adapter` against them. |
+| `internal/adapter/hook` | What both hook adapters share: the hook call, the reading of a shell command and of a path, the project root, the guarded paths, the queries of one tool call, the verdict, and the install and removal of a hook entry. It imports `internal/policy` and `internal/jsonedit`. |
+| `internal/adapter/claudecode` | The `Agent` value of Claude Code: its table of gated tools, its settings files, and its hook entry. |
+| `internal/adapter/codex` | The `Agent` value of Codex: its table of gated tools, the reader of `apply_patch` patches, its hook files, and its hook entry. |
+| `internal/jsonedit` | Edits of JSON text that keep every byte they do not change. It imports nothing from the module. |
 | `internal/hub` | The single-team hub server. |
 | `internal/layering` | The tests that enforce the dependency rules, and the rule that only a test may import another module. |
-| `internal/adapter` | The test that runs every case of `spec/adapter` against the adapters of Claude Code and Codex. The directory holds no other file. |
 | `internal/doclinks` | The test that checks the relative links in the documentation. |
 | `internal/spectest` | The tests that check the contracts: every file under `spec/` is in its place, every schema compiles, every example validates against its schema, every fixture file validates against the fixture-file schema, and every hash follows from its rule. |
 
@@ -54,6 +55,7 @@ The rules apply to transitive imports. The rule table in `internal/layering/laye
 |---|---|
 | `internal/policy`, `internal/room`, `internal/audit` | `internal/adapter/...`, `internal/daemon`, `internal/hub` |
 | `internal/adapter/...` | `internal/daemon`, `internal/hub` |
+| `internal/jsonedit` | Every internal package |
 | `internal/daemon` | `internal/hub` |
 | `internal/hub` | `internal/daemon`, `internal/adapter/...` |
 | `apps/openplexer` | `internal/hub` |
