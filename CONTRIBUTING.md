@@ -32,7 +32,7 @@ Run `make check` and `make build` before you open a pull request. CI runs both c
 2. It runs `go vet ./...`.
 3. It runs `go test ./...`. The tests include the dependency rules, the documentation links, and the checks of the schemas, examples, and fixtures under `spec/`.
 
-Four packages run the fixtures. `TestFixtures` in `internal/policy` runs the policy evaluator and the bundle verifier against every fixture of `spec/policy`. `TestFixtures` in `internal/audit` runs every fixture of `spec/canonical-json` and `spec/audit`. The tests in `internal/daemon` run the local gate against the fixtures of `spec/policy`. `TestFixturesValidate` in `internal/spectest` checks that every fixture file follows the fixture-file schema. To run only the policy fixtures, run `go test ./internal/policy -run TestFixtures`. A failing case prints its name.
+Five packages run the fixtures. `TestFixtures` in `internal/policy` runs the policy evaluator and the bundle verifier against every fixture of `spec/policy`. `TestFixtures` in `internal/audit` runs every fixture of `spec/canonical-json` and `spec/audit`. The tests in `internal/daemon` run the local gate against the fixtures of `spec/policy`. `TestFixtures` in `internal/adapter` runs the adapters against every fixture of `spec/adapter`. `TestFixturesValidate` in `internal/spectest` checks that every fixture file follows the fixture-file schema. To run only the policy fixtures, run `go test ./internal/policy -run TestFixtures`. A failing case prints its name.
 
 ## Build the binaries
 

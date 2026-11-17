@@ -70,7 +70,7 @@ The gate keeps its files in the directory that `OPENPLEXER_HOME` names, or in `.
 | `audit.jsonl` | The audit log, one record on each line | `policy load` and `policy check` |
 | `lock` | An empty file that the commands lock while they write | Every command that writes |
 
-The gate stores the signed token and not the bundle. Each command verifies the token against `keys.json` again before it uses the policy. So an edit to `policy.json` makes the policy rejected, and it does not change the rules. If you remove a key from `keys.json`, every bundle that the key signed stops being enforced.
+The gate stores the signed token and not the bundle. Each command verifies the token against `keys.json` again before it uses the policy. A token with a bad signature is rejected, and the gate then enforces no policy. A token that the key set verifies is enforced, even when it is an older version than the one `policy load` last stored. `policy load` refuses an older version, but a program that writes a validly signed older bundle straight into `policy.json` rolls the policy back, and the gate reports that bundle as verified. The protection against an agent that writes the file is the hook's denial of writes into the OpenPlexer home, which [issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15) adds. A program that runs as you can still do it ([what a same-user attacker can still do](trust-model.md#what-a-same-user-attacker-can-still-do-with-the-policy)). If you remove a key from `keys.json`, every bundle that the key signed stops being enforced.
 
 ## The states of a policy
 
@@ -108,7 +108,7 @@ With no verified policy, the gate does not answer allow or deny. It answers that
 |---|---|
 | A newer version for the same project | Accepted. It becomes the policy in force. |
 | The same version with the same content | Accepted. The load confirms the policy, which makes it fresh. The signature can be a new one. |
-| An older version for the same project | Refused. An old policy cannot replace a newer one. |
+| An older version for the same project | Refused by `policy load`. An old policy cannot replace a newer one through a load. |
 | The same version with another content | Refused. One version has one content. |
 | A bundle for another project | Refused. One home directory holds the policy of one project. To change the project, remove `policy.json` and load the new bundle. |
 
@@ -118,7 +118,7 @@ When the state is absent or rejected, the gate has no version to compare with, a
 
 The gate reads only files, so it works the same with and without a network. If the file of a bundle is gone, or is not a signed bundle message, `policy load` fails and the policy in force stays.
 
-A bundle carries no issue time and no expiry. So the gate measures the age of a policy on the machine: a policy is stale when no load has confirmed it for `stale_after_days`. A stale policy stays in force. `policy status` reports it with exit status 3, `policy check` prints a notice, and each audit record names the state. To make the policy fresh, load the current bundle again.
+A bundle carries no issue time and no expiry. So the gate measures the age of a policy on the machine: a policy is stale when no load has confirmed it for `stale_after_days`. A stale policy stays in force. `policy status` reports it with exit status 3, `policy check` prints a notice, and each decision record names the state in `meta.policy_state`. The records of a load do not carry it. To make the policy fresh, load the current bundle again.
 
 `confirmed_at` is a local time and is not signed. A program that runs as you can change it.
 
@@ -130,7 +130,7 @@ The gate passes each action to the [policy evaluator](../spec/policy/README.md#e
 - The time is the clock of the machine.
 - The overrides are empty. An override comes from a hub, and Phase 1 has none.
 
-A `read` or a `write` with no `--repo` is evaluated in every repo of the bundle, and one deny decides. A repo that the caller does not know therefore opens no path.
+A `read` or a `write` with no `--repo` is evaluated in every repo of the bundle, and one deny decides. If every pattern of the bundle names a listed repo or `*`, a repo that the caller does not know opens no path. A query with no repo never checks a pattern that names a repo the bundle does not list. With `repos: []` and a private area `api:config/**`, `check read config/key.pem` allows, and `check --repo api read config/key.pem` denies.
 
 ## The audit log
 
