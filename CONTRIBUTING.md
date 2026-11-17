@@ -54,7 +54,9 @@ Each coding agent has its own package under `internal/adapter/`.
 	package cursor
 	```
 
-3. Run `make check`.
+3. Add a table of the tools that the agent's hook can gate, as a `hook.Tools` value, and a `Handle` function that passes the table to `hook.Decide`. `internal/adapter/claudecode` is the model.
+4. Add a `pre-tool` fixture file for the agent to `tools/extract/fixtures/adapter-hooks.ts`, and run the extractor. [Regenerate the contracts and fixtures](#regenerate-the-contracts-and-fixtures) gives the commands. Add the agent to the `handlers` table of `internal/adapter/fixtures_test.go`.
+5. Run `make check`.
 
 The dependency rules cover the new package without a change to the test. An adapter must not import `internal/daemon` or `internal/hub`.
 
