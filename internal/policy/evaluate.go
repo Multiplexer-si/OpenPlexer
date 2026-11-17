@@ -11,8 +11,12 @@ import (
 
 // Evaluate decides one action against a bundle, under the rules of
 // spec/policy/README.md. It reads no file, no network, and no clock. Every
-// result has a rule, which gives the reason.
+// result has a rule, which gives the reason. With no bundle, the result is
+// deny.
 func Evaluate(bundle *Bundle, q Query) Result {
+	if bundle == nil {
+		return deny("there is no policy bundle")
+	}
 	roleName, role := bundle.roleOf(q.Member)
 	switch q.Action {
 	case Exec:
@@ -204,11 +208,11 @@ func (b *Bundle) matchAreas(repo, path string) ([]match, error) {
 			glob = normalizeGlob(glob)
 			directory, isTree := strings.CutSuffix(glob, "/**")
 			if !isTree || lowercase(directory) != pathLower {
-				tokens, err := compileGlob(glob)
+				compiled, err := compileGlob(glob)
 				if err != nil {
 					return nil, fmt.Errorf("pattern %q of area %q is not a glob: %w", pattern, area.Name, err)
 				}
-				if !globMatches(tokens, units) {
+				if !globMatches(compiled, units) {
 					continue
 				}
 			}
