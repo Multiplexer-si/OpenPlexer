@@ -270,7 +270,8 @@ func TestGateEnforcesTheSignedBundleExample(t *testing.T) {
 // Every evaluate case that has no override runs through the gate: the
 // shared bundle is signed and loaded, the member of the case is the local
 // identity, and the time of the case is the clock. The decision and the
-// area must be the ones that the reference gave. A case with overrides is
+// area must be the ones that the reference gave. Where the reference throws,
+// the gate must deny with no area. A case with overrides is
 // left out, because the Phase 1 gate has no source of overrides.
 func TestGateGivesTheResultOfEveryEvaluateFixture(t *testing.T) {
 	paths, err := filepath.Glob(filepath.Join(specDir, "policy", "v1", "fixtures", "evaluate-*.json"))
@@ -304,8 +305,12 @@ func TestGateGivesTheResultOfEveryEvaluateFixture(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := decisionOf(t, verdict); !reflect.DeepEqual(got, c.Expected) {
-				t.Errorf("%s: %s: result = %v, want %v", filepath.Base(path), c.Name, got, c.Expected)
+			want := c.Expected
+			if want["throws"] == true {
+				want = map[string]any{"decision": "deny"}
+			}
+			if got := decisionOf(t, verdict); !reflect.DeepEqual(got, want) {
+				t.Errorf("%s: %s: result = %v, want %v", filepath.Base(path), c.Name, got, want)
 			}
 			ran++
 		}
