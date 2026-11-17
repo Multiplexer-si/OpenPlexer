@@ -11,7 +11,7 @@ This repository holds the open-source foundation of OpenPlexer, and only these f
 3. A single-team, self-hosted hub with basic policies.
 4. The hash-chain format of the audit log, and a verifier.
 
-Anything that is not one of these parts is not part of this repository. Building and checking this repository needs no code of the existing implementation. Only regenerating the contracts and fixtures needs a checkout of the existing implementation.
+Anything that is not one of these parts is not part of this repository. Building this repository and running `make check` need no code of the existing implementation. Regenerating the contracts and fixtures, and checking them or the inventory against the existing implementation, need a checkout of it.
 
 The repository holds the contracts for policy, the Room, the audit log, and canonical JSON today. It holds no implementation of them yet. The [roadmap](roadmap.md) gives the order of the work.
 
