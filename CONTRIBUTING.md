@@ -24,13 +24,15 @@ The first run downloads the modules that the tests in `internal/spectest` and `i
 
 ## Run the checks
 
-Run `make check` before you open a pull request. CI runs the same command.
+Run `make check` and `make build` before you open a pull request. CI runs both commands.
 
 `make check` does three things in order.
 
 1. It fails if `gofmt -l .` lists a file. To format every file, run `make fmt`.
 2. It runs `go vet ./...`.
 3. It runs `go test ./...`. The tests include the dependency rules, the documentation links, and the checks of the schemas, examples, and fixtures under `spec/`.
+
+Two tests run the fixtures. `TestFixtures` in `internal/policy` runs the policy evaluator against every `validate` and `evaluate` fixture of `spec/policy`. `TestFixturesValidate` in `internal/spectest` checks that every fixture file follows the fixture-file schema. To run only the policy fixtures, run `go test ./internal/policy -run TestFixtures`. A failing case prints its name.
 
 ## Build the binaries
 
@@ -125,7 +127,7 @@ The extractor has no dependencies of its own. It uses the `tsx` of the checkout,
 
 7. Commit the change to the extractor and the change to `spec/` together.
 
-CI runs `make check` only. It has no checkout of the reference, so it cannot run the extractor. Run the `check` command before you open a pull request that changes `tools/extract` or `spec/`.
+CI runs `make check` and `make build`. It has no checkout of the reference, so it cannot run the extractor. Run the `check` command before you open a pull request that changes `tools/extract` or `spec/`.
 
 ### Make new signatures
 
@@ -157,4 +159,6 @@ The test in `internal/doclinks` fails when a relative link in a Markdown file po
 
 ## Open a pull request
 
-Open the pull request against `main`. CI runs `make check` and `make build` on every pull request.
+Open the pull request against `main`. CI runs `make check` and `make build` on every pull request, in one job named `check`.
+
+`main` requires the `check` job. GitHub blocks the merge of a pull request while that job fails or is still running. A pull request that breaks a fixture fails the job, so fix the code or the fixture before you ask for a review. The rule does not require the branch to be up to date with `main`, and it does not apply to administrators.
