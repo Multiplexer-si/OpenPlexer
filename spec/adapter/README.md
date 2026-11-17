@@ -29,7 +29,7 @@ An adapter reads these fields of the JSON that the agent writes to the hook.
 | `cwd` | The directory that a relative path is read from. A call to a gated tool with no `cwd` is refused. |
 | `tool_input` | The fields that the tool table names. A call to a gated tool whose field is missing or is not a string is refused. |
 
-The caller of the adapter also supplies what the hook input does not hold: the repository, the member that the agent acts for, the time, the overrides that are active, and the project root if it knows one.
+The caller of the adapter also supplies what the hook input does not hold: the repository, the member that the agent acts for, the time, the overrides that are active, and a way to find the project root above `cwd`. The root is the nearest directory at or above `cwd` that holds `.git`, or else the nearest that holds `.claude`, `.codex`, or `.mcp.json`. The home directory and the file system root are never a root. When the caller finds no root, the adapter denies a call that writes a file or runs a command that the policy would judge. A caller with no way to find a root has paths read under `cwd`, as the reference reads them when it finds no root. The fixtures run that way.
 
 ## The tools
 
@@ -131,6 +131,7 @@ The reference is at commit `7d80045a`.
 | A call to a gated tool whose target the adapter cannot read is refused. The reference passes a `Write` with no `file_path`, and a `Bash` with no `command`, because it finds no target. It fails open on bad input and on an error. | A call with an unknown target is a call that the gate cannot judge. |
 | The adapter refuses an unreadable patch whatever the policy is. The reference refuses one only when a bundle is stored. | The adapter has no bundle. The caller decides what happens with no policy. |
 | The adapter judges the one repository that the caller names. The reference judges every repository of the bundle when the repository alias is not known. | The caller knows the repository of the project, and a guess across repositories can deny a write that the policy allows. |
+| A call whose project root the caller cannot find is denied if it writes a file or runs a judged command. The reference then reads every path under `cwd`, so from a subdirectory `rm ../api/server.ts` makes no query and passes. | The hook `cwd` follows each `cd` of the agent, so a path under `cwd` is not a path of the project. |
 | The text of a reason is not the text of the reference. | The reference tells the agent to draft a request in the Room. A reason here names the intent, the area, and the rule. |
 | The adapter has no home-directory protection, no claim check, no warning, no event, no `PostToolUse`, `SessionStart`, `UserPromptSubmit`, `SessionEnd`, or `ConfigChange` hook, no drift check, no native deny rule, and no git hook. | They need the hub, the Room, the audit log, or the install, and they belong to other issues. [The trust model](../../docs/trust-model.md) records each decision. |
 

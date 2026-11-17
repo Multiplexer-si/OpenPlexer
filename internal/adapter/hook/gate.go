@@ -17,9 +17,12 @@ type Env struct {
 	AgentSessionID *string
 	MissionID      *string
 	Overrides      []policy.Override
-	// ProjectRoot is the absolute path of the project. With none, a path is
-	// read as a path under the working directory of the hook call.
-	ProjectRoot string
+	// Root finds the project root above the working directory of a call,
+	// which follows each cd of the agent. When it finds none, every write and
+	// every command that the policy would judge is denied. With no Root, a
+	// path is read as a path under the working directory, as the reference
+	// reads it when it finds no root.
+	Root func(cwd string) (string, bool)
 	// ExecGated is set when the role of the member lists commands. A shell
 	// command is then also judged as `exec`. Otherwise the commands of the
 	// member are not limited, and the command is judged by its write targets.
@@ -133,10 +136,10 @@ func ShellTool(call Call) (Effect, error) {
 
 // queries are what the policy judges of an effect: each write to a path of
 // the project, and, for a member whose role lists commands, each command.
-func (e Env) queries(call Call, effect Effect) []policy.Query {
+func (e Env) queries(call Call, root string, effect Effect) []policy.Query {
 	var out []policy.Query
 	for _, path := range effect.Writes {
-		if rel := normalizeTarget(path, call.Cwd, e.ProjectRoot); inProject(rel) {
+		if rel := normalizeTarget(path, call.Cwd, root); inProject(rel) {
 			out = append(out, e.query(policy.Write, rel, ""))
 		}
 	}
@@ -216,7 +219,17 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	if err != nil {
 		return Verdict{Refuse, err.Error()}
 	}
-	queries := env.queries(call, effect)
+	root := ""
+	if env.Root != nil {
+		var found bool
+		if root, found = env.Root(call.Cwd); !found {
+			if len(effect.Writes) > 0 || env.ExecGated && len(effect.Commands) > 0 {
+				return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked this call because it found no project root above %s: no directory there holds .git, .claude, .codex, or .mcp.json, so the paths of the call cannot be placed in a project. Run the agent inside the project.", call.Cwd)}
+			}
+			return Verdict{}
+		}
+	}
+	queries := env.queries(call, root, effect)
 	if len(queries) == 0 {
 		return Verdict{}
 	}
