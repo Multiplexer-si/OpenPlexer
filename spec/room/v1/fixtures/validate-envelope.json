@@ -1,0 +1,502 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "event_id": "evt-0007",
+        "payload": {
+          "agent": {
+            "id": "ses-ana-1",
+            "vendor": "claude-code"
+          },
+          "at": "2026-01-15T12:00:00.000Z",
+          "body": {
+            "summary": "Running the cart tests"
+          },
+          "id": "evt-0007",
+          "mission": "mis-checkout",
+          "on_behalf_of": "mem-ana",
+          "seq": 7,
+          "type": "status"
+        },
+        "room": "mis-checkout",
+        "sender": {
+          "id": "ses-ana-1",
+          "kind": "daemon"
+        },
+        "seq": 7,
+        "ts": "2026-01-15T12:00:00.000Z",
+        "type": "event",
+        "v": 1
+      },
+      "name": "a message that carries an event is valid",
+      "why": "The hub sets `room`, `seq`, `event_id`, and `ts` on a message that carries an event."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "payload": {
+          "last_seq": 6
+        },
+        "sender": {
+          "id": "dmn-ana",
+          "kind": "daemon"
+        },
+        "type": "resume",
+        "v": 1
+      },
+      "name": "a message about the connection is valid without room, seq, event_id, and ts",
+      "why": "Only `v`, `type`, `sender`, and `payload` are required."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "payload": null,
+        "sender": {
+          "id": "dmn-ana",
+          "kind": "daemon"
+        },
+        "type": "resume",
+        "v": 1
+      },
+      "name": "a null payload is valid",
+      "why": "`payload` must be present, and any JSON value is accepted."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "payload: Invalid input: expected nonoptional, received undefined"
+      },
+      "input": {
+        "sender": {
+          "id": "dmn-ana",
+          "kind": "daemon"
+        },
+        "type": "resume",
+        "v": 1
+      },
+      "name": "a missing payload is invalid",
+      "why": "`payload` is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "v: Invalid input: expected number, received undefined"
+      },
+      "input": {
+        "payload": {
+          "last_seq": 6
+        },
+        "sender": {
+          "id": "dmn-ana",
+          "kind": "daemon"
+        },
+        "type": "resume"
+      },
+      "name": "a missing v is invalid",
+      "why": "`v` is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "v: Too small: expected number to be >0"
+      },
+      "input": {
+        "payload": {
+          "last_seq": 6
+        },
+        "sender": {
+          "id": "dmn-ana",
+          "kind": "daemon"
+        },
+        "type": "resume",
+        "v": 0
+      },
+      "name": "a v of zero is invalid",
+      "why": "`v` is greater than zero."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "payload": {
+          "last_seq": 6
+        },
+        "sender": {
+          "id": "dmn-ana",
+          "kind": "daemon"
+        },
+        "type": "resume",
+        "v": 2
+      },
+      "name": "a v of 2 is valid",
+      "why": "The envelope schema does not fix `v` to one version. Version negotiation happens in the `hello` message."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "type: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "payload": {
+          "last_seq": 6
+        },
+        "sender": {
+          "id": "dmn-ana",
+          "kind": "daemon"
+        },
+        "type": "",
+        "v": 1
+      },
+      "name": "an empty type is invalid",
+      "why": "`type` is not empty."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "payload": {
+          "last_seq": 6
+        },
+        "sender": {
+          "id": "dmn-ana",
+          "kind": "daemon"
+        },
+        "type": "made.up",
+        "v": 1
+      },
+      "name": "a type that no message defines is valid",
+      "why": "The envelope schema accepts any `type` that is not empty, because version 1 defines the payload of `event` only. The hub and the daemon of the reference parse with a message schema that rejects a type that it has no payload for."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "payload.id: Invalid input: expected string, received undefined; payload.seq: Invalid input: expected number, received undefined; payload.mission: Invalid input: expected string, received undefined; payload.type: Invalid option: expected one of \"status\"|\"claim\"|\"release\"|\"decision\"|\"question\"|\"answer\"|\"blocked\"|\"request\"|\"policy.denied\"|\"policy.override\"|\"policy.override.revoked\"|\"ledger.adopted\"|\"decision.confirm\"|\"artifact\"|\"human\"|\"check.timeout-pass\"|\"handoff.offered\"|\"handoff.accepted\"|\"handoff.declined\"|\"handoff.completed\"|\"handoff.cancelled\"; payload.agent: Invalid input: expected object, received undefined; payload.on_behalf_of: Invalid input: expected string, received undefined; payload.at: Invalid input: expected string, received undefined; payload.body: Invalid input: expected nonoptional, received undefined"
+      },
+      "input": {
+        "event_id": "evt-0007",
+        "payload": {},
+        "room": "mis-checkout",
+        "sender": {
+          "id": "ses-ana-1",
+          "kind": "daemon"
+        },
+        "seq": 7,
+        "ts": "2026-01-15T12:00:00.000Z",
+        "type": "event",
+        "v": 1
+      },
+      "name": "an event message with an empty payload is invalid",
+      "why": "The payload of a message with the type `event` is a stored Room event."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "payload: Invalid input: expected object, received null"
+      },
+      "input": {
+        "event_id": "evt-0007",
+        "payload": null,
+        "room": "mis-checkout",
+        "sender": {
+          "id": "ses-ana-1",
+          "kind": "daemon"
+        },
+        "seq": 7,
+        "ts": "2026-01-15T12:00:00.000Z",
+        "type": "event",
+        "v": 1
+      },
+      "name": "an event message with a null payload is invalid",
+      "why": "The payload of a message with the type `event` is a stored Room event."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "payload.type: Invalid option: expected one of \"status\"|\"claim\"|\"release\"|\"decision\"|\"question\"|\"answer\"|\"blocked\"|\"request\"|\"policy.denied\"|\"policy.override\"|\"policy.override.revoked\"|\"ledger.adopted\"|\"decision.confirm\"|\"artifact\"|\"human\"|\"check.timeout-pass\"|\"handoff.offered\"|\"handoff.accepted\"|\"handoff.declined\"|\"handoff.completed\"|\"handoff.cancelled\""
+      },
+      "input": {
+        "event_id": "evt-0007",
+        "payload": {
+          "agent": {
+            "id": "ses-ana-1",
+            "vendor": "claude-code"
+          },
+          "at": "2026-01-15T12:00:00.000Z",
+          "body": {
+            "summary": "Running the cart tests"
+          },
+          "id": "evt-0007",
+          "mission": "mis-checkout",
+          "on_behalf_of": "mem-ana",
+          "seq": 7,
+          "type": "made.up"
+        },
+        "room": "mis-checkout",
+        "sender": {
+          "id": "ses-ana-1",
+          "kind": "daemon"
+        },
+        "seq": 7,
+        "ts": "2026-01-15T12:00:00.000Z",
+        "type": "event",
+        "v": 1
+      },
+      "name": "an event message whose event has an unknown type is invalid",
+      "why": "The payload is validated as a stored Room event, so its `type` must be in the list."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "payload.body: item: Invalid input: expected string, received undefined; paths: Invalid input: expected array, received undefined; intent: Invalid input: expected string, received undefined; ttl_seconds: Invalid input: expected number, received undefined"
+      },
+      "input": {
+        "event_id": "evt-0007",
+        "payload": {
+          "agent": {
+            "id": "ses-ana-1",
+            "vendor": "claude-code"
+          },
+          "at": "2026-01-15T12:00:00.000Z",
+          "body": {
+            "summary": "Running the cart tests"
+          },
+          "id": "evt-0007",
+          "mission": "mis-checkout",
+          "on_behalf_of": "mem-ana",
+          "seq": 7,
+          "type": "claim"
+        },
+        "room": "mis-checkout",
+        "sender": {
+          "id": "ses-ana-1",
+          "kind": "daemon"
+        },
+        "seq": 7,
+        "ts": "2026-01-15T12:00:00.000Z",
+        "type": "event",
+        "v": 1
+      },
+      "name": "an event message whose body does not match the event type is invalid",
+      "why": "The payload is validated as a stored Room event, body included."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "payload": {
+          "agent": {
+            "id": "ses-ana-1",
+            "vendor": "claude-code"
+          },
+          "at": "2026-01-15T12:00:00.000Z",
+          "body": {
+            "summary": "Running the cart tests"
+          },
+          "id": "evt-0007",
+          "mission": "mis-checkout",
+          "on_behalf_of": "mem-ana",
+          "seq": 7,
+          "type": "status"
+        },
+        "sender": {
+          "id": "dmn-ana",
+          "kind": "daemon"
+        },
+        "type": "event",
+        "v": 1
+      },
+      "name": "an event message without room, seq, event_id, and ts is valid",
+      "why": "The schema does not require the fields that the hub sets on an event message."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "sender.kind: Invalid option: expected one of \"daemon\"|\"dashboard\"|\"server\""
+      },
+      "input": {
+        "payload": {
+          "last_seq": 6
+        },
+        "sender": {
+          "id": "x",
+          "kind": "robot"
+        },
+        "type": "resume",
+        "v": 1
+      },
+      "name": "a sender kind outside the list is invalid",
+      "why": "`sender.kind` is `daemon`, `dashboard`, or `server`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "sender.id: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "payload": {
+          "last_seq": 6
+        },
+        "sender": {
+          "id": "",
+          "kind": "daemon"
+        },
+        "type": "resume",
+        "v": 1
+      },
+      "name": "a sender with an empty id is invalid",
+      "why": "`sender.id` is not empty."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "sender: Invalid input: expected object, received undefined"
+      },
+      "input": {
+        "payload": {
+          "last_seq": 6
+        },
+        "type": "resume",
+        "v": 1
+      },
+      "name": "a missing sender is invalid",
+      "why": "`sender` is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "seq: Too small: expected number to be >=0"
+      },
+      "input": {
+        "event_id": "evt-0007",
+        "payload": {
+          "agent": {
+            "id": "ses-ana-1",
+            "vendor": "claude-code"
+          },
+          "at": "2026-01-15T12:00:00.000Z",
+          "body": {
+            "summary": "Running the cart tests"
+          },
+          "id": "evt-0007",
+          "mission": "mis-checkout",
+          "on_behalf_of": "mem-ana",
+          "seq": 7,
+          "type": "status"
+        },
+        "room": "mis-checkout",
+        "sender": {
+          "id": "ses-ana-1",
+          "kind": "daemon"
+        },
+        "seq": -1,
+        "ts": "2026-01-15T12:00:00.000Z",
+        "type": "event",
+        "v": 1
+      },
+      "name": "a negative seq is invalid",
+      "why": "`seq`, when present, is not negative."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "room: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "event_id": "evt-0007",
+        "payload": {
+          "agent": {
+            "id": "ses-ana-1",
+            "vendor": "claude-code"
+          },
+          "at": "2026-01-15T12:00:00.000Z",
+          "body": {
+            "summary": "Running the cart tests"
+          },
+          "id": "evt-0007",
+          "mission": "mis-checkout",
+          "on_behalf_of": "mem-ana",
+          "seq": 7,
+          "type": "status"
+        },
+        "room": "",
+        "sender": {
+          "id": "ses-ana-1",
+          "kind": "daemon"
+        },
+        "seq": 7,
+        "ts": "2026-01-15T12:00:00.000Z",
+        "type": "event",
+        "v": 1
+      },
+      "name": "an empty room is invalid",
+      "why": "`room`, when present, is not empty."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "payload": {
+          "last_seq": 6
+        },
+        "sender": {
+          "id": "dmn-ana",
+          "kind": "daemon"
+        },
+        "trace_id": "trc-1",
+        "type": "resume",
+        "v": 1
+      },
+      "name": "an unknown top-level field is valid",
+      "why": "The envelope keeps fields that the schema does not name."
+    }
+  ],
+  "contract": "room",
+  "description": "Valid and invalid transport envelopes. The verdict of a message with the type `event` comes from the message schema that the hub and the daemon of the reference parse with. The verdict of every other message comes from the envelope schema of the reference, because version 1 defines no other payload.",
+  "operation": "validate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/envelope.ts",
+      "packages/protocol/src/ws-messages.ts"
+    ]
+  },
+  "schema": "urn:openplexer:spec:room:v1:envelope",
+  "version": 1
+}

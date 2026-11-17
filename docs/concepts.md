@@ -58,7 +58,7 @@ A hash chain has a limit, and the design states the limit openly. The chain prov
 
 ## Contracts
 
-A contract is the language-independent definition of a format. A contract has a README with its rules, and the schemas and examples that apply to it. The contracts live in [`spec/`](../spec/README.md), outside the Go code.
+A contract is the language-independent definition of a format. A contract has a README with its rules, and the schemas, examples, and compatibility fixtures that apply to it. The contracts live in [`spec/`](../spec/README.md), outside the Go code.
 
 The contracts exist so that another tool can implement the Room protocol, or verify an audit log, without importing code from this repository. The fixtures are data files and not test code, so an implementation in any language can run them.
 
@@ -72,6 +72,5 @@ The gate stops the actions that it sees. It does not see an action that a coding
 
 Phase 0 of the [roadmap](roadmap.md) settles these questions before any implementation starts.
 
-- The open questions of the contracts. The contracts for policies, Room events, claims, decisions, and audit records now exist in [`spec/`](../spec/README.md). See [issue 9](https://github.com/Multiplexer-si/OpenPlexer/issues/9). Each contract README ends with the questions that the owner has not decided.
-- The fixtures that define the expected behavior of the policy evaluator, the Room protocol, and the audit chain. See [issue 10](https://github.com/Multiplexer-si/OpenPlexer/issues/10).
+- The open questions of the contracts. The contracts for policies, Room events, claims, decisions, and audit records now exist in [`spec/`](../spec/README.md). See [issue 9](https://github.com/Multiplexer-si/OpenPlexer/issues/9). The fixtures that define the expected behavior of the policy evaluator, the claim overlap rules, canonical JSON, and the audit chain exist there too. See [issue 10](https://github.com/Multiplexer-si/OpenPlexer/issues/10). Each contract README ends with the questions that the owner has not decided.
 - The trust model: what data leaves the developer's machine, what the gate can and cannot prevent, and how the verifier obtains a trusted checkpoint. See [issue 11](https://github.com/Multiplexer-si/OpenPlexer/issues/11).

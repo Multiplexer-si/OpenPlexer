@@ -42,7 +42,7 @@ The first seven packages each hold a `doc.go` file with a package comment and no
 | `internal/hub` | The single-team hub server. |
 | `internal/layering` | The tests that enforce the dependency rules, and the rule that only a test may import another module. |
 | `internal/doclinks` | The test that checks the relative links in the documentation. |
-| `internal/spectest` | The tests that check the contracts: every file under `spec/` is in its place, every schema compiles, every example validates against its schema, and every hash in an example follows from its rule. |
+| `internal/spectest` | The tests that check the contracts: every file under `spec/` is in its place, every schema compiles, every example validates against its schema, every fixture file validates against the fixture-file schema, and every hash follows from its rule. |
 
 ## Dependency rules
 
@@ -62,7 +62,7 @@ A trailing `/...` matches the package and every package under it. The last row i
 
 ## Contracts
 
-Each directory under `spec/` holds one contract: a README with the rules, and, except for canonical JSON, a `v1/` directory with the schemas and the examples. Canonical JSON defines text and not a shape, so it has no schema, and its contract is the README alone. [The contracts in `spec/`](../spec/README.md) describes the layout.
+Each directory under `spec/` holds one contract: a README with the rules, and a `v1/` directory with the schemas, the examples, and the fixtures. Canonical JSON defines text and not a shape, so it has no schema, and its `v1/` holds only fixtures. [The contracts in `spec/`](../spec/README.md) describes the layout and the format of a fixture file.
 
 | Directory | Contract |
 |---|---|
@@ -73,7 +73,7 @@ Each directory under `spec/` holds one contract: a README with the rules, and, e
 
 ## Tools
 
-`tools/extract` is the TypeScript program that writes every schema and every example under `spec/`. It runs the existing TypeScript implementation, so it needs a checkout of that implementation and Node. It is not part of the Go module, and neither `make check` nor CI runs it. [Regenerate the contracts](../CONTRIBUTING.md#regenerate-the-contracts) gives the commands.
+`tools/extract` is the TypeScript program that writes every schema, every example, and every fixture under `spec/`. It runs the existing TypeScript implementation, so it needs a checkout of that implementation and Node. It is not part of the Go module, and neither `make check` nor CI runs it. [Regenerate the contracts and fixtures](../CONTRIBUTING.md#regenerate-the-contracts-and-fixtures) gives the commands.
 
 ## Make targets
 

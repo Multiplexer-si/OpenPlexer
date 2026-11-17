@@ -1,0 +1,1086 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "without an override the write is denied",
+      "why": "The baseline for this file: the role has no grant on the area."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active override"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "agent_session_id": "ses-1",
+            "area": "billing",
+            "id": "ovr-1",
+            "scope": "once"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "once: allows the session that it names",
+      "why": "An override with scope once applies to the agent session in agent_session_id."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "id": "ovr-1",
+            "scope": "once"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "once: inactive without agent_session_id",
+      "why": "An override with scope once that names no session is inactive."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "agent_session_id": "ses-2",
+            "area": "billing",
+            "id": "ovr-1",
+            "scope": "once"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "once: inactive for another session",
+      "why": "An override with scope once applies to one session only."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "agent_session_id": "ses-1",
+            "area": "billing",
+            "id": "ovr-1",
+            "scope": "once"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "once: inactive when the query has no session",
+      "why": "A query with no agent session matches no override with scope once."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active override"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "agent_session_id": "ses-1",
+            "area": "billing",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "once"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "once: allows before expires_at",
+      "why": "An override with scope once may also carry an expiry."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "agent_session_id": "ses-1",
+            "area": "billing",
+            "expires_at": "2026-01-15T11:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "once"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "once: inactive after expires_at",
+      "why": "expires_at ends an override of any scope."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active override"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "id": "ovr-1",
+            "mission_id": "mis-1",
+            "scope": "mission"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "mission: allows the mission that it names",
+      "why": "An override with scope mission applies to the mission in mission_id."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "id": "ovr-1",
+            "scope": "mission"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "mission: inactive without mission_id",
+      "why": "An override with scope mission that names no mission is inactive."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "id": "ovr-1",
+            "mission_id": "mis-2",
+            "scope": "mission"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "mission: inactive for another mission",
+      "why": "An override with scope mission applies to one mission only."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "id": "ovr-1",
+            "mission_id": "mis-1",
+            "scope": "mission"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "mission: inactive when the query has no mission",
+      "why": "A query with no mission matches no override with scope mission."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active override"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: allows before expires_at",
+      "why": "An override with scope until applies while the time of the query is before expires_at."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: inactive without expires_at",
+      "why": "An override with scope until that has no expiry is inactive."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T12:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: inactive at the instant of expires_at",
+      "why": "The override ends at expires_at. The comparison is strict."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T11:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: inactive after expires_at",
+      "why": "An expired override has no effect."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "not a timestamp",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: inactive when expires_at is not a timestamp",
+      "why": "An expiry that cannot be read as a time makes the override inactive."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T12:00:00.0005Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: expires_at is compared in whole milliseconds",
+      "why": "The digits after the third digit of the fraction are dropped, so `12:00:00.0005` is `12:00:00.000`, which is not after the time of the query."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.001Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T12:00:00.0019Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: the digits after the third are dropped, not rounded",
+      "why": "`12:00:00.0019` is `12:00:00.001`, which is not after a query at `12:00:00.001`."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active override"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T12:00:00.0019Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: allows one millisecond before a truncated expires_at",
+      "why": "`12:00:00.0019` is `12:00:00.001`, and a query at `12:00:00.000` is before it."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active override"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:59:59.9999Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: the time of the query is compared in whole milliseconds",
+      "why": "`now` loses the digits after the third too, so `12:59:59.9999` is `12:59:59.999`, which is before `13:00:00.000`."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-06-30T23:59:60Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: inactive when expires_at has the second 60",
+      "why": "A leap second is not a timestamp of this contract, so the override is inactive, although the time is months after the query."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "agent_session_id": "ses-2",
+            "area": "billing",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: inactive for another session when it names a session",
+      "why": "agent_session_id restricts an override of any scope."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "mission_id": "mis-2",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "until: inactive for another mission when it names a mission",
+      "why": "mission_id restricts an override of any scope."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "vault",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "an override for another area has no effect",
+      "why": "An override opens only the area that it names."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "read"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "an override for another action has no effect",
+      "why": "An override allows only the actions that it lists."
+    },
+    {
+      "expected": {
+        "area": "vault",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"vault\" read is allowed by an active override"
+      },
+      "input": {
+        "action": "read",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "read"
+            ],
+            "area": "vault",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "vault/keys.json",
+        "repo": "api"
+      },
+      "name": "an override opens a private area for a read",
+      "why": "An override can allow a read that a private area would deny."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role (member mem-eve has no role)"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-eve",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "an override does not apply to a member with no role",
+      "why": "A member that the bundle does not list gets nothing from an override."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-dan",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "an override does not apply to a member whose role is not defined",
+      "why": "A member mapped to a role name that the bundle does not define has no role, so an override gives the member nothing."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active override"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-1",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "id": "ovr-0",
+            "scope": "until"
+          },
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "id": "ovr-1",
+            "mission_id": "mis-1",
+            "scope": "mission"
+          }
+        ],
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "one active override among inactive ones allows",
+      "why": "Any one active override is enough."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active override"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-sub",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "agent_session_id": "ses-1",
+            "area": "billing",
+            "id": "ovr-1",
+            "scope": "once"
+          }
+        ],
+        "parent": {
+          "agent_session_id": "ses-1",
+          "mission_id": "mis-1"
+        },
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a sub-agent gets the once override of its parent session",
+      "why": "For a sub-agent, an override is matched against the session of the parent."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-sub",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "agent_session_id": "ses-sub",
+            "area": "billing",
+            "id": "ovr-1",
+            "scope": "once"
+          }
+        ],
+        "parent": {
+          "agent_session_id": "ses-1",
+          "mission_id": "mis-1"
+        },
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a sub-agent does not get an override for its own session",
+      "why": "An override that names the session of the sub-agent is inactive, so a sub-agent gets at most the grants of its parent."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active override"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-sub",
+        "member": "mem-ana",
+        "mission_id": "mis-2",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "id": "ovr-1",
+            "mission_id": "mis-1",
+            "scope": "mission"
+          }
+        ],
+        "parent": {
+          "agent_session_id": "ses-1",
+          "mission_id": "mis-1"
+        },
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a sub-agent gets the mission override of its parent mission",
+      "why": "For a sub-agent, an override is matched against the mission of the parent."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-sub",
+        "member": "mem-ana",
+        "mission_id": "mis-2",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "billing",
+            "id": "ovr-1",
+            "mission_id": "mis-2",
+            "scope": "mission"
+          }
+        ],
+        "parent": {
+          "agent_session_id": "ses-1",
+          "mission_id": "mis-1"
+        },
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a sub-agent does not get an override for its own mission",
+      "why": "For a sub-agent, the mission of the sub-agent itself is ignored."
+    }
+  ],
+  "contract": "policy",
+  "description": "Overrides with scope once, mission, and until, and every case in which an override is inactive.",
+  "operation": "evaluate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/evaluate.ts",
+      "packages/protocol/src/policy/glob.ts"
+    ]
+  },
+  "shared": {
+    "bundle": {
+      "areas": [
+        {
+          "name": "billing",
+          "patterns": [
+            "api:src/billing/**"
+          ]
+        },
+        {
+          "name": "vault",
+          "patterns": [
+            "api:vault/**"
+          ],
+          "private": true
+        }
+      ],
+      "members": {
+        "mem-ana": "dev",
+        "mem-dan": "ghost"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "api",
+        "web"
+      ],
+      "roles": {
+        "dev": {
+          "exec": [],
+          "read": [],
+          "write": []
+        }
+      },
+      "version": 1
+    }
+  },
+  "version": 1
+}

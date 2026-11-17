@@ -1,0 +1,150 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "actions": [
+          "write"
+        ],
+        "agent_session_id": "ses-1",
+        "area": "billing",
+        "id": "ovr-1",
+        "scope": "once"
+      },
+      "name": "an override with scope once is valid",
+      "why": "`id`, `area`, `actions`, and `scope` are required."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "actions": [
+          "write"
+        ],
+        "area": "billing",
+        "id": "ovr-1",
+        "scope": "once"
+      },
+      "name": "an override with scope once and no session is valid",
+      "why": "The schema does not require the field that the scope needs. The evaluator treats such an override as inactive."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "actions": [
+          "write"
+        ],
+        "agent_session_id": "ses-1",
+        "area": "billing",
+        "expires_at": "not a timestamp",
+        "id": "ovr-1",
+        "scope": "once"
+      },
+      "name": "an expires_at that is not a timestamp is valid",
+      "why": "`expires_at` is any string. The evaluator treats an unreadable expiry as inactive."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "scope: Invalid option: expected one of \"once\"|\"mission\"|\"until\""
+      },
+      "input": {
+        "actions": [
+          "write"
+        ],
+        "agent_session_id": "ses-1",
+        "area": "billing",
+        "id": "ovr-1",
+        "scope": "forever"
+      },
+      "name": "an unknown scope is invalid",
+      "why": "`scope` is `once`, `mission`, or `until`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "actions.0: Invalid option: expected one of \"read\"|\"write\"|\"exec\"|\"git.push\""
+      },
+      "input": {
+        "actions": [
+          "delete"
+        ],
+        "agent_session_id": "ses-1",
+        "area": "billing",
+        "id": "ovr-1",
+        "scope": "once"
+      },
+      "name": "an unknown action is invalid",
+      "why": "`actions` holds only the four actions of the policy contract."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "actions": [],
+        "agent_session_id": "ses-1",
+        "area": "billing",
+        "id": "ovr-1",
+        "scope": "once"
+      },
+      "name": "an empty list of actions is valid",
+      "why": "The schema sets no minimum length for `actions`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "id: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "actions": [
+          "write"
+        ],
+        "agent_session_id": "ses-1",
+        "area": "billing",
+        "scope": "once"
+      },
+      "name": "a missing id is invalid",
+      "why": "`id` is required."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "actions": [
+          "write"
+        ],
+        "agent_session_id": "ses-1",
+        "area": "billing",
+        "granted_by": "mem-lee",
+        "id": "ovr-1",
+        "scope": "once"
+      },
+      "name": "an unknown field is valid",
+      "why": "An override keeps fields that the schema does not name."
+    }
+  ],
+  "contract": "policy",
+  "description": "Valid and invalid overrides.",
+  "operation": "validate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/types.ts"
+    ]
+  },
+  "schema": "urn:openplexer:spec:policy:v1:override",
+  "version": 1
+}

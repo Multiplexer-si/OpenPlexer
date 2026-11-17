@@ -1,0 +1,412 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "area": "payroll",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"payroll\" is private; readable by role hr only"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app/payroll/salaries.csv",
+        "repo": "api"
+      },
+      "name": "read in a private area without a grant is denied",
+      "why": "A private area denies a read unless the role lists it under read."
+    },
+    {
+      "expected": {
+        "area": "payroll",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"payroll\" read is granted to role hr"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-hana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app/payroll/salaries.csv",
+        "repo": "api"
+      },
+      "name": "read in a private area with a grant is allowed",
+      "why": "A role that lists the private area under read may read it."
+    },
+    {
+      "expected": {
+        "area": "payroll",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"payroll\" write is granted to role hr"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-hana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app/payroll/salaries.csv",
+        "repo": "api"
+      },
+      "name": "write in a private area with a grant is allowed",
+      "why": "A role that lists the private area under write may write it."
+    },
+    {
+      "expected": {
+        "area": "payroll",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"payroll\" is private; readable by role hr only"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-cal",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app/payroll/salaries.csv",
+        "repo": "api"
+      },
+      "name": "a write grant does not allow a read in a private area",
+      "why": "A role that lists a private area under write only may not read it. Only a read grant opens a private area for a read."
+    },
+    {
+      "expected": {
+        "area": "payroll",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"payroll\" is writable by role clerk, hr only"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app/payroll/ui/form.tsx",
+        "repo": "api"
+      },
+      "name": "a private area denies a write despite a more specific granted area",
+      "why": "A private area that denies wins over every other area, however specific."
+    },
+    {
+      "expected": {
+        "area": "payroll",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"payroll\" is private; readable by role hr only"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app/payroll/ui/form.tsx",
+        "repo": "api"
+      },
+      "name": "a private area denies a read despite a more specific area that is not private",
+      "why": "A private area that denies wins over every other area, however specific."
+    },
+    {
+      "expected": {
+        "area": "payroll-ui",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"payroll-ui\" is readable by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-hana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app/payroll/ui/form.tsx",
+        "repo": "api"
+      },
+      "name": "a granted private area leaves the decision to the most specific area",
+      "why": "A private area that allows takes part in the ranking like any other area."
+    },
+    {
+      "expected": {
+        "area": "payroll",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"payroll\" is private; readable by role hr only"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app/payroll/.env",
+        "repo": "api"
+      },
+      "name": "the first private area that denies is reported",
+      "why": "When two private areas deny, the one listed first in the bundle is reported."
+    },
+    {
+      "expected": {
+        "area": "secrets",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"secrets\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-hana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app/payroll/.env",
+        "repo": "api"
+      },
+      "name": "a private area that denies wins over a private area that allows",
+      "why": "A grant on one private area does not open another private area that matches the same path."
+    },
+    {
+      "expected": {
+        "area": "infra",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"infra\" is readable by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "deploy/prod.yaml",
+        "repo": "api"
+      },
+      "name": "read in a system area is allowed",
+      "why": "The system flag restricts only writes."
+    },
+    {
+      "expected": {
+        "area": "infra",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"infra\" is a system area and is never writable"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-omar",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "deploy/prod.yaml",
+        "repo": "api"
+      },
+      "name": "write in a system area is denied despite a role grant",
+      "why": "No role grant makes a system area writable."
+    },
+    {
+      "expected": {
+        "area": "infra",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"infra\" is a system area and is never writable"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-omar",
+        "now": "2026-01-15T12:00:00.000Z",
+        "overrides": [
+          {
+            "actions": [
+              "write"
+            ],
+            "area": "infra",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "id": "ovr-1",
+            "scope": "until"
+          }
+        ],
+        "path": "deploy/prod.yaml",
+        "repo": "api"
+      },
+      "name": "write in a system area is denied despite an override",
+      "why": "No override makes a system area writable."
+    },
+    {
+      "expected": {
+        "area": "infra",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"infra\" is a system area and is never writable"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-omar",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "deploy/docs/runbook.md",
+        "repo": "api"
+      },
+      "name": "a system area denies a write despite a more specific granted area",
+      "why": "A system area wins over every other area for a write."
+    },
+    {
+      "expected": {
+        "area": "infra",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"infra\" is a system area and is never writable"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-omar",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "deploy/prod/app.yaml",
+        "repo": "api"
+      },
+      "name": "the first system area that matches is reported",
+      "why": "When two system areas match a write, the one listed first in the bundle is reported, although the other one is more specific."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app2/a\nb/.env",
+        "repo": "api"
+      },
+      "name": "a line feed in a directory name takes a path out of a private area",
+      "why": "`**` does not match a line terminator, so `**/.env*` does not match this path, and the read is allowed by default."
+    },
+    {
+      "expected": {
+        "area": "secrets",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"secrets\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "app2/.env\nx",
+        "repo": "api"
+      },
+      "name": "a line feed in a file name does not take a path out of a private area",
+      "why": "`*` matches a line terminator, so `**/.env*` matches this path."
+    }
+  ],
+  "contract": "policy",
+  "description": "Private areas, which need a grant to read, and system areas, which nothing can write.",
+  "operation": "evaluate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/evaluate.ts",
+      "packages/protocol/src/policy/glob.ts"
+    ]
+  },
+  "shared": {
+    "bundle": {
+      "areas": [
+        {
+          "name": "app",
+          "patterns": [
+            "api:app/**"
+          ]
+        },
+        {
+          "name": "payroll",
+          "patterns": [
+            "api:app/payroll/**"
+          ],
+          "private": true
+        },
+        {
+          "name": "payroll-ui",
+          "patterns": [
+            "api:app/payroll/ui/**"
+          ]
+        },
+        {
+          "name": "secrets",
+          "patterns": [
+            "*:**/.env*"
+          ],
+          "private": true
+        },
+        {
+          "name": "infra",
+          "patterns": [
+            "api:deploy/**"
+          ],
+          "system": true
+        },
+        {
+          "name": "deploy-docs",
+          "patterns": [
+            "api:deploy/docs/**"
+          ]
+        },
+        {
+          "name": "infra-prod",
+          "patterns": [
+            "api:deploy/prod/**"
+          ],
+          "system": true
+        }
+      ],
+      "members": {
+        "mem-ana": "dev",
+        "mem-cal": "clerk",
+        "mem-hana": "hr",
+        "mem-omar": "ops"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "api",
+        "web"
+      ],
+      "roles": {
+        "clerk": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "payroll"
+          ]
+        },
+        "dev": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "app",
+            "payroll-ui"
+          ]
+        },
+        "hr": {
+          "exec": [],
+          "read": [
+            "payroll"
+          ],
+          "write": [
+            "payroll"
+          ]
+        },
+        "ops": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "infra",
+            "deploy-docs",
+            "infra-prod"
+          ]
+        }
+      },
+      "version": 1
+    }
+  },
+  "version": 1
+}

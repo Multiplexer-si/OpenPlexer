@@ -1,0 +1,1561 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "status: a summary alone is valid",
+      "why": "`summary` is the only required field of a status body."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: summary: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "files": [
+            "src/orders/cart.ts"
+          ]
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "status: a missing summary is invalid",
+      "why": "`summary` is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: files: Invalid input: expected array, received string"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "files": "src/orders/cart.ts",
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "status: files that is not a list is invalid",
+      "why": "`files` is a list of strings."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "intent": "Add discounts",
+          "item": "Cart discount",
+          "paths": [
+            "src/orders/**"
+          ],
+          "ttl_seconds": 600
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "claim"
+      },
+      "name": "claim: all four fields is valid",
+      "why": "A claim body needs `item`, `paths`, `intent`, and `ttl_seconds`."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "intent": "Add discounts",
+          "item": "Cart discount",
+          "paths": [],
+          "ttl_seconds": 600
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "claim"
+      },
+      "name": "claim: an empty list of paths is valid",
+      "why": "The schema sets no minimum length for `paths`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: ttl_seconds: Too small: expected number to be >0"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "intent": "Add discounts",
+          "item": "Cart discount",
+          "paths": [
+            "src/orders/**"
+          ],
+          "ttl_seconds": 0
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "claim"
+      },
+      "name": "claim: a ttl of zero is invalid",
+      "why": "`ttl_seconds` is greater than zero."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: ttl_seconds: Invalid input: expected int, received number"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "intent": "Add discounts",
+          "item": "Cart discount",
+          "paths": [
+            "src/orders/**"
+          ],
+          "ttl_seconds": 1.5
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "claim"
+      },
+      "name": "claim: a ttl with a fraction is invalid",
+      "why": "`ttl_seconds` is an integer."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: paths: Invalid input: expected array, received undefined"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "intent": "Add discounts",
+          "item": "Cart discount",
+          "ttl_seconds": 600
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "claim"
+      },
+      "name": "claim: missing paths is invalid",
+      "why": "`paths` is required."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "claim_id": "evt-0002"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "release"
+      },
+      "name": "release: a claim id alone is valid",
+      "why": "`claim_id` is the only required field of a release body."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: claim_id: Invalid input: expected string, received number"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "claim_id": 2
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "release"
+      },
+      "name": "release: a claim id that is not a string is invalid",
+      "why": "`claim_id` is a string."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "detail": "Every amount is an integer number of cents.",
+          "title": "Money is cents"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "decision"
+      },
+      "name": "decision: a title and a detail is valid",
+      "why": "A decision body needs `title` and `detail`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: detail: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "title": "Money is cents"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "decision"
+      },
+      "name": "decision: a missing detail is invalid",
+      "why": "`detail` is required."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "mem-lee",
+          "vendor": "human"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "decision_id": "evt-0004",
+          "result": "confirmed"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-lee",
+        "seq": 7,
+        "type": "decision.confirm"
+      },
+      "name": "decision.confirm: confirmed is valid",
+      "why": "`result` is `confirmed` or `rejected`."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "mem-lee",
+          "vendor": "human"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "decision_id": "evt-0004",
+          "result": "rejected"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-lee",
+        "seq": 7,
+        "type": "decision.confirm"
+      },
+      "name": "decision.confirm: rejected is valid",
+      "why": "`result` is `confirmed` or `rejected`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: result: Invalid option: expected one of \"confirmed\"|\"rejected\""
+      },
+      "input": {
+        "agent": {
+          "id": "mem-lee",
+          "vendor": "human"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "decision_id": "evt-0004",
+          "result": "maybe"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-lee",
+        "seq": 7,
+        "type": "decision.confirm"
+      },
+      "name": "decision.confirm: another result is invalid",
+      "why": "`result` is a closed list."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "Is the discount a separate field?"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: a text alone is valid",
+      "why": "`text` is the only required field of a question body."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: text: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "   "
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: a text of only white space is invalid",
+      "why": "`text` needs one character that is not white space."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: text: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "\u00a0"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: a text of only a no-break space is invalid",
+      "why": "U+00A0 is white space, so the text has no character that is not white space."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: text: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "\u000b"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: a text of only a line tabulation is invalid",
+      "why": "U+000B is white space, so the text has no character that is not white space."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: text: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "\ufeff"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: a text of only a zero width no-break space is invalid",
+      "why": "U+FEFF is white space, so the text has no character that is not white space."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: text: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "\u3000"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: a text of only an ideographic space is invalid",
+      "why": "U+3000 is white space, so the text has no character that is not white space."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: text: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "\u2028"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: a text of only a line separator is invalid",
+      "why": "U+2028 is white space, so the text has no character that is not white space."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "\u0085"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: a text of only a next line character is valid",
+      "why": "U+0085 is not white space in this contract."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "\u180e"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: a text of only a Mongolian vowel separator is valid",
+      "why": "U+180E is not white space in this contract."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "\u200b"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: a text of only a zero width space is valid",
+      "why": "U+200B is not white space in this contract."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: addressed_to: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "addressed_to": "",
+          "text": "Is the discount a separate field?"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: an empty addressed_to is invalid",
+      "why": "`addressed_to`, when present, is not empty."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: addressed_to: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "addressed_to": " ",
+          "text": "Is the discount a separate field?"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "question"
+      },
+      "name": "question: an addressed_to of only white space is invalid",
+      "why": "`addressed_to` needs one character that is not white space."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "question_id": "evt-0006",
+          "text": "Yes."
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "answer"
+      },
+      "name": "answer: a question id and a text is valid",
+      "why": "An answer body needs `question_id` and `text`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: question_id: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "question_id": "",
+          "text": "Yes."
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "answer"
+      },
+      "name": "answer: an empty question id is invalid",
+      "why": "`question_id` is not empty."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: text: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "question_id": "evt-0006",
+          "text": "\t\n"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "answer"
+      },
+      "name": "answer: a text of only white space is invalid",
+      "why": "`text` needs one character that is not white space."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "reason": "The billing area is not writable"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "blocked"
+      },
+      "name": "blocked: a reason alone is valid",
+      "why": "`reason` is the only required field of a blocked body."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "needs": {
+            "decision": "evt-0004"
+          },
+          "reason": "Waiting"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "blocked"
+      },
+      "name": "blocked: needs with a decision is valid",
+      "why": "`needs` is an object with optional `request_id` and `decision`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: needs: Invalid input: expected object, received string"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "needs": "evt-0004",
+          "reason": "Waiting"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "blocked"
+      },
+      "name": "blocked: needs that is not an object is invalid",
+      "why": "`needs` is an object."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "mem-lee",
+          "vendor": "human"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "text": "Ship the discount work first."
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-lee",
+        "seq": 7,
+        "type": "human"
+      },
+      "name": "human: a text alone is valid",
+      "why": "`text` is the only required field of a human body."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: mentions.0: Invalid input: expected string, received number"
+      },
+      "input": {
+        "agent": {
+          "id": "mem-lee",
+          "vendor": "human"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "mentions": [
+            1
+          ],
+          "text": "Ship the discount work first."
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-lee",
+        "seq": 7,
+        "type": "human"
+      },
+      "name": "human: mentions that are not strings is invalid",
+      "why": "`mentions` is a list of strings."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "action": "write",
+          "path": "src/billing/invoice.ts",
+          "rule": "denied"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "policy.denied"
+      },
+      "name": "policy.denied: action, path, and rule is valid",
+      "why": "A policy.denied body needs `action`, `path`, and `rule`."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "action": "delete",
+          "path": "src/billing/invoice.ts",
+          "rule": "denied"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "policy.denied"
+      },
+      "name": "policy.denied: any string is a valid action",
+      "why": "`action` is an open string in the event, not the closed list of the policy contract."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: rule: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "action": "write",
+          "path": "src/billing/invoice.ts"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "policy.denied"
+      },
+      "name": "policy.denied: a missing rule is invalid",
+      "why": "`rule` is required."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "mem-lee",
+          "vendor": "human"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "actions": [
+            "write"
+          ],
+          "agent": "ses-ana-1",
+          "areas": [
+            "billing"
+          ],
+          "lead": "mem-lee",
+          "reason": "One change to the invoice total",
+          "scope": "mission"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-lee",
+        "seq": 7,
+        "type": "policy.override"
+      },
+      "name": "policy.override: all six fields is valid",
+      "why": "A policy.override body needs `lead`, `agent`, `areas`, `actions`, `scope`, and `reason`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: areas: Invalid input: expected array, received string"
+      },
+      "input": {
+        "agent": {
+          "id": "mem-lee",
+          "vendor": "human"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "actions": [
+            "write"
+          ],
+          "agent": "ses-ana-1",
+          "areas": "billing",
+          "lead": "mem-lee",
+          "reason": "One change to the invoice total",
+          "scope": "mission"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-lee",
+        "seq": 7,
+        "type": "policy.override"
+      },
+      "name": "policy.override: areas that is not a list is invalid",
+      "why": "`areas` is a list of strings."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: reason: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "agent": {
+          "id": "mem-lee",
+          "vendor": "human"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "actions": [
+            "write"
+          ],
+          "agent": "ses-ana-1",
+          "areas": [
+            "billing"
+          ],
+          "lead": "mem-lee",
+          "scope": "mission"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-lee",
+        "seq": 7,
+        "type": "policy.override"
+      },
+      "name": "policy.override: a missing reason is invalid",
+      "why": "`reason` is required."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "mem-lee",
+          "vendor": "human"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "agent": "ses-ana-1",
+          "area": "billing",
+          "override_id": "ovr-2",
+          "revoked_by": "mem-lee"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-lee",
+        "seq": 7,
+        "type": "policy.override.revoked"
+      },
+      "name": "policy.override.revoked: without a reason is valid",
+      "why": "`reason` is optional in a revocation."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: revoked_by: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "agent": {
+          "id": "mem-lee",
+          "vendor": "human"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "agent": "ses-ana-1",
+          "area": "billing",
+          "override_id": "ovr-2"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-lee",
+        "seq": 7,
+        "type": "policy.override.revoked"
+      },
+      "name": "policy.override.revoked: a missing revoked_by is invalid",
+      "why": "`revoked_by` is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "type: Invalid option: expected one of \"status\"|\"claim\"|\"release\"|\"decision\"|\"question\"|\"answer\"|\"blocked\"|\"request\"|\"policy.denied\"|\"policy.override\"|\"policy.override.revoked\"|\"ledger.adopted\"|\"decision.confirm\"|\"artifact\"|\"human\"|\"check.timeout-pass\"|\"handoff.offered\"|\"handoff.accepted\"|\"handoff.declined\"|\"handoff.completed\"|\"handoff.cancelled\""
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "made.up"
+      },
+      "name": "an unknown event type is invalid",
+      "why": "An event whose type is not in the list is rejected, whatever its body."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "mood": "calm",
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "a body with an unknown field is valid",
+      "why": "A body keeps fields that the schema does not name."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "trace_id": "trc-1",
+        "type": "status"
+      },
+      "name": "an event with an unknown top-level field is valid",
+      "why": "An event keeps fields that the schema does not name."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "reply_to": "evt-0003",
+          "summary": "Running the cart tests",
+          "thread_id": "evt-0001"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "thread_id and reply_to are valid on any body",
+      "why": "Every body accepts the two threading fields."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: thread_id: Invalid input: expected string, received number"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests",
+          "thread_id": 1
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "a thread_id that is not a string is invalid",
+      "why": "`thread_id` is a string."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1-sub",
+          "parent": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "an agent with a parent is valid",
+      "why": "`agent.parent` marks the event of a sub-agent."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "agent.parent: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1-sub",
+          "parent": "",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "an agent with an empty parent is invalid",
+      "why": "`agent.parent`, when present, is not empty."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "model": "x",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "an agent with an unknown field is valid",
+      "why": "`agent` accepts fields that the schema does not name."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "at: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "a missing at is invalid",
+      "why": "`at` is required."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "yesterday",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "an at that is not a timestamp is valid",
+      "why": "`at` is any string that is not empty. The schema does not check that it is a time."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "on_behalf_of: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "a missing on_behalf_of is invalid",
+      "why": "`on_behalf_of` is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "id: Too small: expected string to have >=1 characters"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "an empty id is invalid",
+      "why": "`id` is not empty."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 0,
+        "type": "status"
+      },
+      "name": "a seq of zero is valid",
+      "why": "The schema accepts zero. The hub of the reference gives the first event of a Room the `seq` 1."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "seq: Too small: expected number to be >=0"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": -1,
+        "type": "status"
+      },
+      "name": "a negative seq is invalid",
+      "why": "`seq` is not negative."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "seq: Invalid input: expected int, received number"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 1.5,
+        "type": "status"
+      },
+      "name": "a seq with a fraction is invalid",
+      "why": "`seq` is an integer."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "seq: Invalid input: expected number, received string"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": "7",
+        "type": "status"
+      },
+      "name": "a seq that is a string is invalid",
+      "why": "`seq` is a number."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: item: Invalid input: expected string, received undefined; paths: Invalid input: expected array, received undefined; intent: Invalid input: expected string, received undefined; ttl_seconds: Invalid input: expected number, received undefined"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": {
+          "summary": "Running the cart tests"
+        },
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "claim"
+      },
+      "name": "a body that does not match its type is invalid",
+      "why": "The body is validated against the schema of the event type."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: Invalid input: expected nonoptional, received undefined"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "a missing body is invalid",
+      "why": "`body` is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "body: (root): Invalid input: expected object, received null"
+      },
+      "input": {
+        "agent": {
+          "id": "ses-ana-1",
+          "vendor": "claude-code"
+        },
+        "at": "2026-01-15T12:00:00.000Z",
+        "body": null,
+        "id": "evt-0007",
+        "mission": "mis-checkout",
+        "on_behalf_of": "mem-ana",
+        "seq": 7,
+        "type": "status"
+      },
+      "name": "a null body is invalid",
+      "why": "Every body is an object."
+    }
+  ],
+  "contract": "room",
+  "description": "Valid and invalid stored Room events: one valid and at least one invalid body for each event type, an unknown type, and faults in the fields around the body.",
+  "operation": "validate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/events.ts"
+    ]
+  },
+  "schema": "urn:openplexer:spec:room:v1:room-event",
+  "version": 1
+}

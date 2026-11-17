@@ -1,0 +1,747 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.nb6Eq6zgth8lVHx856WRs_w6WMA2pGAj09lDICiiv5ywktjwTn8nlUo5lXPjgwqfSWrJItKbhoUyZiHG-qqcDg"
+      },
+      "name": "a bundle signed by a key in the key set verifies",
+      "why": "The payload of a valid signature is returned as the bundle."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "color": "red",
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "note": "draft",
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3siY29sb3IiOiJyZWQiLCJuYW1lIjoiYmFja2VuZCIsInBhdHRlcm5zIjpbImFwaTpzcmMvKioiXX1dLCJtZW1iZXJzIjp7Im1lbS1hbmEiOiJiYWNrZW5kIn0sIm5vdGUiOiJkcmFmdCIsInByb2plY3RfaWQiOiJwcmotc2hvcCIsInJlcG9zIjpbImFwaSJdLCJyb2xlcyI6eyJiYWNrZW5kIjp7ImV4ZWMiOlsibnBtIHRlc3QiXSwicmVhZCI6W10sIndyaXRlIjpbImJhY2tlbmQiXX19LCJ2ZXJzaW9uIjo3fQ.X2YMLrMa8KtoYmtd9GbJHDwXvLOz_wiIJeEqCm4gX3chK0fevfeCqP4qJruio-iD9iOGIDZfsciOZxvvkbIz3Q"
+      },
+      "name": "a bundle with unknown fields keeps them",
+      "why": "The verified bundle is the payload, with the fields that the bundle schema does not name."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.ewogICJ2ZXJzaW9uIjogNywKICAicHJvamVjdF9pZCI6ICJwcmotc2hvcCIsCiAgInJlcG9zIjogWwogICAgImFwaSIKICBdLAogICJhcmVhcyI6IFsKICAgIHsKICAgICAgIm5hbWUiOiAiYmFja2VuZCIsCiAgICAgICJwYXR0ZXJucyI6IFsKICAgICAgICAiYXBpOnNyYy8qKiIKICAgICAgXQogICAgfQogIF0sCiAgInJvbGVzIjogewogICAgImJhY2tlbmQiOiB7CiAgICAgICJyZWFkIjogW10sCiAgICAgICJ3cml0ZSI6IFsKICAgICAgICAiYmFja2VuZCIKICAgICAgXSwKICAgICAgImV4ZWMiOiBbCiAgICAgICAgIm5wbSB0ZXN0IgogICAgICBdCiAgICB9CiAgfSwKICAibWVtYmVycyI6IHsKICAgICJtZW0tYW5hIjogImJhY2tlbmQiCiAgfQp9.--zQllpzkElL9noZpj-Qu2VgA0iJr7x6JGAOFlPkAIHzBlADfioMEqC77x6sVlESvGDH9DQmUgcwYjLOhfHrhw"
+      },
+      "name": "a payload that is not canonical JSON still verifies",
+      "why": "The verifier checks the signature over the bytes that it receives. It does not check that those bytes are canonical."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsInR5cCI6Im1wLXBvbGljeStqd3MifQ.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.VPcj8li6hcx7iJ6XqXTaxtPFkiIurkb3lKITZwZ8XD30aDvVhk6xgVAF9QZ3o-mxvr0D_6t2dHMgd39vINBfnA"
+      },
+      "name": "a header without kid verifies when one key in the set fits",
+      "why": "Without `kid`, the key is chosen by `alg` and key type."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.77u_eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.aLptQUFYN-LE4Tf6PCB0x6AivYNPQ68Yc_81XDaWqoBeNP0JgsQrZtVRSGfWeiTB38wzpPlUIPgwKw6f9ptQbg"
+      },
+      "name": "a payload that starts with a byte order mark verifies",
+      "why": "The payload is decoded as UTF-8 with the byte order mark removed. The twelfth open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-\ufffd",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLfCfmCIsInJlcG9zIjpbImFwaSJdLCJyb2xlcyI6eyJiYWNrZW5kIjp7ImV4ZWMiOlsibnBtIHRlc3QiXSwicmVhZCI6W10sIndyaXRlIjpbImJhY2tlbmQiXX19LCJ2ZXJzaW9uIjo3fQ.ZSewTusfH9cGcCT7HccNPV9A4zOt4xlSq_jcMNDve9Ht6IaybYOmACmBKqJ3E_LVcKXIXI7pQMtQj1U73XVRRA"
+      },
+      "name": "an invalid UTF-8 sequence in a payload becomes one U+FFFD",
+      "why": "The payload is decoded as UTF-8, and each invalid sequence becomes U+FFFD, as the WHATWG Encoding Standard decodes it. The three bytes of a truncated four-byte sequence become one U+FFFD. The twelfth open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJ2ZXJzaW9uIjoxLCJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.ihy7Es4PkaA2SA1A96BcS5Wl5neFJmhPwBjCjUwKh8ZSibJzPn6C45vNeGZC9b5tjdM-hRKoZT5pHa8xi0edYQ"
+      },
+      "name": "a repeated key in the payload keeps the last member",
+      "why": "The payload is parsed as JSON, and a later member replaces an earlier one with the same key, so `version` is 7. The twelfth open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJub25lIiwiYWxnIjoiRVMyNTYiLCJraWQiOiJoa19maXh0dXJlIiwidHlwIjoibXAtcG9saWN5K2p3cyJ9.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.l2nhH3sVfO56elWPKPxV-DxPSecE4_CiX8FQHaFN1QQawYbxUZxGgNF482LvzZa2yoj6aDcOrbBp9P6PpKA2YQ"
+      },
+      "name": "a repeated key in the header keeps the last member",
+      "why": "The header is parsed as JSON, and the later `alg` replaces the earlier one, so the header has the `alg` ES256. The twelfth open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "77u_eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.jLLkRNp0wpgHrZPZPrAmlr_jhWk5gBZXSFKoxxJJPHDGc44zeEmU5f7KXQdgonp7wnpNPPtds5tkOpoEClK__g"
+      },
+      "name": "a header that starts with a byte order mark verifies",
+      "why": "The header is decoded as UTF-8 with the byte order mark removed. The twelfth open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.IWPfsm8vfeMmH0al8_14bq8oHaTBeynugYTPRBvzUdcFo_Fut8YQXDD2v7uRDKPNeT3lexpiXmlgXoI-L_Ivqw=="
+      },
+      "name": "a signature with = padding verifies",
+      "why": "A segment is decoded with the forgiving-base64 decode, which accepts padding to a multiple of four. The signature is not part of the signing input, so the padding needs no key. The twelfth open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.tkrwb7EQORRGHqPlIPvLiHbU2U0Dv_Zt-kbZd6Kr pDFA_-dGEziI3KjJi6eJAyqIN2hHDg0RvNLsip7SGFK_NA"
+      },
+      "name": "a signature with a space inside verifies",
+      "why": "The forgiving-base64 decode ignores ASCII white space anywhere in a segment. The twelfth open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.2DW4cquWSZBKf8ff9MoP41_rsXVHBLLGmYOsBgHExOiwpj79b-AqtlCtSDV1UStiOVBneRnsqFpOBmGwRz5eaA\n"
+      },
+      "name": "a line feed after the token verifies",
+      "why": "The line feed belongs to the signature segment, and the decode ignores it. The twelfth open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIiwiYjY0IjpmYWxzZSwiY3JpdCI6WyJiNjQiXX0.{\"areas\":[{\"name\":\"backend\",\"patterns\":[\"api:src/**\"]}],\"members\":{\"mem-ana\":\"backend\"},\"project_id\":\"prj-shop\",\"repos\":[\"api\"],\"roles\":{\"backend\":{\"exec\":[\"npm test\"],\"read\":[],\"write\":[\"backend\"]}},\"version\":7}.ByxxH1tKX3LvYSCbzb9458YdKyxealIsKjB6_LIlfkcHtZ0KLExw77i5iqg6svyI-hx5pPnrID_zpqyRC3QwzQ"
+      },
+      "name": "an unencoded payload verifies when crit names b64 and b64 is false",
+      "why": "With `b64` false and `crit` naming it, the payload segment is the payload itself, as RFC 7797 defines. The twelfth open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: Failed to base64url decode the payload"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIiwiYjY0IjpmYWxzZX0.{\"areas\":[{\"name\":\"backend\",\"patterns\":[\"api:src/**\"]}],\"members\":{\"mem-ana\":\"backend\"},\"project_id\":\"prj-shop\",\"repos\":[\"api\"],\"roles\":{\"backend\":{\"exec\":[\"npm test\"],\"read\":[],\"write\":[\"backend\"]}},\"version\":7}.J6N6yeGye_eYJXbcs0e8OiwKiHKx2v1qSs754mzj5_6kjk-IhQbVnqm5y7trDKINPn1KEbWnEPEGiwD4qCucCw"
+      },
+      "name": "b64 false without crit has no effect",
+      "why": "`b64` counts only when `crit` names it. Without `crit`, the payload segment is decoded as base64url, and the JSON text of the bundle does not decode."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: Extension Header Parameter \"exp\" is not recognized"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIiwiY3JpdCI6WyJleHAiXSwiZXhwIjoxfQ.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.AOCkdyo_JmY9PwZWTq34XrnKWDqcLLhP27UOcQ4sWIaRXH5_7jQ89c-HRoHk3mRieDNi5olE0YggLOREGLxTYA"
+      },
+      "name": "a crit that names an unknown parameter does not verify",
+      "why": "`crit` may name only `b64`. A verifier rejects a header that asks it to understand a parameter that it does not know."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: \"crit\" (Critical) Header Parameter MUST be an array of non-empty strings when present"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIiwiY3JpdCI6W119.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.7DB1sgkgNSqixvgGDJU_z3QcqKEAOsIWYlKS8uYpGwwG2b5Y2TbahDpkQ8lGg_vamcMlkSFtyFDtlyDv2rRWHQ"
+      },
+      "name": "an empty crit does not verify",
+      "why": "A `crit` that is present must name at least one parameter."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: signature verification failed"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCIsIm1lbS1ldmUiOiJiYWNrZW5kIn0sInByb2plY3RfaWQiOiJwcmotc2hvcCIsInJlcG9zIjpbImFwaSJdLCJyb2xlcyI6eyJiYWNrZW5kIjp7ImV4ZWMiOlsibnBtIHRlc3QiXSwicmVhZCI6W10sIndyaXRlIjpbImJhY2tlbmQiXX19LCJ2ZXJzaW9uIjo3fQ.yGe5OumNc0QOeDdHYkEDgBTMXcvrU_myK0gWpo8Juu63kW73I7pBqUbO_AuwI5TdQYohnnP6_fCc5Q5pOehgUw"
+      },
+      "name": "a payload changed after signing does not verify",
+      "why": "The signature covers the payload."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: signature verification failed"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.Wl5FsdGNxdu881mqN7a4FhLzTVHJqvENaCI4KEk_DUNc2siUP7u8Fft9TWz3SaKdUjymEhJgK-E8FAJcHAzZeg"
+      },
+      "name": "a signature from another key with the same kid does not verify",
+      "why": "The `kid` selects the key. It proves nothing."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: no applicable key found in the JSON Web Key Set"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX3Vua25vd24iLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.wspAUppk129D_zDlFkuMrdt8fGBrHb4W_m6U6qHLzNyaHpHNeOKLtaQeqXnmdpVkn-NCLoJDmipc-dbamcrTsQ"
+      },
+      "name": "a kid that is not in the key set does not verify",
+      "why": "A signature is checked only against the keys of the key set."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: Failed to base64url decode the signature"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.D6A6NR-vwS5q_YhMJmTLXSfTIACK9NX7wXPiVFeKD0OPYesybBnxsRuQp_8hSALvimkJBNAF8mLn5buq1MNdD"
+      },
+      "name": "a signature with the last character removed does not verify",
+      "why": "A truncated signature is not a valid ES256 signature."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: \"alg\" (Algorithm) Header Parameter value not allowed"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJIUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.kgbQS_Fd_4ta-FgpGMCT2zp0fnJpQUIsaF3W8hs3bWg"
+      },
+      "name": "alg HS256 does not verify",
+      "why": "Only ES256 is accepted. An HMAC keyed with the public key must not pass."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: \"alg\" (Algorithm) Header Parameter value not allowed"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJub25lIiwia2lkIjoiaGtfZml4dHVyZSIsInR5cCI6Im1wLXBvbGljeStqd3MifQ.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30."
+      },
+      "name": "alg none does not verify",
+      "why": "Only ES256 is accepted. An unsigned token must not pass."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "unexpected JWS typ undefined"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUifQ.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.692eS7VSrU4V_oXqreshZ8H5uEWX-odzqvdfkoJ3qit3MozE-Jv2VWOJOzowD9uGLUPpfmTAKSY7l5WtWPU9jg"
+      },
+      "name": "a missing typ does not verify",
+      "why": "The protected header must carry the `typ` of a policy bundle."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "unexpected JWS typ JWT"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJKV1QifQ.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.qsD7zuRgkSXl89bkpYyvW6AFnHrNDrMIMDDvVboa4HShioZigsU5PuiU7MXKtTbOyArap83q9n3nhtShxI8uRQ"
+      },
+      "name": "another typ does not verify",
+      "why": "A token that the same key signed for another purpose is not a policy bundle."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "verified payload is not a valid policy bundle"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJ2ZXJzaW9uIjo3fQ.FQHuysgX6tuFGPJ5gyjWossc1s6vL2xyQWTUKGR1Uc9KeM_ELrfBjROHMlvh32RnBECFV3OoO9ZFH3LuujHyYA"
+      },
+      "name": "a signed payload that is not a bundle does not verify",
+      "why": "The payload must validate against the bundle schema."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "verified payload is not a valid policy bundle"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidGVtcG9yYXJ5X2dyYW50cyI6W3siYWN0aW9ucyI6WyJ3cml0ZSJdLCJhcmVhIjoiYmFja2VuZCIsIm1lbWJlcl9pZCI6Im1lbS1hbmEiLCJtaXNzaW9uX2lkIjoibWlzLTEiLCJub3RlIjoieCIsInNjb3BlIjoibWlzc2lvbiJ9XSwidmVyc2lvbiI6N30.tU439d6PjW-40cZnI9RMh6hs1gfUVYFVFQNNtMA5zikov5Rw1O7OVBTvBErt8NiOI_bbYO_eYmWj5e7BfMeYpw"
+      },
+      "name": "a signed payload with an invalid temporary grant does not verify",
+      "why": "The whole payload is validated, including the closed temporary grant objects."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: Unexpected token 'o', \"not json\" is not valid JSON"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.bm90IGpzb24.dWnpPKj8sJKRAkVNUfnqiyWOU5W6sRv8BPP3vIboFJfWpbt1HmLLYG5CkyZROYHxVuf9Sm_65QO4bkH1T8PkEA"
+      },
+      "name": "a signed payload that is not JSON does not verify",
+      "why": "The payload must parse as JSON."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: Invalid Compact JWS"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2ZpeHR1cmUiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30"
+      },
+      "name": "a token with two parts does not verify",
+      "why": "A compact JWS has three parts."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: Invalid Compact JWS"
+      },
+      "input": {
+        "signature": ""
+      },
+      "name": "an empty string does not verify",
+      "why": "A missing signature is a failure, not an error."
+    }
+  ],
+  "contract": "policy",
+  "description": "Compact JWS tokens and the result of verifying each one against the key set in `shared`. The signing key was made for this file and then discarded.",
+  "operation": "verify-signed-bundle",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/daemon/src/policy/store.ts",
+      "apps/hub/src/policy/canonical.ts"
+    ]
+  },
+  "shared": {
+    "jwks": {
+      "keys": [
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "kid": "hk_fixture",
+          "kty": "EC",
+          "use": "sig",
+          "x": "TDg9wjSW1yXHIEAqhCur6gRxMkKq9HjxqAZfu3EFycc",
+          "y": "V0Mfo1fIxke95bx278-fE2ca7p6YmZzx8Xeo7aBTbLg"
+        }
+      ]
+    }
+  },
+  "version": 1
+}

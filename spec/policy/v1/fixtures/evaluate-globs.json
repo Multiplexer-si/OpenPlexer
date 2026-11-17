@@ -1,0 +1,1309 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "area": "dir",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"dir\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "assets/img/logo.png",
+        "repo": "api"
+      },
+      "name": "dir/** matches a file below the directory",
+      "why": "`**` matches any number of segments."
+    },
+    {
+      "expected": {
+        "area": "dir",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"dir\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "assets",
+        "repo": "api"
+      },
+      "name": "dir/** matches the directory itself",
+      "why": "A pattern that ends in `/**` also matches the path before `/**`."
+    },
+    {
+      "expected": {
+        "area": "dir",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"dir\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "ASSETS",
+        "repo": "api"
+      },
+      "name": "dir/** matches the directory itself without case",
+      "why": "The directory rule is case-insensitive like the rest."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "assetsx",
+        "repo": "api"
+      },
+      "name": "dir/** does not match a longer name",
+      "why": "The directory name must match as a whole segment."
+    },
+    {
+      "expected": {
+        "area": "star",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"star\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "logs/app.log",
+        "repo": "api"
+      },
+      "name": "* matches inside one segment",
+      "why": "`*` matches any run of characters except `/`."
+    },
+    {
+      "expected": {
+        "area": "star",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"star\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "logs/.log",
+        "repo": "api"
+      },
+      "name": "* matches an empty run",
+      "why": "`*` may match nothing."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "logs/sub/app.log",
+        "repo": "api"
+      },
+      "name": "* does not cross a slash",
+      "why": "`*` never matches `/`."
+    },
+    {
+      "expected": {
+        "area": "middle",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"middle\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "pkg/test/a.ts",
+        "repo": "api"
+      },
+      "name": "**/ in the middle matches zero directories",
+      "why": "`a/**/b` matches `a/b`."
+    },
+    {
+      "expected": {
+        "area": "middle",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"middle\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "pkg/x/y/test/a.ts",
+        "repo": "api"
+      },
+      "name": "**/ in the middle matches several directories",
+      "why": "`a/**/b` matches `a/x/y/b`."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "pkg/xtest/a.ts",
+        "repo": "api"
+      },
+      "name": "**/ in the middle needs a whole segment",
+      "why": "`pkg/**/test` does not match `pkg/xtest`."
+    },
+    {
+      "expected": {
+        "area": "leading",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"leading\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": ".env",
+        "repo": "api"
+      },
+      "name": "a leading **/ matches at the root",
+      "why": "`**/name` matches `name`."
+    },
+    {
+      "expected": {
+        "area": "leading",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"leading\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a/b/.env.local",
+        "repo": "api"
+      },
+      "name": "a leading **/ matches at any depth",
+      "why": "`**/name` matches `a/b/name`."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a/b/x.env",
+        "repo": "api"
+      },
+      "name": "a leading **/ still anchors the segment",
+      "why": "`**/.env*` does not match `x.env`."
+    },
+    {
+      "expected": {
+        "area": "question",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"question\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "data/file1.csv",
+        "repo": "api"
+      },
+      "name": "? matches one character",
+      "why": "`?` matches exactly one character."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "data/file.csv",
+        "repo": "api"
+      },
+      "name": "? does not match zero characters",
+      "why": "`?` matches exactly one character."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "data/file12.csv",
+        "repo": "api"
+      },
+      "name": "? does not match two characters",
+      "why": "`?` matches exactly one character."
+    },
+    {
+      "expected": {
+        "area": "class",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"class\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "img/a.png",
+        "repo": "api"
+      },
+      "name": "a class matches a listed character",
+      "why": "`[abc]` matches one of the listed characters."
+    },
+    {
+      "expected": {
+        "area": "class",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"class\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "img/B.png",
+        "repo": "api"
+      },
+      "name": "a class matches without case",
+      "why": "A class is case-insensitive like the rest of the pattern."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "img/d.png",
+        "repo": "api"
+      },
+      "name": "a class does not match another character",
+      "why": "`[abc]` matches only the listed characters."
+    },
+    {
+      "expected": {
+        "area": "range",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"range\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "rel/v7/notes.md",
+        "repo": "api"
+      },
+      "name": "a class with a range matches inside the range",
+      "why": "`[0-9]` matches one digit."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "rel/vx/notes.md",
+        "repo": "api"
+      },
+      "name": "a class with a range does not match outside the range",
+      "why": "`[0-9]` matches one digit."
+    },
+    {
+      "expected": {
+        "area": "negated",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"negated\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "tmp/d.txt",
+        "repo": "api"
+      },
+      "name": "a class negated with ! matches another character",
+      "why": "`[!abc]` matches one character that is not listed."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "tmp/a.txt",
+        "repo": "api"
+      },
+      "name": "a class negated with ! does not match a listed character",
+      "why": "`[!abc]` matches one character that is not listed."
+    },
+    {
+      "expected": {
+        "area": "caret",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"caret\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "tmp2/d.txt",
+        "repo": "api"
+      },
+      "name": "a class negated with ^ matches another character",
+      "why": "`^` at the start of a class negates it, as `!` does."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "tmp2/a.txt",
+        "repo": "api"
+      },
+      "name": "a class negated with ^ does not match a listed character",
+      "why": "`^` at the start of a class negates it, as `!` does."
+    },
+    {
+      "expected": {
+        "area": "unclosed",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"unclosed\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "odd/[x",
+        "repo": "api"
+      },
+      "name": "a [ with no ] is a literal character",
+      "why": "A class that is not closed matches the character `[` itself."
+    },
+    {
+      "expected": {
+        "area": "negated-empty",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"negated-empty\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "neg/a/b",
+        "repo": "api"
+      },
+      "name": "[!] matches a slash",
+      "why": "The `!` counts as the first character of the class, so `[!]` is a negated class with no members, which matches any one character."
+    },
+    {
+      "expected": {
+        "area": "negated-empty",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"negated-empty\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "neg/a\nb",
+        "repo": "api"
+      },
+      "name": "[!] matches a line feed",
+      "why": "A negated class with no members matches a line terminator too."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "neg/ab",
+        "repo": "api"
+      },
+      "name": "[!] does not match zero characters",
+      "why": "A class matches exactly one character."
+    },
+    {
+      "expected": {
+        "area": "caret-empty",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"caret-empty\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "neg2/a/b",
+        "repo": "api"
+      },
+      "name": "[^] matches a slash",
+      "why": "`[^]` is the same as `[!]`."
+    },
+    {
+      "expected": {
+        "area": "negated-slash",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"negated-slash\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "t/x",
+        "repo": "api"
+      },
+      "name": "a negated class with members matches a slash",
+      "why": "`[!a]` matches every character that is not `a`, `/` included, so `t[!a]x` crosses a directory boundary."
+    },
+    {
+      "expected": {
+        "area": "range-slash",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"range-slash\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "r/x",
+        "repo": "api"
+      },
+      "name": "a class whose range holds the slash matches a slash",
+      "why": "`[.-0]` is the range from `.` to `0`, which holds `/`."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "q/\ud83d\ude00",
+        "repo": "api"
+      },
+      "name": "? does not match one character outside the Basic Multilingual Plane",
+      "why": "`?` matches one UTF-16 code unit, and U+1F600 is two."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "t\ud83d\ude00x",
+        "repo": "api"
+      },
+      "name": "a negated class does not match one character outside the Basic Multilingual Plane",
+      "why": "A class matches one UTF-16 code unit, and U+1F600 is two. The sixth open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "area": "triple-dir",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"triple-dir\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "tri/x",
+        "repo": "api"
+      },
+      "name": "*** before a slash matches zero directories",
+      "why": "A run of three or more `*` is the same as `**`, so `tri/***/x` matches `tri/x`."
+    },
+    {
+      "expected": {
+        "area": "triple-dir",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"triple-dir\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "tri/a/b/x",
+        "repo": "api"
+      },
+      "name": "*** before a slash matches several directories",
+      "why": "A run of three or more `*` is the same as `**`."
+    },
+    {
+      "expected": {
+        "area": "triple-inner",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"triple-inner\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "tri2/a/x/b",
+        "repo": "api"
+      },
+      "name": "*** inside a segment crosses slashes",
+      "why": "A run of three or more `*` is the same as `**`, so `a***b` matches across `/`."
+    },
+    {
+      "expected": {
+        "area": "range-upper",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"range-upper\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "rc/ax",
+        "repo": "api"
+      },
+      "name": "a range matches the other case of a letter that it holds",
+      "why": "`[@-Z]` holds `A`, so it matches `a` without case."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "rc/_x",
+        "repo": "api"
+      },
+      "name": "a range does not match a character between the two cases",
+      "why": "`[@-Z]` does not hold `_`, and `_` has no other case. The ends of a range are not folded, so `[@-Z]` is not `[@-z]`."
+    },
+    {
+      "expected": {
+        "area": "range-mixed",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"range-mixed\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "rm/ax",
+        "repo": "api"
+      },
+      "name": "a range whose ends differ in case is in order",
+      "why": "`[A-_]` runs from U+0041 to U+005F, so it is in order, and it matches `a` because it holds `A`."
+    },
+    {
+      "expected": {
+        "area": "negated-then",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"negated-then\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "negx/ax]",
+        "repo": "api"
+      },
+      "name": "[!]x] is [!] followed by x and ]",
+      "why": "The class ends at the first `]` after its first character, so the rest of the glob is literal."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "negx/a",
+        "repo": "api"
+      },
+      "name": "[!]x] does not match one character",
+      "why": "`[!]x]` needs three characters."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "first/]",
+        "repo": "api"
+      },
+      "name": "a class whose first character is ] does not match that character",
+      "why": "The reference reads `[]` as a class that matches nothing, so the glob matches no path. The second open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "first/x",
+        "repo": "api"
+      },
+      "name": "a class whose first character is ] does not match its other member",
+      "why": "The reference reads `[]` as a class that matches nothing, so the glob matches no path. The second open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "first/]x]",
+        "repo": "api"
+      },
+      "name": "a class whose first character is ] does not match its own text",
+      "why": "The reference reads `[]` as a class that matches nothing, so the glob matches no path. The second open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "first2/]",
+        "repo": "api"
+      },
+      "name": "[]] does not match ]",
+      "why": "The reference reads `[]` as a class that matches nothing, so the glob matches no path. The second open question of the README records the behavior."
+    },
+    {
+      "expected": {
+        "area": "inner-stars",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"inner-stars\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "gen/a/x/y/b",
+        "repo": "api"
+      },
+      "name": "** inside a segment crosses slashes",
+      "why": "`**` that is not a whole segment matches any run of characters, including `/`."
+    },
+    {
+      "expected": {
+        "area": "trailing-stars",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"trailing-stars\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "build-out/x/y.js",
+        "repo": "api"
+      },
+      "name": "** at the end of a segment crosses slashes",
+      "why": "`build**` matches `build-out/x`."
+    },
+    {
+      "expected": {
+        "area": "normalized",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"normalized\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "norm/x/y.ts",
+        "repo": "api"
+      },
+      "name": "a pattern is normalized like a path",
+      "why": "A leading `./` and a repeated `/` in a pattern are removed."
+    },
+    {
+      "expected": {
+        "area": "literal",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"literal\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "lit/a+b(1).txt",
+        "repo": "api"
+      },
+      "name": "other punctuation in a pattern is literal",
+      "why": "`+`, `(`, `)`, and `.` match themselves."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "lit/a+b(1)xtxt",
+        "repo": "api"
+      },
+      "name": "a . in a pattern does not match any character",
+      "why": "`.` is not a wildcard."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "assets/a\nb.png",
+        "repo": "api"
+      },
+      "name": "** does not match a line feed",
+      "why": "`**` matches any run of characters except the four line terminators."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "assets/a\rb.png",
+        "repo": "api"
+      },
+      "name": "** does not match a carriage return",
+      "why": "`**` matches any run of characters except the four line terminators."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "assets/a\u2028b.png",
+        "repo": "api"
+      },
+      "name": "** does not match U+2028",
+      "why": "`**` matches any run of characters except the four line terminators."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "assets/a\u2029b.png",
+        "repo": "api"
+      },
+      "name": "** does not match U+2029",
+      "why": "`**` matches any run of characters except the four line terminators."
+    },
+    {
+      "expected": {
+        "area": "dir",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"dir\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "assets/a\u0085b.png",
+        "repo": "api"
+      },
+      "name": "** matches U+0085",
+      "why": "The next line character is not one of the four line terminators."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "gen/a\nb",
+        "repo": "api"
+      },
+      "name": "** inside a segment does not match a line feed",
+      "why": "The rule for line terminators holds for `**` in every position."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "pkg/a\nb/test/a.ts",
+        "repo": "api"
+      },
+      "name": "**/ in the middle does not cross a directory with a line feed in its name",
+      "why": "The directories that `**/` matches hold no line terminator."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "path is in no area; writes are denied by default"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "a\nb/.env",
+        "repo": "api"
+      },
+      "name": "a leading **/ does not cross a directory with a line feed in its name",
+      "why": "The directories that `**/` matches hold no line terminator."
+    },
+    {
+      "expected": {
+        "area": "star",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"star\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "logs/a\nb.log",
+        "repo": "api"
+      },
+      "name": "* matches a line feed",
+      "why": "Only `**` excludes the line terminators. `*` excludes only `/`."
+    },
+    {
+      "expected": {
+        "area": "question",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"question\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "data/file\n.csv",
+        "repo": "api"
+      },
+      "name": "? matches a line feed",
+      "why": "Only `**` excludes the line terminators. `?` excludes only `/`."
+    },
+    {
+      "expected": {
+        "area": "negated",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"negated\" write is granted to role dev"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "tmp/\n.txt",
+        "repo": "api"
+      },
+      "name": "a negated class matches a line feed",
+      "why": "Only `**` excludes the line terminators."
+    }
+  ],
+  "contract": "policy",
+  "description": "The policy glob dialect. The role may write every area, so a result of allow with an area means that the pattern of that area matched, and deny means that no pattern matched.",
+  "operation": "evaluate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/evaluate.ts",
+      "packages/protocol/src/policy/glob.ts"
+    ]
+  },
+  "shared": {
+    "bundle": {
+      "areas": [
+        {
+          "name": "dir",
+          "patterns": [
+            "api:assets/**"
+          ]
+        },
+        {
+          "name": "star",
+          "patterns": [
+            "api:logs/*.log"
+          ]
+        },
+        {
+          "name": "middle",
+          "patterns": [
+            "api:pkg/**/test/*.ts"
+          ]
+        },
+        {
+          "name": "leading",
+          "patterns": [
+            "api:**/.env*"
+          ]
+        },
+        {
+          "name": "question",
+          "patterns": [
+            "api:data/file?.csv"
+          ]
+        },
+        {
+          "name": "class",
+          "patterns": [
+            "api:img/[abc].png"
+          ]
+        },
+        {
+          "name": "range",
+          "patterns": [
+            "api:rel/v[0-9]/notes.md"
+          ]
+        },
+        {
+          "name": "negated",
+          "patterns": [
+            "api:tmp/[!abc].txt"
+          ]
+        },
+        {
+          "name": "caret",
+          "patterns": [
+            "api:tmp2/[^abc].txt"
+          ]
+        },
+        {
+          "name": "unclosed",
+          "patterns": [
+            "api:odd/[x"
+          ]
+        },
+        {
+          "name": "inner-stars",
+          "patterns": [
+            "api:gen/a**b"
+          ]
+        },
+        {
+          "name": "trailing-stars",
+          "patterns": [
+            "api:build**"
+          ]
+        },
+        {
+          "name": "normalized",
+          "patterns": [
+            "api:./norm//x/**"
+          ]
+        },
+        {
+          "name": "literal",
+          "patterns": [
+            "api:lit/a+b(1).txt"
+          ]
+        },
+        {
+          "name": "negated-empty",
+          "patterns": [
+            "api:neg/a[!]b"
+          ]
+        },
+        {
+          "name": "caret-empty",
+          "patterns": [
+            "api:neg2/a[^]b"
+          ]
+        },
+        {
+          "name": "negated-then",
+          "patterns": [
+            "api:negx/[!]x]"
+          ]
+        },
+        {
+          "name": "bracket-first",
+          "patterns": [
+            "api:first/[]x]"
+          ]
+        },
+        {
+          "name": "bracket-only",
+          "patterns": [
+            "api:first2/[]]"
+          ]
+        },
+        {
+          "name": "negated-slash",
+          "patterns": [
+            "api:t[!a]x"
+          ]
+        },
+        {
+          "name": "range-slash",
+          "patterns": [
+            "api:r[.-0]x"
+          ]
+        },
+        {
+          "name": "question-pair",
+          "patterns": [
+            "api:q/?"
+          ]
+        },
+        {
+          "name": "triple-dir",
+          "patterns": [
+            "api:tri/***/x"
+          ]
+        },
+        {
+          "name": "triple-inner",
+          "patterns": [
+            "api:tri2/a***b"
+          ]
+        },
+        {
+          "name": "range-upper",
+          "patterns": [
+            "api:rc/[@-Z]x"
+          ]
+        },
+        {
+          "name": "range-mixed",
+          "patterns": [
+            "api:rm/[A-_]x"
+          ]
+        }
+      ],
+      "members": {
+        "mem-ana": "dev"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "api",
+        "web"
+      ],
+      "roles": {
+        "dev": {
+          "exec": [],
+          "read": [],
+          "write": [
+            "dir",
+            "star",
+            "middle",
+            "leading",
+            "question",
+            "class",
+            "range",
+            "negated",
+            "caret",
+            "unclosed",
+            "inner-stars",
+            "trailing-stars",
+            "normalized",
+            "literal",
+            "negated-empty",
+            "caret-empty",
+            "negated-then",
+            "bracket-first",
+            "bracket-only",
+            "negated-slash",
+            "range-slash",
+            "question-pair",
+            "triple-dir",
+            "triple-inner",
+            "range-upper",
+            "range-mixed"
+          ]
+        }
+      },
+      "version": 1
+    }
+  },
+  "version": 1
+}

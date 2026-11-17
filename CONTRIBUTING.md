@@ -30,7 +30,7 @@ Run `make check` before you open a pull request. CI runs the same command.
 
 1. It fails if `gofmt -l .` lists a file. To format every file, run `make fmt`.
 2. It runs `go vet ./...`.
-3. It runs `go test ./...`. The tests include the dependency rules, the documentation links, and the checks of the schemas and examples under `spec/`.
+3. It runs `go test ./...`. The tests include the dependency rules, the documentation links, and the checks of the schemas, examples, and fixtures under `spec/`.
 
 ## Build the binaries
 
@@ -84,9 +84,9 @@ internal/policy must not depend on internal/hub
 
 The dependency can be indirect. In this example `internal/policy` imports a package that imports `internal/hub`. Remove the import, or move the shared code into a package that both sides may import. Do not weaken the rule to make the test pass.
 
-## Regenerate the contracts
+## Regenerate the contracts and fixtures
 
-The extractor in `tools/extract` writes every file under `spec/` except the README pages. Do not edit those files by hand. Change the extractor, and run it.
+The extractor in `tools/extract` writes every file under `spec/` except the README pages: the schemas, the examples, and the fixtures. Do not edit those files by hand. Change the extractor, and run it.
 
 The extractor runs the code of the existing TypeScript implementation, so you need these things.
 
@@ -107,16 +107,16 @@ The extractor has no dependencies of its own. It uses the `tsx` of the checkout,
 	"$REFERENCE/node_modules/.bin/tsx" tools/extract/main.ts check --reference "$REFERENCE"
 	```
 
-	The command recomputes every file in memory and prints each difference. It exits with status 0 if there is none, and with status 1 if there is one.
+	The command recomputes every file in memory and prints each difference. A difference in a fixture names the case. The command exits with status 0 if there is no difference, and with status 1 if there is one.
 
-3. Change the extractor. The schemas are in `tools/extract/schemas.ts`, and the examples are in `tools/extract/examples.ts`.
+3. Change the extractor. The schemas are in `tools/extract/schemas.ts`, the examples are in `tools/extract/examples.ts`, and each fixture file has a module in `tools/extract/fixtures/`. Give every new case a `name` and a `why` that names the behavior that the case pins. Do not write an expected value. The extractor computes it.
 4. Write the files.
 
 	```sh
 	"$REFERENCE/node_modules/.bin/tsx" tools/extract/main.ts generate --reference "$REFERENCE"
 	```
 
-5. Read the diff of `spec/`.
+5. Read the diff of `spec/`. Review every expected value that changed or is new. If a value looks like a mistake in the reference, keep it, and add the case to the open questions in the README of the contract.
 6. Run the Go checks.
 
 	```sh
@@ -129,9 +129,9 @@ CI runs `make check` only. It has no checkout of the reference, so it cannot run
 
 ### Make new signatures
 
-`spec/policy/v1/examples/signed-bundle/message.json` and `spec/policy/v1/examples/jwks/hub-keys.json` hold a signature and the public key that verifies it. An ES256 signature is different on every run, and the extractor discards the private key, so `generate` does not write these files again. `check` verifies the signature in them with the verifier of the reference.
+Four files hold signatures and the public keys that verify them: `spec/policy/v1/examples/signed-bundle/message.json`, `spec/policy/v1/examples/jwks/hub-keys.json`, `spec/policy/v1/fixtures/verify-signed-bundle.json`, and `spec/policy/v1/fixtures/verify-signed-bundle-key-selection.json`. An ES256 signature is different on every run, and the extractor discards the private key, so `generate` does not write these files again. `check` verifies every signature in them with the verifier of the reference, and compares each result with the committed one.
 
-To change the signed example, pass `--new-signatures`. The extractor makes a new key and writes both files.
+To change a signed example or a case of a signed fixture, pass `--new-signatures`. The extractor makes new keys and writes the four files.
 
 ```sh
 "$REFERENCE/node_modules/.bin/tsx" tools/extract/main.ts generate --reference "$REFERENCE" --new-signatures
@@ -141,7 +141,7 @@ To change the signed example, pass `--new-signatures`. The extractor makes a new
 
 1. Change `REFERENCE_COMMIT` in `tools/extract/reference.ts`, the commit in the README pages under `spec/`, and the commit in this page.
 2. Run `generate`.
-3. Read the diff of `spec/`. A change to a schema changes the contract. [Versions and compatibility](spec/README.md#versions-and-compatibility) says whether the change fits in version 1.
+3. Read the diff of `spec/`. A change to a schema or to an expected value changes the contract. [Versions and compatibility](spec/README.md#versions-and-compatibility) says whether the change fits in version 1.
 
 ## Write documentation
 

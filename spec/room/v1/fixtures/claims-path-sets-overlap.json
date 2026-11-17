@@ -1,0 +1,72 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": [
+          "docs/**",
+          "src/orders/cart.ts"
+        ],
+        "b": [
+          "web/**",
+          "src/orders/**"
+        ]
+      },
+      "name": "sets with one overlapping pair overlap",
+      "why": "Two sets overlap if any pattern of one overlaps any pattern of the other."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": [
+          "docs/**",
+          "src/orders/cart.ts"
+        ],
+        "b": [
+          "web/**",
+          "src/billing/**"
+        ]
+      },
+      "name": "sets with no overlapping pair do not overlap",
+      "why": "Every pair must be disjoint for the sets to be disjoint."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": [],
+        "b": [
+          "src/**"
+        ]
+      },
+      "name": "an empty set overlaps nothing",
+      "why": "A claim with no paths conflicts with no claim."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": [],
+        "b": []
+      },
+      "name": "two empty sets do not overlap",
+      "why": "There is no pair to compare."
+    }
+  ],
+  "contract": "room",
+  "description": "Whether the path lists of two claims overlap.",
+  "operation": "path-sets-overlap",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/hub/src/claims/overlap.ts"
+    ]
+  },
+  "version": 1
+}

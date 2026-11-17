@@ -14,6 +14,9 @@ The field descriptions are in the schemas. This page gives the rules that a sche
 | `v1/envelope.schema.json` | The object that wraps every WebSocket message between a daemon and the hub. |
 | `v1/examples/room-event/` | One valid event for each event type, and one event from a sub-agent. |
 | `v1/examples/envelope/` | An envelope that carries an event, and an envelope about the connection. |
+| `v1/fixtures/validate-room-event.json` | Valid and invalid events: at least one of each for every event type. |
+| `v1/fixtures/validate-envelope.json` | Valid and invalid envelopes. |
+| `v1/fixtures/claims-patterns-overlap.json`, `v1/fixtures/claims-path-sets-overlap.json` | Pairs of patterns and pairs of path lists, with whether they overlap. |
 
 ## Events
 
@@ -113,6 +116,7 @@ The reference is at commit `7d80045a`.
 | The `if` and `then` in `envelope` that tie `payload` to the `type` `event` | Authored. The reference does the same check in `packages/protocol/src/ws-messages.ts`, in the schema that its hub and its daemon parse every message with. |
 | Every `description` | Authored. |
 | The overlap rules on this page | Authored from `apps/hub/src/claims/overlap.ts`. |
+| Every expected value in the fixtures | Computed by the schemas and by the `patternsOverlap` and `pathSetsOverlap` functions of the reference. In `validate-envelope`, the verdict of a message with the `type` `event` comes from the message schema in `ws-messages.ts`, and the verdict of every other message comes from the envelope schema in `envelope.ts`. |
 
 ## Intentional differences from the reference
 
@@ -122,6 +126,8 @@ The reference is at commit `7d80045a`.
 | Version 1 defines one envelope payload, the stored event. The reference defines a payload for each of its message types, and its hub and its daemon reject a message whose `type` is not one of them. A version 1 validator accepts such a message. | The other messages depend on the transport between the daemon and the hub, which Phase 2 settles. |
 | A receiver that skips an event records the `seq` of that event. The daemon of the reference does not. | A receiver that has recorded the `seq` does not ask for the same event after every reconnection. Both behaviors work with the hub of the reference. |
 | A receiver keeps an unknown field of `agent`, of `sender`, and of `needs`. The reference drops an unknown field of these three objects when it parses a message, and it keeps an unknown field of an event, of a body, and of an envelope. | [The general rule](../README.md#writers-and-receivers) has no exception. No conforming writer sends such a field today, so the two behaviors differ only after version 1 adds a field to one of the three objects. |
+
+No fixture case depends on one of these differences. Every expected value is the value that the reference returns. One case needs a note. In `validate-envelope`, the case `a type that no message defines is valid` records the verdict of the envelope schema of the reference. The message schema of the reference, which its hub and its daemon parse with, rejects that message.
 
 ## Open questions
 
@@ -133,5 +139,5 @@ Each item is behavior of the reference that looks unintended, or a choice that t
 4. **`action` in a `policy.denied` body, and `actions` and `scope` in a `policy.override` body, are open strings.** The policy contract has closed lists for the same values.
 5. **The envelope schema accepts any `v` greater than zero and any `type` that is not empty. The reference is stricter.** Its hub and its daemon parse every message with a schema that lists their message types. A message with another `type`, or with a payload that does not fit its `type`, fails. The hub answers such a message with an `error` message, the daemon drops it, and both keep the connection. The hub closes a connection that sends a `v` other than 1. Version 1 defines the payload of `event` only. What a receiver does with any other `type`, and with another `v`, is settled with the transport in Phase 2.
 6. **The reference removes the white space around `text` and `addressed_to` when it parses a `question` or an `answer`.** Version 1 says only that the value needs one character that is not white space. It does not say whether a receiver stores the trimmed value.
-7. **Some classes make the overlap check of the reference fail, or give a result that the glob rules do not.** The causes are those of the second open question of the [policy contract](../policy/README.md#open-questions): a range that is out of order, such as `[z-a]`, makes the check throw an error, and a class whose first character is `]` is read as regular expression syntax. Version 1 does not define the result of a glob that throws, or of a class whose first character is `]` and whose rest holds a syntax character.
+7. **Some classes make the overlap check of the reference fail, or give a result that the glob rules do not.** The causes are those of the second open question of the [policy contract](../policy/README.md#open-questions): a range that is out of order, such as `[z-a]`, makes the check throw an error, and a class whose first character is `]` is read as regular expression syntax. Version 1 does not define the result of a glob that throws, or of a class whose first character is `]` and whose rest holds a syntax character. The fixture `claims-patterns-overlap` pins the classes that match no path, and no fixture covers the others.
 8. **`dir/**` matches `dir` in the policy dialect and not in the claims dialect.** A claim on `src/**` does not overlap a claim on the path `src`.

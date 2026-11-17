@@ -1,0 +1,156 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "git push to api is granted to role dev"
+      },
+      "input": {
+        "action": "git.push",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "refs/heads/main",
+        "repo": "api"
+      },
+      "name": "push to a granted repository is allowed",
+      "why": "A role may push to the repositories that it lists under push."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "git push to web is not granted to role dev"
+      },
+      "input": {
+        "action": "git.push",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "refs/heads/main",
+        "repo": "web"
+      },
+      "name": "push to another repository is denied",
+      "why": "A push is denied by default."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "git push to tools is granted to role lead"
+      },
+      "input": {
+        "action": "git.push",
+        "member": "mem-lee",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "refs/heads/main",
+        "repo": "tools"
+      },
+      "name": "push with * is allowed for every repository",
+      "why": "`*` under push means every repository, also one that the bundle does not list."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "git push to api is not granted to role reviewer"
+      },
+      "input": {
+        "action": "git.push",
+        "member": "mem-ben",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "refs/heads/main",
+        "repo": "api"
+      },
+      "name": "push by a role with no push list is denied",
+      "why": "`push` is optional in a role, and its absence grants nothing."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "git push to api is not granted (member mem-eve has no role)"
+      },
+      "input": {
+        "action": "git.push",
+        "member": "mem-eve",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "refs/heads/main",
+        "repo": "api"
+      },
+      "name": "push by a member with no role is denied",
+      "why": "A member that the bundle does not list has no push grants."
+    },
+    {
+      "expected": {
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "git push to API is not granted to role dev"
+      },
+      "input": {
+        "action": "git.push",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "refs/heads/main",
+        "repo": "API"
+      },
+      "name": "the repository of a push is compared with case",
+      "why": "Push matching is case-sensitive, unlike the repository part of an area pattern."
+    }
+  ],
+  "contract": "policy",
+  "description": "Push grants by repository.",
+  "operation": "evaluate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/evaluate.ts",
+      "packages/protocol/src/policy/glob.ts"
+    ]
+  },
+  "shared": {
+    "bundle": {
+      "areas": [],
+      "members": {
+        "mem-ana": "dev",
+        "mem-ben": "reviewer",
+        "mem-lee": "lead"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "api",
+        "web"
+      ],
+      "roles": {
+        "dev": {
+          "exec": [],
+          "push": [
+            "api"
+          ],
+          "read": [],
+          "write": []
+        },
+        "lead": {
+          "exec": [],
+          "push": [
+            "*"
+          ],
+          "read": [],
+          "write": []
+        },
+        "reviewer": {
+          "exec": [],
+          "read": [],
+          "write": []
+        }
+      },
+      "version": 1
+    }
+  },
+  "version": 1
+}

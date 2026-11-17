@@ -1,0 +1,522 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active temporary grant"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a mission grant allows in its mission",
+      "why": "A grant with scope mission applies when the query has the same mission."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "mission_id": "mis-2",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a mission grant does not allow in another mission",
+      "why": "A grant with scope mission applies only to its own mission."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a mission grant does not allow a query without a mission",
+      "why": "A query with no mission matches no mission grant."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active temporary grant"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ben",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a timed grant allows before it expires",
+      "why": "A grant with scope until applies while the time of the query is before expires_at."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ben",
+        "now": "2026-01-15T13:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a timed grant does not allow at the instant it expires",
+      "why": "The grant ends at expires_at. The comparison is strict."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ben",
+        "now": "2026-01-15T13:00:00.001Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a timed grant does not allow after it expires",
+      "why": "An expired grant has no effect."
+    },
+    {
+      "expected": {
+        "area": "vault",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"vault\" read is allowed by an active temporary grant"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:29:59.999Z",
+        "path": "vault/keys.json",
+        "repo": "api"
+      },
+      "name": "a timed grant with a UTC offset allows before it expires",
+      "why": "expires_at is an instant. `14:30:00+02:00` is 12:30 UTC."
+    },
+    {
+      "expected": {
+        "area": "vault",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"vault\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:30:00.000Z",
+        "path": "vault/keys.json",
+        "repo": "api"
+      },
+      "name": "a timed grant with a UTC offset does not allow at the instant it expires",
+      "why": "expires_at is an instant. `14:30:00+02:00` is 12:30 UTC."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-cy",
+        "now": "2026-01-15T15:00:00.001Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a timed grant is compared in whole milliseconds",
+      "why": "The digits after the third digit of the fraction are dropped, so `15:00:00.0019` is `15:00:00.001`, and the grant no longer applies at that instant."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active temporary grant"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-cy",
+        "now": "2026-01-15T15:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a timed grant with a long fraction allows one millisecond before it expires",
+      "why": "`15:00:00.0019` is `15:00:00.001`, and `15:00:00.000` is before it."
+    },
+    {
+      "expected": {
+        "area": "vault",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"vault\" read is allowed by an active temporary grant"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "vault/keys.json",
+        "repo": "api"
+      },
+      "name": "a temporary grant opens a private area",
+      "why": "A temporary grant can allow a read that a private area would deny."
+    },
+    {
+      "expected": {
+        "area": "vault",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"vault\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "vault/keys.json",
+        "repo": "api"
+      },
+      "name": "a temporary grant covers only its actions",
+      "why": "A grant for read does not allow a write."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active temporary grant"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-cy",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a temporary grant covers only its member",
+      "why": "A grant names one member."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role (member mem-eve has no role)"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-eve",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a temporary grant does not apply to a member with no role",
+      "why": "A member that the bundle does not list gets nothing from a temporary grant."
+    },
+    {
+      "expected": {
+        "area": "infra",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"infra\" is a system area and is never writable"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "deploy/prod.yaml",
+        "repo": "api"
+      },
+      "name": "a temporary grant does not open a system area",
+      "why": "No temporary grant makes a system area writable."
+    },
+    {
+      "expected": {
+        "area": "sealed",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"sealed\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "sealed/key.pem",
+        "repo": "api"
+      },
+      "name": "a temporary grant does not open a private system area for a read",
+      "why": "A temporary grant never applies to a system area, so it cannot open a private system area for a read either."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "member": "mem-dan",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a temporary grant does not apply to a member whose role is not defined",
+      "why": "A member mapped to a role name that the bundle does not define has no role, so a temporary grant gives the member nothing."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "area \"billing\" write is allowed by an active temporary grant"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-sub",
+        "member": "mem-ana",
+        "mission_id": "mis-2",
+        "now": "2026-01-15T12:00:00.000Z",
+        "parent": {
+          "agent_session_id": "ses-1",
+          "mission_id": "mis-1"
+        },
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a sub-agent gets the mission grant of its parent",
+      "why": "For a sub-agent, a mission grant is matched against the mission of the parent."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-sub",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "parent": {
+          "agent_session_id": "ses-1",
+          "mission_id": "mis-2"
+        },
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a sub-agent does not get a mission grant for its own mission",
+      "why": "For a sub-agent, the mission of the sub-agent itself is ignored."
+    },
+    {
+      "expected": {
+        "area": "billing",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"billing\" is not writable by any role"
+      },
+      "input": {
+        "action": "write",
+        "agent_session_id": "ses-sub",
+        "member": "mem-ana",
+        "mission_id": "mis-1",
+        "now": "2026-01-15T12:00:00.000Z",
+        "parent": {
+          "agent_session_id": "ses-1"
+        },
+        "path": "src/billing/invoice.ts",
+        "repo": "api"
+      },
+      "name": "a sub-agent whose parent has no mission gets no mission grant",
+      "why": "The mission of the sub-agent does not stand in for a missing mission of the parent."
+    }
+  ],
+  "contract": "policy",
+  "description": "Temporary grants by mission and by time, expired and not.",
+  "operation": "evaluate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/policy/evaluate.ts",
+      "packages/protocol/src/policy/glob.ts"
+    ]
+  },
+  "shared": {
+    "bundle": {
+      "areas": [
+        {
+          "name": "billing",
+          "patterns": [
+            "api:src/billing/**"
+          ]
+        },
+        {
+          "name": "vault",
+          "patterns": [
+            "api:vault/**"
+          ],
+          "private": true
+        },
+        {
+          "name": "infra",
+          "patterns": [
+            "api:deploy/**"
+          ],
+          "system": true
+        },
+        {
+          "name": "sealed",
+          "patterns": [
+            "api:sealed/**"
+          ],
+          "private": true,
+          "system": true
+        }
+      ],
+      "members": {
+        "mem-ana": "dev",
+        "mem-ben": "dev",
+        "mem-cy": "dev",
+        "mem-dan": "ghost"
+      },
+      "project_id": "prj-fixture",
+      "repos": [
+        "api",
+        "web"
+      ],
+      "roles": {
+        "dev": {
+          "exec": [],
+          "read": [],
+          "write": []
+        }
+      },
+      "temporary_grants": [
+        {
+          "actions": [
+            "write"
+          ],
+          "area": "billing",
+          "member_id": "mem-ana",
+          "mission_id": "mis-1",
+          "scope": "mission"
+        },
+        {
+          "actions": [
+            "write"
+          ],
+          "area": "billing",
+          "expires_at": "2026-01-15T13:00:00Z",
+          "member_id": "mem-ben",
+          "scope": "until"
+        },
+        {
+          "actions": [
+            "read"
+          ],
+          "area": "vault",
+          "expires_at": "2026-01-15T14:30:00+02:00",
+          "member_id": "mem-ana",
+          "scope": "until"
+        },
+        {
+          "actions": [
+            "write"
+          ],
+          "area": "billing",
+          "expires_at": "2026-01-15T13:00:00Z",
+          "member_id": "mem-eve",
+          "scope": "until"
+        },
+        {
+          "actions": [
+            "write"
+          ],
+          "area": "infra",
+          "expires_at": "2026-01-15T13:00:00Z",
+          "member_id": "mem-ana",
+          "scope": "until"
+        },
+        {
+          "actions": [
+            "write"
+          ],
+          "area": "billing",
+          "expires_at": "2026-01-15T15:00:00.0019Z",
+          "member_id": "mem-cy",
+          "scope": "until"
+        },
+        {
+          "actions": [
+            "read"
+          ],
+          "area": "sealed",
+          "expires_at": "2026-01-15T13:00:00Z",
+          "member_id": "mem-ana",
+          "scope": "until"
+        },
+        {
+          "actions": [
+            "write"
+          ],
+          "area": "billing",
+          "expires_at": "2026-01-15T13:00:00Z",
+          "member_id": "mem-dan",
+          "scope": "until"
+        }
+      ],
+      "version": 1
+    }
+  },
+  "version": 1
+}

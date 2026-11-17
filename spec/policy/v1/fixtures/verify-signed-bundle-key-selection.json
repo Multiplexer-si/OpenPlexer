@@ -1,0 +1,342 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2EiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.KuYT5zuOM5sZ_o5Pz31zeHrAwog06pvWh9AnRYK_LOa9SFeUxJJBaNzUfxb_qWijFISkOYXgYztPsRK3MEXxow"
+      },
+      "name": "a kid selects its key among several",
+      "why": "The key whose `kid` equals the `kid` of the header is the only candidate."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2IiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.y3D4tllX7RVRhomGMSEB35Hm10R2o7odDCT5u5au2iv370tTE_UY1DvT-d7pa82Ns56g77iRbuFEO7DJn12hJA"
+      },
+      "name": "a kid selects a key that is not first in the set",
+      "why": "The order of the key set does not matter."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: signature verification failed"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2IiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.iLeD85shOR1nKxG24FdklFjajx0qRMJELRaore4Zh74QGrOilm61CbUsjMpkPlzeAccs2qltyk6S7ZEchVklvQ"
+      },
+      "name": "a kid that names another key of the set does not verify",
+      "why": "The signature is checked only with the key that the `kid` selects, not with every key of the set."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: multiple matching keys found in the JSON Web Key Set"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsInR5cCI6Im1wLXBvbGljeStqd3MifQ.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.Obi_7kPhDpBxv90row4Qd45NGF9EAOPd5H0kKjjG_I71vxypBFw_x8nl03v9YHEwNuNRdvexDYrKYqw4cUiJWg"
+      },
+      "name": "a header without kid does not verify when several keys are candidates",
+      "why": "Without `kid`, every key of the type ES256 needs is a candidate, and more than one candidate is a failure."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: multiple matching keys found in the JSON Web Key Set"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX3R3aW4iLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.xKQKYTV_5upJwBGaJsZpfzdzEis0jyQ_tN86TQu1VFbaPFSbnNw35gxB3Bb3i28r_jMEcCjSRG9CKvXQf_v8Mw"
+      },
+      "name": "two keys with the same kid do not verify, even when one of them signed",
+      "why": "More than one candidate is a failure. A bundle verifier does not try each candidate."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: no applicable key found in the JSON Web Key Set"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2VuYyIsInR5cCI6Im1wLXBvbGljeStqd3MifQ.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.rnQd6PvJ2T5benZUtw12k76-oiz-gD_wahokcQzWhO4EBwxC-mYRQid6QrwT4k-dIz1vzbiFi6PmY42EfHLx5A"
+      },
+      "name": "a key whose use is enc does not verify",
+      "why": "A key with `use` other than `sig` is not a candidate."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: no applicable key found in the JSON Web Key Set"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX29wcyIsInR5cCI6Im1wLXBvbGljeStqd3MifQ.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.YcxeWcfKPgiqMuEY1lMRcA9Rcb1ESn1gY-Gxf2wT7Vg-G8V0T7eAcoxj8l5KTebYZHIvlZtBXaiLHV6wCUaSjQ"
+      },
+      "name": "a key whose key_ops lacks verify does not verify",
+      "why": "A key with `key_ops` that does not hold `verify` is not a candidate."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: no applicable key found in the JSON Web Key Set"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX2VzMzg0IiwidHlwIjoibXAtcG9saWN5K2p3cyJ9.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.oRkFe-2J2lFBPY5b_L1kwbrGFKW6MorQ13_rQ6_FibhYiwVcCAQ3W7nAGjMz0IUCgNTiP8XWS3BPx78smgI37w"
+      },
+      "name": "a key whose alg is not ES256 does not verify",
+      "why": "A key with an `alg` other than `ES256` is not a candidate."
+    },
+    {
+      "expected": {
+        "bundle": {
+          "areas": [
+            {
+              "name": "backend",
+              "patterns": [
+                "api:src/**"
+              ]
+            }
+          ],
+          "members": {
+            "mem-ana": "backend"
+          },
+          "project_id": "prj-shop",
+          "repos": [
+            "api"
+          ],
+          "roles": {
+            "backend": {
+              "exec": [
+                "npm test"
+              ],
+              "read": [],
+              "write": [
+                "backend"
+              ]
+            }
+          },
+          "version": 7
+        },
+        "ok": true
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX29wc192ZXJpZnkiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.MAQdtr7PrqvwngFI1p2CHTh4PMEHKjFfKfGfZOD4N070QiN9RU3QKu-9JCpP746nUiWs4o9GvMjBIG_d76LKlQ"
+      },
+      "name": "a key whose key_ops is verify verifies",
+      "why": "A key whose `key_ops` holds only `verify` is a candidate, and it verifies."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: Unsupported key usage for a ECDSA key"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImhrX29wc19taXhlZCIsInR5cCI6Im1wLXBvbGljeStqd3MifQ.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.5-m1DpRIbQ6F31sK87vnvi2NO40qdoX6sb-yRyxybH3bFjtsF6FDce84MN5YjWsLdB7kZmgfvc3KSl23eqs6bA"
+      },
+      "name": "a key whose key_ops holds verify and sign does not verify",
+      "why": "The key is the only candidate, but a candidate whose `key_ops` holds an operation other than `verify` fails."
+    },
+    {
+      "expected": {
+        "ok": false
+      },
+      "informational": {
+        "reason": "signature verification failed: no applicable key found in the JSON Web Key Set"
+      },
+      "input": {
+        "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6MSwidHlwIjoibXAtcG9saWN5K2p3cyJ9.eyJhcmVhcyI6W3sibmFtZSI6ImJhY2tlbmQiLCJwYXR0ZXJucyI6WyJhcGk6c3JjLyoqIl19XSwibWVtYmVycyI6eyJtZW0tYW5hIjoiYmFja2VuZCJ9LCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnsiYmFja2VuZCI6eyJleGVjIjpbIm5wbSB0ZXN0Il0sInJlYWQiOltdLCJ3cml0ZSI6WyJiYWNrZW5kIl19fSwidmVyc2lvbiI6N30.Lq-xmq6pAvwJVQRNwMIdaEEOrIbDoQwmGQYZQgx4S6S1O8uODPdvT7EmiQiXiAnjtNnrEDEl8zafFIZ8Onlqkg"
+      },
+      "name": "a kid that is a number matches no key, even a key with the same number",
+      "why": "A header `kid` matches a key only if it is a string."
+    }
+  ],
+  "contract": "policy",
+  "description": "Compact JWS tokens signed with the keys of a key set that holds several keys, and the result of verifying each one against that key set. The rule that chooses the key decides each case. The signing keys were made for this file and then discarded.",
+  "operation": "verify-signed-bundle",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/daemon/src/policy/store.ts",
+      "apps/hub/src/policy/canonical.ts"
+    ]
+  },
+  "shared": {
+    "jwks": {
+      "keys": [
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "kid": "hk_a",
+          "kty": "EC",
+          "use": "sig",
+          "x": "pwsL1tzfkMaf0UcPHqTpAGUT3dtcnFYeDNxnl2mbOv8",
+          "y": "9hVtZv4rwfxyIm2vQ5g_JNuq9vR3pt4HcVoihJRpl98"
+        },
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "kid": "hk_b",
+          "kty": "EC",
+          "use": "sig",
+          "x": "0EUwV1o14G9aRuqrz4WeSlvgamAIFoscutLSwmCf_D8",
+          "y": "Bsg-LLnhSeUxUs5yFi_47xVkJAHJIOGojAgaEqtwBqc"
+        },
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "kid": "hk_twin",
+          "kty": "EC",
+          "use": "sig",
+          "x": "nTfiUtajR5Qi3jhK64Jd1Pj0PwsBeuhb4sYMNBoWJv8",
+          "y": "8YPOkpBUg2zLkpZgONLyZyb8D7gME-7nGtay2h3AUOg"
+        },
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "kid": "hk_twin",
+          "kty": "EC",
+          "use": "sig",
+          "x": "EyH2QYsqoY55MoyQU5nDVPOIPNdeKXeonwmopNT4pBE",
+          "y": "FUxaGXURvVjre9a6cbC7mwtNnl72epbeopp6hn7pxGc"
+        },
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "kid": "hk_enc",
+          "kty": "EC",
+          "use": "enc",
+          "x": "bsST5MAxaV4cmx6mLaTjmYalqnIosd3rnJw6HWIgDRE",
+          "y": "o-ZNRtglavh844sCXUa8u5vAWH8SsQFSPe-YDGuL2Xo"
+        },
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "key_ops": [
+            "sign"
+          ],
+          "kid": "hk_ops",
+          "kty": "EC",
+          "use": "sig",
+          "x": "aWmGd53lh2GNn-vKZMBmn-aHutkb7N_FQib0X8bPFqY",
+          "y": "6gvhCImltbvqACjUhmamv2irAOgeChixKalqqDFP6Dg"
+        },
+        {
+          "alg": "ES384",
+          "crv": "P-256",
+          "kid": "hk_es384",
+          "kty": "EC",
+          "use": "sig",
+          "x": "TlVO2uUe3RlrRCOSEX30Y5fmCdul7JD-hAP0eh6YzYI",
+          "y": "02b48QTg-CKkLAbOmHJI3QBJVyH8IJPOBcbIOp-bDlM"
+        },
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "key_ops": [
+            "verify"
+          ],
+          "kid": "hk_ops_verify",
+          "kty": "EC",
+          "use": "sig",
+          "x": "QtgQHmL2q46UberHhg71wWBkoq2eJ6GJjVFk8Jq79xE",
+          "y": "KlXgMWPXyNxKDWA95NTUsoiyj3kQ6PqsHGNZ84ySVtc"
+        },
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "key_ops": [
+            "verify",
+            "sign"
+          ],
+          "kid": "hk_ops_mixed",
+          "kty": "EC",
+          "use": "sig",
+          "x": "kUJlQa7mCf_8It9Jjmzv27WLDlVga2TflY9BV2cSDjQ",
+          "y": "CTtvyHE9i1u1reLcNb1mwr2sU7B7FBOwBkGCYESc7b0"
+        },
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "kid": 1,
+          "kty": "EC",
+          "use": "sig",
+          "x": "7jxfl6DnAY-0HZfiIDgwHyUDirz6ETGxiOajNeyQblM",
+          "y": "Oz4egs9LxV81cXs58u9te6rA8wctvgABXZpL6T6pjC8"
+        }
+      ]
+    }
+  },
+  "version": 1
+}
