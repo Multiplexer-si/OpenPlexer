@@ -3,7 +3,7 @@
     {
       "expected": {
         "area": "src",
-        "decision": "allow"
+        "decision": "deny"
       },
       "informational": {
         "rule": "area \"src\" write is granted to role dev"
