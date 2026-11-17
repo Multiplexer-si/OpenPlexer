@@ -18,7 +18,7 @@ func eachLine(raw []byte, fn func(map[string]any)) {
 	}
 }
 
-func claudeFeedback(stdout, _ []byte) (said, toolResults string) {
+func claudeFeedback(stdout []byte) (said, toolResults string) {
 	var s, t strings.Builder
 	eachLine(stdout, func(ev map[string]any) {
 		msg, _ := ev["message"].(map[string]any)
@@ -36,10 +36,8 @@ func claudeFeedback(stdout, _ []byte) (said, toolResults string) {
 	return s.String(), t.String()
 }
 
-// Codex prints a hook denial on stderr, and a command's output as an item.
-func codexFeedback(stdout, stderr []byte) (said, toolResults string) {
+func codexFeedback(stdout []byte) (said, toolResults string) {
 	var s, t strings.Builder
-	t.Write(stderr)
 	eachLine(stdout, func(ev map[string]any) {
 		item, _ := ev["item"].(map[string]any)
 		switch item["type"] {

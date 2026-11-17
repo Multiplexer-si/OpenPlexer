@@ -15,6 +15,7 @@ import (
 var (
 	uuidRe      = regexp.MustCompile(`(?i)[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`)
 	timestampRe = regexp.MustCompile(`\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:?\d{2})?`)
+	lsDateRe    = regexp.MustCompile(`\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) +\d{1,2} +(\d{2}:\d{2}|\d{4})\b`)
 	toolIDRe    = regexp.MustCompile(`\b(toolu|call|fc|rs|msg)_[A-Za-z0-9]{8,}`)
 	rolloutRe   = regexp.MustCompile(`rollout-[^"\s/]+`)
 	uidDirRe    = regexp.MustCompile(`claude-\d+`)
@@ -33,33 +34,38 @@ type redactor struct {
 	secrets      []string
 }
 
-func newRedactor(projectDirs ...string) (*redactor, error) {
+func newRedactor(root string) (*redactor, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return nil, err
 	}
 	r := &redactor{}
-	var pairs [][2]string
-	for _, p := range projectDirs {
-		pairs = append(pairs, [2]string{p, "<PROJECT>"}, [2]string{strings.ReplaceAll(p, "/", "-"), "<PROJECT_SLUG>"})
-		if real, err := filepath.EvalSymlinks(p); err == nil {
-			pairs = append(pairs, [2]string{real, "<PROJECT>"})
+	project := filepath.Join(root, "project")
+	pairs := [][2]string{{claudeSlug(project), "<PROJECT_SLUG>"}}
+	for dir, label := range map[string]string{project: "<PROJECT>", root: "<RUN>"} {
+		pairs = append(pairs, [2]string{dir, label})
+		if strings.HasPrefix(dir, "/private/") {
+			pairs = append(pairs, [2]string{strings.TrimPrefix(dir, "/private"), label})
 		}
-		if strings.HasPrefix(p, "/private/") {
-			pairs = append(pairs, [2]string{strings.TrimPrefix(p, "/private"), "<PROJECT>"})
-		}
+		r.secrets = append(r.secrets, dir)
 	}
 	pairs = append(pairs, [2]string{home, "<HOME>"})
 	r.secrets = append(r.secrets, home)
+	var names [][2]string
 	if u, err := user.Current(); err == nil {
-		for _, name := range []string{u.Username, filepath.Base(home)} {
-			if name != "" {
-				pairs = append(pairs, [2]string{name, "<USER>"})
-				r.secrets = append(r.secrets, name)
-			}
+		names = append(names, [2]string{u.Username, "<USER>"})
+	}
+	names = append(names, [2]string{filepath.Base(home), "<USER>"})
+	if host, err := os.Hostname(); err == nil {
+		short, _, _ := strings.Cut(host, ".")
+		names = append(names, [2]string{host, "<HOST>"}, [2]string{short, "<HOST>"})
+	}
+	for _, n := range names {
+		if n[0] != "" {
+			pairs = append(pairs, n)
+			r.secrets = append(r.secrets, n[0])
 		}
 	}
-	r.secrets = append(r.secrets, projectDirs...)
 	slices.SortStableFunc(pairs, func(a, b [2]string) int { return len(b[0]) - len(a[0]) })
 	r.replacements = pairs
 	return r, nil
@@ -73,6 +79,7 @@ func (r *redactor) text(s string) string {
 	s = uidDirRe.ReplaceAllString(s, "claude-<UID>")
 	s = uuidRe.ReplaceAllString(s, "<UUID>")
 	s = timestampRe.ReplaceAllString(s, "<TIMESTAMP>")
+	s = lsDateRe.ReplaceAllString(s, "<TIMESTAMP>")
 	return toolIDRe.ReplaceAllString(s, "<TOOL_USE_ID>")
 }
 
@@ -121,8 +128,8 @@ func (r *redactor) json(raw []byte) ([]byte, error) {
 	return out, nil
 }
 
-func writeSamples(dir, agentName string, recs []record, project string, written map[string]bool) error {
-	r, err := newRedactor(project)
+func writeSamples(dir, agentName string, recs []record, root string, written map[string]bool) error {
+	r, err := newRedactor(root)
 	if err != nil {
 		return err
 	}
@@ -137,6 +144,9 @@ func writeSamples(dir, agentName string, recs []record, project string, written 
 		json.Unmarshal(rec.Input, &in)
 		if in.Tool != "" {
 			name += "." + in.Tool
+		}
+		if rec.Decision == "deny" {
+			name += ".deny"
 		}
 		if written[agentName+"/"+name] {
 			continue
