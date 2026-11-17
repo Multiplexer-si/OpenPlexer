@@ -16,6 +16,7 @@ type fixtureFile struct {
 	Schema    string `json:"schema"`
 	Shared    struct {
 		Bundle json.RawMessage `json:"bundle"`
+		JWKS   json.RawMessage `json:"jwks"`
 	} `json:"shared"`
 	Cases []fixtureCase `json:"cases"`
 }
@@ -81,7 +82,11 @@ func TestFixtures(t *testing.T) {
 				}
 				run = func(t *testing.T, c fixtureCase) { runEvaluate(t, bundle, c) }
 			case "verify-signed-bundle":
-				t.Skip("this package does not verify a signed bundle yet")
+				keys, err := ParseKeySet(file.Shared.JWKS)
+				if err != nil {
+					t.Fatalf("shared jwks: %v", err)
+				}
+				run = func(t *testing.T, c fixtureCase) { runVerify(t, keys, c) }
 			default:
 				t.Fatalf("unknown operation %q", file.Operation)
 			}
@@ -146,5 +151,39 @@ func runEvaluate(t *testing.T, bundle *Bundle, c fixtureCase) {
 	delete(got, "rule")
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("result = %v, want %v (rule: %s)", got, want, result.Rule)
+	}
+}
+
+// A verified bundle is compared with expected as JSON, so that a field that
+// Bundle does not model must survive too.
+func runVerify(t *testing.T, keys KeySet, c fixtureCase) {
+	var input struct {
+		Signature *string `json:"signature"`
+	}
+	if err := json.Unmarshal(c.Input, &input); err != nil || input.Signature == nil {
+		t.Fatalf("input has no signature: %v", err)
+	}
+	var want map[string]any
+	if err := json.Unmarshal(c.Expected, &want); err != nil {
+		t.Fatal(err)
+	}
+	verified, err := VerifySignedBundle(*input.Signature, keys)
+	got := map[string]any{"ok": err == nil}
+	if err != nil {
+		if err.Error() == "" {
+			t.Error("the error has no reason")
+		}
+	} else {
+		var bundle any
+		if err := json.Unmarshal(verified.Payload, &bundle); err != nil {
+			t.Fatalf("payload: %v", err)
+		}
+		got["bundle"] = bundle
+		if verified.Bundle == nil {
+			t.Error("the verified result has no bundle")
+		}
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("result = %v, want %v (%v)", got, want, err)
 	}
 }
