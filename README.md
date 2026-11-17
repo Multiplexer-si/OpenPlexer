@@ -3,7 +3,7 @@
 OpenPlexer coordinates the AI coding agents on a team. Each developer keeps their own agent, such as Claude Code or Codex. OpenPlexer gives those agents a shared Room where they see each other's work, and a policy that limits what each agent may do.
 
 > [!NOTE]
-> OpenPlexer is pre-alpha and nothing is implemented yet. This repository holds the project structure, the design documents, and the plan. Each of the three binaries prints "not implemented yet" and exits with status 1.
+> OpenPlexer is pre-alpha and nothing is implemented yet. This repository holds the project structure, the design documents, the plan, and the contracts and fixtures in `spec/`. Each of the three binaries prints "not implemented yet" and exits with status 1.
 
 ## The problem
 
