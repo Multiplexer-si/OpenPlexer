@@ -1,13 +1,14 @@
 ---
 name: verify
-description: Drive and prove OpenPlexer at a given git ref. Builds the three CLI binaries, runs make check, validates spec/ with a non-Go JSON Schema validator, and checks spec/ and docs/inventory.md against the private TypeScript reference. Use to verify a PR or branch before calling it done or posting a verdict.
+description: Drive and prove OpenPlexer at a given git ref. Builds the three CLI binaries, drives the local policy gate, runs make check, validates spec/ with a non-Go JSON Schema validator, and checks spec/ and docs/inventory.md against the private TypeScript reference. Use to verify a PR or branch before calling it done or posting a verdict.
 ---
 
 # Verify OpenPlexer
 
 OpenPlexer is pre-alpha. Its user-facing surface today is:
 
-- Three CLI binaries (`openplexer`, `openplexer-hub`, `openplexer-verify`). Each prints `<name>: not implemented yet` to stderr and exits 1. That is the expected behavior until Phase 1 lands. Update the `binaries` journey when it changes.
+- The `openplexer` CLI, which configures the local policy gate, loads a signed bundle, reports the state of the policy, and checks one action. With no command it prints its usage and exits 2. The `gate` journey drives it.
+- Two CLI binaries that are not implemented yet (`openplexer-hub`, `openplexer-verify`). Each prints `<name>: not implemented yet` to stderr and exits 1. Update the `binaries` journey when that changes.
 - The language-independent contracts in `spec/`, which implementers in other languages consume.
 - Two tools that compare the repo with the existing TypeScript implementation (the reference): the extractor (`tools/extract`) and the inventory checker (`tools/checkinventory`).
 
@@ -22,7 +23,7 @@ There is no server to keep running. Each run happens in a fresh, detached git wo
 .claude/skills/verify/verify.sh <sha> build binaries check
 ```
 
-Journeys are `doctor`, `build`, `binaries`, `check`, `spec-ajv`, `extract`, `inventory`, and `all`. The script fetches `origin`, adds a detached worktree at the ref under `$TMPDIR`, runs the journeys, and exits 0 only if every journey got its expected exit code. Ready means the worktree exists and `head.txt` names the SHA you asked for.
+Journeys are `doctor`, `build`, `binaries`, `gate`, `check`, `spec-ajv`, `extract`, `inventory`, and `all`. The script fetches `origin`, adds a detached worktree at the ref under `$TMPDIR`, runs the journeys, and exits 0 only if every journey got its expected exit code. Ready means the worktree exists and `head.txt` names the SHA you asked for.
 
 Inputs you can override with environment variables:
 
@@ -41,7 +42,9 @@ Each journey runs the real command that a contributor or CI runs. See `features/
 | Journey | Command in the worktree | Expected exit |
 |---|---|---|
 | `build` | `make build` | 0 |
-| `binaries` | `bin/<name>` for each binary, and its stderr is `<name>: not implemented yet` | 1 each |
+| `binaries` | `bin/openplexer-hub` and `bin/openplexer-verify`, and the stderr of each is `<name>: not implemented yet` | 1 each |
+| `binaries` | `bin/openplexer`, and its stderr starts with `usage:` | 2 |
+| `gate` | `gate.sh <worktree>` runs `bin/openplexer` against a home directory that it makes: no policy, a loaded example bundle, allowed and denied actions, a bundle with a bad signature, a stale policy, and an edited store. Needs `build` first. | 0 |
 | `check` | `make check` (gofmt, `go vet`, `go test`, which includes the doc-link test and the spec tests) | 0 |
 | `spec-ajv` | `node spec-ajv.cjs <worktree> $REFERENCE/node_modules` validates every example and fixture with ajv 2020 | 0 |
 | `extract` | `$REFERENCE/node_modules/.bin/tsx tools/extract/main.ts check --reference $REFERENCE` | 0 |
@@ -71,3 +74,5 @@ The script's exit trap removes the worktree it created, and only that worktree. 
 
 - `verify.sh <ref> <journey>...` is the runner.
 - `spec-ajv.cjs <repo-root> <node_modules>` validates `spec/` with ajv. The runner calls it, and you can run it alone on any checkout.
+- `gate.sh <repo-root>` drives the local policy gate of a built checkout. The runner calls it, and you can run it alone after `make build`. It prints one `ok` or `FAIL` line for each step.
+- `gate-files.cjs` holds the file operations of `gate.sh`: it changes one character of a signed payload, moves the confirmation time of the stored policy into the past, and reads the audit log.

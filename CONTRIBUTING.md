@@ -18,9 +18,9 @@ This guide covers the tasks that a contributor does in this repository. [Archite
 	make check
 	```
 
-	The last lines of the output list each package. The packages `internal/layering`, `internal/doclinks`, `internal/spectest`, and `internal/policy` report `ok`.
+	The last lines of the output list each package. Each package that has tests reports `ok`, such as `internal/layering`, `internal/spectest`, `internal/policy`, and `internal/daemon`.
 
-The first run downloads the modules that the tests in `internal/spectest` and `internal/policy` use. The binaries use only the standard library.
+The first run downloads the modules that the tests in `internal/spectest`, `internal/policy`, and `internal/daemon` use. The binaries use only the standard library.
 
 ## Run the checks
 
@@ -32,7 +32,7 @@ Run `make check` and `make build` before you open a pull request. CI runs both c
 2. It runs `go vet ./...`.
 3. It runs `go test ./...`. The tests include the dependency rules, the documentation links, and the checks of the schemas, examples, and fixtures under `spec/`.
 
-Two tests run the fixtures. `TestFixtures` in `internal/policy` runs the policy evaluator against every `validate` and `evaluate` fixture of `spec/policy`. `TestFixturesValidate` in `internal/spectest` checks that every fixture file follows the fixture-file schema. To run only the policy fixtures, run `go test ./internal/policy -run TestFixtures`. A failing case prints its name.
+Five packages run the fixtures. `TestFixtures` in `internal/policy` runs the policy evaluator and the bundle verifier against every fixture of `spec/policy`. `TestFixtures` in `internal/audit` runs every fixture of `spec/canonical-json` and `spec/audit`. The tests in `internal/daemon` run the local gate against the fixtures of `spec/policy`. `TestFixtures` in `internal/adapter` runs the adapters against every fixture of `spec/adapter`. `TestFixturesValidate` in `internal/spectest` checks that every fixture file follows the fixture-file schema. To run only the policy fixtures, run `go test ./internal/policy -run TestFixtures`. A failing case prints its name.
 
 ## Build the binaries
 

@@ -3,7 +3,7 @@
 OpenPlexer coordinates the AI coding agents on a team. Each developer keeps their own agent, such as Claude Code or Codex. OpenPlexer gives those agents a shared Room where they see each other's work, and a policy that limits what each agent may do.
 
 > [!NOTE]
-> OpenPlexer is pre-alpha and you cannot use it yet. This repository holds the project structure, the design documents, the plan, the contracts and fixtures in `spec/`, and the policy evaluator in `internal/policy`. Each of the three binaries prints "not implemented yet" and exits with status 1.
+> OpenPlexer is pre-alpha and you cannot use it yet. This repository holds the project structure, the design documents, the plan, the contracts and fixtures in `spec/`, the policy evaluator in `internal/policy`, and the local policy gate in `internal/daemon`. The `openplexer` binary loads a signed policy bundle and checks one action against it. It does not connect to a coding agent yet. The other two binaries print "not implemented yet" and exit with status 1.
 
 ## The problem
 
@@ -29,6 +29,7 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 | Understand the ideas behind the four parts | [Concepts](docs/concepts.md) |
 | See how the parts connect, and why the code is split the way it is | [Architecture](docs/architecture.md) |
 | Decide whether to trust the hooks on your machine | [Trust model](docs/trust-model.md) |
+| Load a signed policy on your machine and check an action against it | [Local policy gate](docs/local-policy.md) |
 | Connect Claude Code to the gate by hand, or see what its hook cannot see | [Claude Code hooks](docs/hooks-claude-code.md) |
 | Connect Codex to the gate by hand, or see what its hook cannot see | [Codex hooks](docs/hooks-codex.md) |
 | Find a binary, a package, or a make target | [Repository layout](docs/repository-layout.md) |

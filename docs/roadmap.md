@@ -24,4 +24,4 @@ Phase 3 follows Phase 2 because the hub writes the audit log that the verifier c
 
 Phase 0 is complete. The repository has its structure, its license, the dependency rules, and CI. It also has the [trust model](trust-model.md), the [inventory](inventory.md) of the existing implementation, and the contracts and fixtures in [`spec/`](../spec/README.md).
 
-No Go implementation exists yet. Phase 1 is next.
+Phase 1 is in progress. The policy evaluator and the [local policy gate](local-policy.md) exist. The adapters for Claude Code and Codex exist in `internal/adapter`. The `openplexer hook` command that calls them and the `install` command that writes their hooks do not exist yet.

@@ -1,7 +1,7 @@
 # Architecture
 
 > [!NOTE]
-> This page describes the design. The directory structure and the dependency rules exist today. The behavior does not exist yet.
+> This page describes the design. The directory structure and the dependency rules exist today. Of the behavior, the policy evaluator and the gate exist, and the gate has no adapter and no hub yet ([Local policy gate](local-policy.md)).
 
 This page explains how the parts of OpenPlexer connect, and why the code is split the way it is. [Concepts](concepts.md) defines the terms. [Repository layout](repository-layout.md) lists every directory.
 
