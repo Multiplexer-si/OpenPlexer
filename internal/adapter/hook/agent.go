@@ -29,6 +29,9 @@ type Agent struct {
 	Settings  []string
 	Timeout   int
 	OnFailure string
+	// NextStep tells the developer what the agent needs before it runs a
+	// hook that install wrote.
+	NextStep string
 }
 
 // PreTool is the event word of `openplexer hook <agent> pre-tool`.

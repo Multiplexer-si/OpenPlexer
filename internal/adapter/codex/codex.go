@@ -20,6 +20,7 @@ var Agent = hook.Agent{
 	HookFile:  "hooks.json",
 	Settings:  []string{"hooks.json", "config.toml"},
 	Timeout:   5,
+	NextStep:  "Start codex and type /hooks to review and trust the hook. Codex skips a new or changed hook until you trust it, and runs the hooks of a project only in a trusted project.",
 }
 
 var errUnreadablePatch = errors.New("this apply_patch could not be checked: it is not a patch that the gate can read (*** Begin Patch, then Add, Update, or Delete File hunks, then *** End Patch)")

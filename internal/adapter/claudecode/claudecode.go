@@ -18,4 +18,5 @@ var Agent = hook.Agent{
 	Settings:  []string{"settings.json", "settings.local.json"},
 	Timeout:   5,
 	OnFailure: "block",
+	NextStep:  "Claude Code reads the change at once. It runs the hooks of a project file after you accept the workspace trust dialog of the project.",
 }
