@@ -85,7 +85,7 @@ Each directory under `spec/` holds one contract: a README with the rules, and a 
 
 ## CI
 
-The workflow in `.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It installs the Go version that `go.mod` names, then runs `make check` and `make build`.
+The workflow in `.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It installs the Go version that `go.mod` names, then runs `make check` and `make build` in one job named `check`. `main` requires that job before a pull request can merge. [Run the checks](../CONTRIBUTING.md#run-the-checks) lists the same commands to run locally, and names the tests that run the fixtures.
 
 ## Toolchain
 
