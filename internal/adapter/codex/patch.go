@@ -2,9 +2,6 @@ package codex
 
 import "strings"
 
-// The paths that an apply_patch call touches are read the way Codex reads the
-// patch. A header counts only where the parser of Codex looks for one.
-
 const (
 	beginMarker = "*** Begin Patch"
 	endMarker   = "*** End Patch"
@@ -16,8 +13,6 @@ const (
 	endOfFile   = "*** End of File"
 )
 
-// isTrimmed is the white space that Rust trims: the Unicode White_Space
-// property. It is the white space of ECMA-262 with U+0085 added.
 func isTrimmed(r rune) bool {
 	switch r {
 	case '\t', '\n', '\v', '\f', '\r', ' ', 0x85, 0xa0, 0x1680, 0x2028, 0x2029, 0x202f, 0x205f, 0x3000, 0xfeff:
@@ -28,8 +23,6 @@ func isTrimmed(r rune) bool {
 
 func trim(s string) string { return strings.TrimFunc(s, isTrimmed) }
 
-// linesOf splits on a line feed, drops one carriage return at the end of each
-// line, and has no empty line at the end.
 func linesOf(s string) []string {
 	if s == "" {
 		return nil
@@ -45,8 +38,6 @@ func framed(lines []string) bool {
 	return len(lines) >= 2 && trim(lines[0]) == beginMarker && trim(lines[len(lines)-1]) == endMarker
 }
 
-// body returns the lines between the markers, also inside a `<<EOF` wrapper,
-// and false if the patch has no markers.
 func body(lines []string) ([]string, bool) {
 	if framed(lines) {
 		return lines[1 : len(lines)-1], true
@@ -64,9 +55,6 @@ func body(lines []string) ([]string, bool) {
 	return nil, false
 }
 
-// chunkLength returns the number of lines that the update chunk at index at
-// spans, or -1 if the chunk is not valid. Only the first chunk of a hunk may
-// leave out its `@@` line.
 func chunkLength(lines []string, at int, first bool) int {
 	head := lines[at]
 	start := -1
@@ -100,8 +88,6 @@ func chunkLength(lines []string, at int, first bool) int {
 	return start - at + n
 }
 
-// updateEnd returns the index after the move line and the chunks of an Update
-// File hunk, starting just after its header, or -1 if the hunk is not valid.
 func updateEnd(lines []string, at int, add func(string) bool) int {
 	i := at
 	if i < len(lines) && strings.HasPrefix(lines[i], moveTo) {

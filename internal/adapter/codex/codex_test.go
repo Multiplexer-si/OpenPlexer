@@ -13,8 +13,6 @@ func TestMatcherNamesTheGatedTools(t *testing.T) {
 	}
 }
 
-// A patch that Codex rejects has unknown targets, so the call is blocked
-// without a policy query.
 func TestUnreadablePatchIsRefusedWithoutAQuery(t *testing.T) {
 	evaluate := func(policy.Query) policy.Result {
 		t.Fatal("the policy was asked about a patch that cannot be read")

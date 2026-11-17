@@ -71,7 +71,6 @@ export interface Reference {
   policyJwsTyp: string;
   verifyBundleJws(signature: string, jwks: unknown): Promise<BundleVerification>;
   jose: Jose;
-  /** The hook code of the daemon adapters. */
   adapters: {
     bashTargets(command: string): string[];
     commandSegments(command: string): string[][];
@@ -140,9 +139,8 @@ export async function loadReference(root: string): Promise<Reference> {
   };
 }
 
-type Load = (path: string) => Promise<any>; // eslint-disable-line @typescript-eslint/no-explicit-any
+type Load = (path: string) => Promise<any>;
 
-/** A hook port that has no claims and no hub: the part of the Room that the gate does not need. */
 const OFFLINE_PORT = {
   ready: async () => true,
   digest: async () => null,

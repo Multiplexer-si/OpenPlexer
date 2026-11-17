@@ -53,9 +53,6 @@ func readFixture(t *testing.T, path string) fixtureFile {
 	return file
 }
 
-// Every case of every fixture file runs, and a failure names the file and the
-// case. A file with an operation that the switch does not know fails, so that a
-// new fixture file cannot go unread.
 func TestFixtures(t *testing.T) {
 	paths, err := filepath.Glob(filepath.Join(fixtureDir, "*.json"))
 	if err != nil || len(paths) == 0 {
@@ -130,9 +127,6 @@ func runPatchTargets(t *testing.T, c fixtureCase) {
 	}
 }
 
-// preToolRunner runs the hook of the agent that the file names against the
-// shared bundle. A case is allowed if the hook writes nothing and exits 0. It
-// is denied if the hook writes a deny verdict with a reason, or exits 2.
 func preToolRunner(t *testing.T, file fixtureFile) func(*testing.T, fixtureCase) {
 	handle, ok := handlers[file.Shared.Agent]
 	if !ok {

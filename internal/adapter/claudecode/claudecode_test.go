@@ -13,7 +13,6 @@ func TestMatcherNamesTheGatedTools(t *testing.T) {
 	}
 }
 
-// A notebook cell edit writes the notebook file, so it is judged as a write.
 func TestNotebookEditIsAWrite(t *testing.T) {
 	var asked []policy.Query
 	evaluate := func(q policy.Query) policy.Result {

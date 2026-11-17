@@ -14,16 +14,12 @@ const (
 	dupToken
 )
 
-// token is one piece of a shell line. A word has its quotes and backslash
-// escapes removed. A redirection that reads, such as `<`, has reads set: its
-// target is never a write.
 type token struct {
 	kind  tokenKind
 	text  string
 	reads bool
 }
 
-// dynamic matches a word whose value the shell decides at run time.
 var dynamic = regexp.MustCompile("[$`()]")
 
 // isSpace is the white space of ECMA-262, the set that the reference splits on.
@@ -45,8 +41,6 @@ func startsWith(s []rune, i int, text string) bool {
 	return i+len([]rune(text)) <= len(s) && string(s[i:i+len([]rune(text))]) == text
 }
 
-// matchDup returns the length of an fd duplication or close, such as `2>&1` or
-// `>&-`, at i, or 0.
 func matchDup(s []rune, i int) int {
 	j := i
 	for j < len(s) && isDigit(s[j]) {
@@ -72,12 +66,8 @@ func matchDup(s []rune, i int) int {
 	return j - i
 }
 
-// redirOperators is in the order that the reference tries them: a longer
-// operator that shares a start with a shorter one comes first.
 var redirOperators = []string{">>", ">&", ">|", "<<<", "<<-", "<<", "<>", ">", "<"}
 
-// matchRedir returns the length of a redirection operator at i, with the file
-// descriptor in front of it, or 0.
 func matchRedir(s []rune, i int) int {
 	for _, op := range []string{"&>>", "&>"} {
 		if startsWith(s, i, op) {
@@ -108,8 +98,6 @@ func matchSep(s []rune, i int) int {
 	return 0
 }
 
-// readWord reads the word at i with its quotes and escapes resolved, so that a
-// quoted `;`, `|`, or `&` stays inside the word.
 func readWord(s []rune, i int) (string, int) {
 	var text strings.Builder
 	for i < len(s) && !isWordEnd(s[i]) {
@@ -142,8 +130,6 @@ type heredoc struct {
 	tabs      bool
 }
 
-// skipBodies returns the index just past the bodies of docs, read in order from
-// i, the start of the line after the heredoc operators.
 func skipBodies(s []rune, i int, docs []heredoc) int {
 	for _, d := range docs {
 		for i < len(s) {
@@ -170,8 +156,6 @@ var (
 	readWriteOp     = regexp.MustCompile(`^[0-9]*<>`)
 )
 
-// tokens reads a shell line the way the reference does. A heredoc body is
-// data, so it yields no token.
 func tokens(command string) []token {
 	s := []rune(command)
 	var out []token
@@ -264,9 +248,6 @@ var (
 	installDirs  = regexp.MustCompile(`^-[a-zA-Z]*d`)
 )
 
-// argTargets lists the write targets of one command's arguments, with the verb
-// already removed. When it is unclear that an argument is a path being
-// written, the argument is left out.
 func argTargets(verb string, args []string) []string {
 	valueOpt := valueOptions[verb]
 	var operands []string
@@ -382,13 +363,8 @@ func WriteTargets(command string) []string {
 	return targets
 }
 
-// substitution matches a command substitution or a process substitution. The
-// check reads the raw text of the line, so that a quote does not hide one.
 var substitution = regexp.MustCompile("\\$\\(|`|[<>]\\(")
 
-// bareTee reports a command that is `tee` itself with no word that the shell
-// decides at run time. Such a command only writes its arguments, which the
-// path check judges, so it needs no exec grant.
 func bareTee(words []string) bool {
 	if words[0] != "tee" {
 		return false
