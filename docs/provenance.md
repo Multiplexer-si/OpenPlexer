@@ -61,5 +61,4 @@ When a change ports code from the existing implementation, add a row to the tabl
 
 This repository is licensed under Apache-2.0. See [LICENSE](../LICENSE) and [NOTICE](../NOTICE).
 
-> [!IMPORTANT]
-> The copyright holder of the existing implementation has not yet recorded the confirmation that the material derived from it may be released under Apache-2.0. [Issue 7](https://github.com/Multiplexer-si/OpenPlexer/issues/7) tracks that confirmation. This note is replaced with the confirmation when it is given.
+On 2026-11-17, the copyright holder of the existing implementation confirmed that its code may be released under Apache-2.0. The confirmation covers the material under `spec/` that `tools/extract` derives from it, and the code that the table above records as ported. [Issue 7](https://github.com/Multiplexer-si/OpenPlexer/issues/7) records the confirmation.
