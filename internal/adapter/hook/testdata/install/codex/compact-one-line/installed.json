@@ -1,0 +1,1 @@
+{"hooks":{"Stop":[{"hooks":[{"type":"command","command":"x"}]}],"PreToolUse":[{"matcher":"Bash|apply_patch","hooks":[{"type":"command","command":"/usr/local/bin/openplexer hook codex pre-tool","timeout":5}]}]}}
