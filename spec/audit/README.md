@@ -58,7 +58,7 @@ A log with no records is valid, with `entries` equal to 0.
 
 The JSON export is one object with `entries` and `next_cursor`. `next_cursor` is null. `entries` lists the records newest first, so a verifier reverses the list before it verifies.
 
-Each entry has the twelve fields of a record and two more. `result` is the part of `action` after its last `.` or `-`, or the whole `action` if it has neither character. `agent_member_id` is the member that owns the agent session. Neither field is hashed.
+Each entry has the twelve fields of a record and `result`, and it can also have `agent_member_id`. `result` is the part of `action` after its last `.` or `-`, or the whole `action` if it has neither character. `agent_member_id` is the member that owns the agent session, or null. Neither field is hashed.
 
 ## What a chain cannot show
 
