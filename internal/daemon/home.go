@@ -147,6 +147,10 @@ func Configure(home string, change Settings) error {
 		return err
 	}
 	defer unlock()
+	current, err := readConfig(home)
+	if err != nil {
+		return err
+	}
 	if change.KeySet != nil {
 		if err := writeFile(home, keysFile, change.KeySet); err != nil {
 			return err
@@ -154,10 +158,6 @@ func Configure(home string, change Settings) error {
 	}
 	if change.MemberID == "" && change.StaleAfterDays == 0 {
 		return nil
-	}
-	current, err := readConfig(home)
-	if err != nil {
-		return err
 	}
 	if change.MemberID != "" {
 		current.MemberID = change.MemberID

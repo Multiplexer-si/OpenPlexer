@@ -779,3 +779,18 @@ func TestOpenFailsOnAConfigurationThatCannotBeRead(t *testing.T) {
 		t.Error("Configure accepted a key set that is not valid")
 	}
 }
+
+func TestConfigureChangesNothingWhenTheConfigurationCannotBeRead(t *testing.T) {
+	home := t.TempDir()
+	first := newSigner(t).keySet(t)
+	configure(t, home, Settings{KeySet: first})
+	if err := os.WriteFile(filepath.Join(home, configFile), []byte("{"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := Configure(home, Settings{KeySet: newSigner(t).keySet(t), MemberID: "mem-ana"}); err == nil {
+		t.Fatal("Configure gave no error for a configuration that is not valid")
+	}
+	if got := readFile(t, filepath.Join(home, keysFile)); string(got) != string(first) {
+		t.Error("a Configure that failed replaced the key set")
+	}
+}
