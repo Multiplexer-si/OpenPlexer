@@ -21,8 +21,6 @@ var decisionActions = map[policy.Decision]string{
 	policy.Deny:  "policy.denied",
 }
 
-// decisionRecord describes one verdict. With no verified policy the action
-// is policy.unenforced, so that the log reports a missing policy.
 func decisionRecord(agent string, verdict Verdict, queries []policy.Query) audit.Record {
 	query := verdict.Query
 	meta := map[string]any{
@@ -58,8 +56,8 @@ func decisionRecord(agent string, verdict Verdict, queries []policy.Query) audit
 	return record
 }
 
-// target names what a query acts on. A command can hold a secret, so the
-// record holds its SHA-256 and not its text.
+// A command can hold a secret, so target returns its SHA-256 and not its
+// text.
 func target(query policy.Query) string {
 	switch query.Action {
 	case policy.Exec:
@@ -71,10 +69,8 @@ func target(query policy.Query) string {
 	return query.Path
 }
 
-// appendRecord adds one record to the audit log of the home. The caller
-// holds the lock of the home. The gate fills the fields that say where and
-// when: the log has no team, so workspace_id is the project of the policy
-// in force.
+// appendRecord expects the caller to hold the lock of the home. The local
+// log has no team, so workspace_id holds the project of the policy in force.
 func (g *Gate) appendRecord(record audit.Record) error {
 	record.WorkspaceID = g.status.ProjectID
 	if g.status.Member != "" {
@@ -115,10 +111,8 @@ type chainLink struct {
 
 const tailWindow = 1 << 20
 
-// lastRecord returns the id and the hash of the last record of the log,
-// or the start of a chain for an empty log. A writer that stopped in the
-// middle of a line left a part of a record that no caller got an answer
-// for, and lastRecord removes it.
+// A writer that stopped in the middle of a line was never told that its
+// record was written, so lastRecord removes that part of a line.
 func lastRecord(file *os.File) (chainLink, error) {
 	info, err := file.Stat()
 	if err != nil {

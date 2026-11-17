@@ -12,8 +12,6 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
 
-// The files of the home directory. This package is the only reader and
-// writer of each.
 const (
 	configFile = "config.json"
 	keysFile   = "keys.json"
@@ -37,8 +35,6 @@ func (c config) staleAfter() time.Duration {
 	return time.Duration(days) * 24 * time.Hour
 }
 
-// readJSON reads one file of the home directory. It returns nil and no
-// error for a file that does not exist.
 func readJSON[T any](home, name string) (*T, error) {
 	text, err := os.ReadFile(filepath.Join(home, name))
 	if errors.Is(err, fs.ErrNotExist) {
@@ -91,8 +87,8 @@ func readStoredPolicy(home string) (*storedPolicy, error) {
 	return stored, err
 }
 
-// writeFile replaces one file of the home directory. A reader sees the old
-// content or the new content, and never a part of one.
+// Readers of the home take no lock, so writeFile replaces a file by rename:
+// a reader sees the old content or the new content, and never a part.
 func writeFile(home, name string, content []byte) error {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return err
@@ -172,8 +168,6 @@ func Configure(home string, change Settings) error {
 	return writeJSON(home, configFile, current)
 }
 
-// lockHome takes the one lock of the home directory. A load, a change to
-// the configuration, and each audit record hold it.
 func lockHome(home string) (unlock func(), err error) {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return nil, err

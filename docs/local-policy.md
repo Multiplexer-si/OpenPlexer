@@ -157,6 +157,6 @@ The log is a file that your user can write, so it has the limits that [the trust
 
 ## Limits
 
-- The gate locks its home directory with `flock`, which exists on Unix only. On another system, a load and an audit record fail, and `policy check` still prints its result.
+- The gate locks its home directory with `flock`, which exists on Unix only. On another system, `configure`, a load, and an audit record fail, so no policy can be put in force there. `policy check` still prints its result.
 - The log grows by one record for each checked action, and nothing removes old records.
 - The member id is a claim. The gate does not check that the developer is that member.

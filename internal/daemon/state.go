@@ -7,10 +7,7 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
 
-// State is the state of the stored policy. The home directory records two
-// facts, the signed token and the time that the source last confirmed it.
-// classify computes the state from them, the key set, and the clock, so no
-// state is stored and no two flags can disagree.
+// State is the state of the stored policy.
 //
 //	Absent    load of a token that verifies              -> Verified
 //	Verified  the clock passes StaleAt                   -> Stale
@@ -67,8 +64,6 @@ type storedPolicy struct {
 	ConfirmedAt time.Time `json:"confirmed_at"`
 }
 
-// classify reads the stored policy and the key set of a home directory and
-// computes the state.
 func classify(home string, staleAfter time.Duration, now time.Time) (Status, *policy.Verified) {
 	rejected := func(format string, args ...any) (Status, *policy.Verified) {
 		return Status{State: Rejected, Detail: fmt.Sprintf(format, args...)}, nil

@@ -37,7 +37,6 @@ func Open(home string, now func() time.Time) (*Gate, error) {
 	return g, nil
 }
 
-// read sets the status and the bundle from the files of the home.
 func (g *Gate) read() *policy.Verified {
 	status, verified := classify(g.home, g.config.staleAfter(), g.now())
 	status.Member = g.config.MemberID
@@ -84,8 +83,8 @@ func (g *Gate) Load(ctx context.Context, source Source) (Status, error) {
 	candidate, action, err := g.admit(token, inForce)
 	if err != nil {
 		reason := err.Error()
-		// The rejection is the answer of this load, so a record that cannot
-		// be written does not replace it.
+		// A failed record does not join the rejection, because a caller takes
+		// an error that wraps ErrNotRecorded to mean that the bundle is in force.
 		_ = g.record(audit.Record{Action: "policy.rejected", Target: g.status.ProjectID, Reason: &reason})
 		return g.status, fmt.Errorf("%w, and the policy in force stays: %w", ErrRejected, err)
 	}
@@ -111,8 +110,6 @@ func (g *Gate) record(record audit.Record) error {
 	return nil
 }
 
-// admit applies the rules of Load to a token and returns the audit action
-// of the load.
 func (g *Gate) admit(token string, inForce *policy.Verified) (*policy.Verified, string, error) {
 	keys, err := readKeys(g.home)
 	if err != nil {
@@ -213,9 +210,8 @@ func (g *Gate) evaluate(queries []policy.Query) (policy.Query, policy.Result) {
 	return firstQuery, firstResult
 }
 
-// candidateRepos returns the repos that a query is evaluated in. A repo
-// that the caller does not know must not open a path, so a read or a write
-// with no repo must be allowed in every repo of the bundle.
+// The caller may not know the repo of a path, so a read or a write with no
+// repo must be allowed in every repo of the bundle.
 func (g *Gate) candidateRepos(query policy.Query) []string {
 	fileAction := query.Action == policy.Read || query.Action == policy.Write
 	switch {

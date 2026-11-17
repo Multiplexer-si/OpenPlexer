@@ -98,8 +98,6 @@ func (f fixtureFile) token(t *testing.T, name string) string {
 	return ""
 }
 
-// tokenSource is a source that holds one token, as a hub connection holds
-// the bundle that the hub pushed.
 type tokenSource string
 
 func (token tokenSource) Fetch(context.Context) (string, error) { return string(token), nil }

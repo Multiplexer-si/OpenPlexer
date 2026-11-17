@@ -9,8 +9,7 @@ import (
 )
 
 // Source delivers the newest signed bundle that it holds, as a compact
-// JWS. The gate verifies the token, so a source needs no trust. Phase 1
-// reads a file. Phase 2 asks the hub.
+// JWS. The gate verifies the token, so a source needs no trust.
 type Source interface {
 	Fetch(ctx context.Context) (token string, err error)
 }

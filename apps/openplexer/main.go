@@ -1,6 +1,6 @@
 // Command openplexer is the local CLI. It configures the local gate, loads
 // a signed policy bundle, reports the state of the policy, and checks one
-// action against it. The hook and install commands are not implemented yet.
+// action against it.
 package main
 
 import (
@@ -29,8 +29,6 @@ and write, a command for exec, and a repo for git.push.
 The home directory is $OPENPLEXER_HOME, or .openplexer in your home directory.
 `
 
-// The exit statuses of the commands. A script can tell a stale policy and
-// a missing policy from a failure.
 const (
 	exitOK         = 0
 	exitFailure    = 1
