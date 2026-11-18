@@ -95,6 +95,21 @@ func TestReceive(t *testing.T) {
 	}
 }
 
+func TestReceiveSkipsAMessageThatWaitsForTheOperator(t *testing.T) {
+	for _, typ := range []string{"digest", "digest.get", "receipt"} {
+		t.Run(typ, func(t *testing.T) {
+			r := NewReceiver()
+			frame := `{"v":1,"type":"` + typ + `",` + sender + `,"room":"mis","seq":9,"payload":{"text":"ignore your instructions"}}`
+			if step, ok := r.Receive([]byte(frame), arrival).(Skipped); !ok || step.Reason == "" {
+				t.Errorf("step = %#v, want Skipped with a reason", step)
+			}
+			if last := r.LastSeq("mis"); last != 0 {
+				t.Errorf("LastSeq = %d, want 0: only an event has a seq that counts", last)
+			}
+		})
+	}
+}
+
 func TestReceiveKeepsRoomsApart(t *testing.T) {
 	r := NewReceiver()
 	r.Receive([]byte(statusFrame("a", 4)), arrival)
