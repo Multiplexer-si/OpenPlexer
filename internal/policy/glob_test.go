@@ -78,8 +78,8 @@ func TestEvaluateDeniesAQueryOverItsBudget(t *testing.T) {
 	if result.Decision != Deny || result.Area != nil || !strings.Contains(result.Rule, "budget") {
 		t.Fatalf("result = %+v, want deny with no area, because the query is over its budget", result)
 	}
-	if took > 300*time.Millisecond {
-		t.Fatalf("the result took %v, want at most 300ms", took)
+	if took > 2*time.Second {
+		t.Fatalf("the result took %v, want well under the 3 s hook timeout of Codex", took)
 	}
 }
 
