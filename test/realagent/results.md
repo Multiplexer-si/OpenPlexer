@@ -14,12 +14,12 @@ The runs used macOS 26.6.2 on arm64, under `env -i` with `HOME`, `USER`, `PATH`,
 
 | Scenario | Codex | Claude Code |
 |---|---|---|
-| `allow_write` | Pass | Not run: no sign-in |
-| `deny_write` | Pass | Not run: no sign-in |
-| `deny_shell` | Pass | Not run: no sign-in |
-| `stale` | Pass | Not run: no sign-in |
-| `no_policy` | Pass | Not run: no sign-in |
-| `offline` | Pass | Not run: no sign-in |
+| `allow_write` | Pass | Pass |
+| `deny_write` | Pass | Pass |
+| `deny_shell` | Pass | Pass |
+| `stale` | Pass | Pass |
+| `no_policy` | Pass | Pass |
+| `offline` | Pass | Pass |
 
 ### Codex
 
@@ -46,15 +46,18 @@ Each Codex run printed `` `--dangerously-bypass-hook-trust` is enabled. Enabled 
 
 ### Claude Code
 
-The Claude Code CLI on the test machine had no sign-in. The harness started 6 sessions, and each one stopped before its first model call with `Failed to authenticate: OAuth session expired and could not be refreshed`. Claude Code reported a cost of $0 for each. `claude auth status` then reported `"loggedIn": false`. The same message came from all 6 sessions, so the expired session was already there before the first one.
+The Claude Code column ran on 2026-11-18 after the CLI was signed in, with `go run ./test/realagent run -agent claude` under `env -i`, against `openplexer` built from `main` at `a4bf260`. All 6 scenarios passed.
 
-The steps before each session ran and gave the wanted result: `openplexer policy status` exited with status 0, 3, or 4 as the scenario wants, the install recorded the project root, and the network check of `offline` gave 0 and 1.
+| Scenario | On disk | Audit record | Reason reached the agent | Model repeated it |
+|---|---|---|---|---|
+| `allow_write` | written | `allowed`, state `verified` | n/a | n/a |
+| `deny_write` | absent | `denied`, state `verified` | yes | yes |
+| `deny_shell` | absent | `denied`, state `verified` | yes | yes |
+| `stale` | absent | `denied`, state `stale` | yes | yes |
+| `no_policy` | absent | `unenforced`, state `absent` | yes | no |
+| `offline` | absent | `denied`, state `verified` | yes | yes |
 
-The harness now asks `claude auth status` before the first Claude scenario, and starts no scenario when the CLI has no sign-in. To finish this column, sign in with `claude auth login` in a plain terminal, then run:
-
-```sh
-go run ./test/realagent run -agent claude
-```
+An earlier attempt the same day stopped before any model call, because the CLI had no sign-in. The harness now checks `claude auth status` before the first Claude scenario. `~/.claude/settings.json` and `~/.codex/config.toml` had the same hashes before and after the runs.
 
 ### Agent configuration
 
