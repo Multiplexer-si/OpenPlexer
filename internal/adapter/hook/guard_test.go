@@ -15,7 +15,7 @@ func TestAWriteToAGuardedPathIsDeniedBeforeThePolicy(t *testing.T) {
 	gate := filepath.Join(home, ".openplexer")
 	mkdirs(t, filepath.Join(root, ".git"), filepath.Join(root, "web"), gate)
 	env := Env{
-		Root: func(cwd string) (string, bool) { return FindRoot(cwd, home) },
+		Root: Roots{Home: home}.Find,
 		Home: home,
 		Guards: []Guard{
 			{Path: gate, Why: "it holds the policy of OpenPlexer"},

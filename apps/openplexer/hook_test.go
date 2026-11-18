@@ -24,6 +24,7 @@ func TestMain(m *testing.M) {
 	for _, name := range []string{"HOME", "CLAUDE_CONFIG_DIR", "CODEX_HOME", "OPENPLEXER_HOME"} {
 		os.Setenv(name, filepath.Join(dir, strings.ToLower(name)))
 	}
+	executablePath = func() (string, error) { return filepath.Join(dir, "bin", "openplexer"), nil }
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)

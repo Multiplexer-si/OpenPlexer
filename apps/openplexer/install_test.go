@@ -35,7 +35,7 @@ func TestInstallAndUninstallKeepTheUserSettings(t *testing.T) {
 	t.Setenv("CLAUDE_CONFIG_DIR", t.TempDir())
 	settings := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "settings.json")
 	writeFile(t, settings, userSettings)
-	executable, err := os.Executable()
+	executable, err := executablePath()
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,8 @@ func TestInstallUsage(t *testing.T) {
 		{"install"},
 		{"install", "gemini"},
 		{"install", "codex", "--scope", "team"},
-		{"install", "codex", "--project", "."},
+		{"install", "codex", "--scope", "user", "--project", "."},
+		{"install", "codex", "--file", "hooks.json", "--project", "."},
 		{"uninstall", "codex", "extra"},
 		{"hook", "gemini", "pre-tool"},
 	} {

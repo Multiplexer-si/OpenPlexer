@@ -69,11 +69,17 @@ func syntaxError(b []byte, err error) error {
 	if !errors.As(err, &se) {
 		return errors.New("invalid JSON")
 	}
-	pos := min(max(int(se.Offset)-1, 0), len(b))
-	line := 1 + bytes.Count(b[:pos], []byte("\n"))
-	col := pos - bytes.LastIndexByte(b[:pos], '\n')
+	line, col := position(b, min(max(int(se.Offset)-1, 0), len(b)))
 	return fmt.Errorf("invalid JSON at line %d, column %d: %s", line, col, se.Error())
 }
+
+func position(b []byte, offset int) (line, col int) {
+	return 1 + bytes.Count(b[:offset], []byte("\n")), offset - bytes.LastIndexByte(b[:offset], '\n')
+}
+
+// Position returns the line and the column of an offset of a node, both
+// counted from 1.
+func (d *Doc) Position(offset int) (line, col int) { return position(d.src, offset) }
 
 func (d *Doc) Root() Node { return d.root }
 
@@ -108,16 +114,17 @@ func (n Node) MemberIndex(key string) (int, error) {
 	return found, nil
 }
 
-// DuplicateKey reports a key that appears twice in the object n.
-func (n Node) DuplicateKey() (string, bool) {
+// DuplicateKey reports the second member of the object n that has the key of
+// an earlier one.
+func (n Node) DuplicateKey() (Member, bool) {
 	seen := make(map[string]bool, len(n.Members))
 	for _, m := range n.Members {
 		if seen[m.Key] {
-			return m.Key, true
+			return m, true
 		}
 		seen[m.Key] = true
 	}
-	return "", false
+	return Member{}, false
 }
 
 type scanner struct {

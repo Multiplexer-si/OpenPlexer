@@ -16,7 +16,7 @@ func TestTheEntryOfEachAgentIsTheOneTheGoldensPin(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			got, _, err := hook.Install(nil, false, agent.Handler("/usr/local/bin/openplexer"))
+			got, _, _, err := hook.Install(nil, false, agent.Handler("/usr/local/bin/openplexer"))
 			if err != nil || string(got) != string(want) {
 				t.Fatalf("install into a missing file gave %s (%v), want %s", got, err, want)
 			}

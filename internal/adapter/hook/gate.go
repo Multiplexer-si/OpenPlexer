@@ -17,12 +17,13 @@ type Env struct {
 	AgentSessionID *string
 	MissionID      *string
 	Overrides      []policy.Override
-	// Root finds the project root above the working directory of a call.
-	// When it finds none, every write and every command that the policy would
-	// judge is denied. With no Root, a path is read as a path under the
-	// working directory, as the reference reads it when it finds no root, and
-	// the adapter fixtures run that way.
-	Root   func(cwd string) (string, bool)
+	// Root finds the project root of the working directory of a call. When it
+	// returns an error, every write and every command that the policy would
+	// judge is denied, and the error completes the sentence "OpenPlexer
+	// blocked this call because". With no Root, a path is read as a path under
+	// the working directory, as the reference reads it when it finds no root,
+	// and the adapter fixtures run that way.
+	Root   func(cwd string) (string, error)
 	Guards []Guard
 	Home   string
 	// ExecGated is set when the role of the member lists commands. A shell
@@ -213,16 +214,17 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	if err != nil {
 		return Verdict{Refuse, err.Error()}
 	}
-	root, found := "", env.Root == nil
+	var root string
+	var noRoot error
 	if env.Root != nil {
-		root, found = env.Root(call.Cwd)
+		root, noRoot = env.Root(call.Cwd)
 	}
 	if v, guarded := env.guard(call.Cwd, root, effect.Writes); guarded {
 		return v
 	}
-	if !found {
+	if noRoot != nil {
 		if len(effect.Writes) > 0 || env.ExecGated && len(effect.Commands) > 0 {
-			return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked this call because it found no project root above %s: no directory there holds .git, .claude, .codex, or .mcp.json, so the paths of the call cannot be placed in a project. Run the agent inside the project.", call.Cwd)}
+			return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked this call because %v.", noRoot)}
 		}
 		return Verdict{}
 	}

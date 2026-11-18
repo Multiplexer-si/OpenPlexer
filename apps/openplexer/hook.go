@@ -37,11 +37,29 @@ func (c command) hook(agent hook.Agent) int {
 	roleUnknown := openErr != nil || !gate.Status().Enforced()
 	env := hook.Env{
 		ExecGated: roleUnknown || gate.ExecGated(),
-		Root:      func(cwd string) (string, bool) { return hook.FindRoot(cwd, userHome) },
+		Root:      c.projectRoot(agent.Name, userHome),
 		Guards:    c.guards(userHome),
 		Home:      userHome,
 	}
 	return c.emit(agent.Handle(input, env, c.judge(agent.Name, gate, openErr)))
+}
+
+func (c command) journal() hook.Journal {
+	return hook.Journal{Dir: filepath.Join(c.home, "installs")}
+}
+
+func (c command) projectRoot(agent, userHome string) func(cwd string) (string, error) {
+	return func(cwd string) (string, error) {
+		recorded, err := c.journal().Roots()
+		if err != nil {
+			return "", fmt.Errorf("it cannot read its record of the installed projects: %w. Run `openplexer install %s --project <dir>` again", err, agent)
+		}
+		root, err := hook.Roots{Home: userHome, Recorded: recorded}.Find(cwd)
+		if err != nil {
+			return "", fmt.Errorf("%w. Run the agent inside the project, or record the project root with `openplexer install %s --project <dir>`", err, agent)
+		}
+		return root, nil
+	}
 }
 
 func (c command) emit(out hook.Output) int {

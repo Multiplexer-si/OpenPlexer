@@ -9,11 +9,20 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 var update = flag.Bool("update", false, "rewrite testdata/install/*/*/installed.json from the current output")
 
 const exe = "/usr/local/bin/openplexer"
+
+var testJournal = func() Journal {
+	dir, err := os.MkdirTemp("", "openplexer-journal")
+	if err != nil {
+		panic(err)
+	}
+	return Journal{Dir: dir}
+}()
 
 func handlerFor(agent string) Handler {
 	if agent == "codex" {
@@ -122,7 +131,6 @@ var claudeEdits = []userEdit{
 type goldenCase struct {
 	agent, dir string
 	edits      []userEdit
-	deleted    string
 }
 
 var goldenCases = []goldenCase{
@@ -141,11 +149,12 @@ var goldenCases = []goldenCase{
 	}},
 	{agent: "claude-code", dir: "bom-two-space"},
 	{agent: "claude-code", dir: "user-hook-named-like-ours"},
-	{agent: "claude-code", dir: "missing", deleted: "a file that did not exist is deleted, not left as an empty file"},
-	{agent: "claude-code", dir: "empty-object", deleted: "{} is deleted: the root emptied, so the file goes"},
-	{agent: "claude-code", dir: "empty-object-newline", deleted: "{} and its final newline are deleted: the root emptied, so the file goes"},
-	{agent: "claude-code", dir: "empty-pretooluse-compact", deleted: "the empty PreToolUse list, and with it the hooks object and the file, are deleted"},
-	{agent: "claude-code", dir: "blank-file", deleted: "a whitespace-only file is deleted"},
+	{agent: "claude-code", dir: "missing", edits: []userEdit{{"no edit", none}, timeoutTo30("claude-code")}},
+	{agent: "claude-code", dir: "empty-object"},
+	{agent: "claude-code", dir: "empty-object-newline"},
+	{agent: "claude-code", dir: "empty-pretooluse-compact"},
+	{agent: "claude-code", dir: "blank-file"},
+	{agent: "claude-code", dir: "bom-only"},
 	{agent: "codex", dir: "crlf-two-space", edits: []userEdit{
 		{"no edit", none},
 		timeoutTo30("codex"),
@@ -156,7 +165,7 @@ var goldenCases = []goldenCase{
 		}},
 	}},
 	{agent: "codex", dir: "compact-one-line", edits: []userEdit{{"no edit", none}, timeoutTo30("codex")}},
-	{agent: "codex", dir: "missing", deleted: "a file that did not exist is deleted, not left as an empty file"},
+	{agent: "codex", dir: "missing"},
 }
 
 func TestInstallUninstallGolden(t *testing.T) {
@@ -170,7 +179,7 @@ func TestInstallUninstallGolden(t *testing.T) {
 			}
 			h := handlerFor(c.agent)
 
-			installed, change, err := Install(before, exists, h)
+			installed, change, added, err := Install(before, exists, h)
 			if err != nil || change != Added {
 				t.Fatalf("Install = %v, %v; want Added", change, err)
 			}
@@ -188,7 +197,7 @@ func TestInstallUninstallGolden(t *testing.T) {
 				t.Fatalf("Install output differs from installed.json\ngot  %q\nwant %q", installed, golden)
 			}
 
-			again, change, err := Install(installed, true, h)
+			again, change, _, err := Install(installed, true, h)
 			if err != nil || change != Unchanged || !bytes.Equal(again, installed) {
 				t.Fatalf("second Install = %v, %v, changed bytes %v; want Unchanged and the same bytes", change, err, !bytes.Equal(again, installed))
 			}
@@ -200,13 +209,13 @@ func TestInstallUninstallGolden(t *testing.T) {
 			for _, e := range edits {
 				t.Run(e.name, func(t *testing.T) {
 					edited := e.fn(t, string(installed))
-					out, remove, change, err := Uninstall([]byte(edited), c.agent)
+					out, remove, change, err := Uninstall([]byte(edited), c.agent, added)
 					if err != nil {
 						t.Fatal(err)
 					}
-					if c.deleted != "" {
+					if !exists {
 						if !remove || change != Removed {
-							t.Fatalf("Uninstall = remove %v, %v; want the file deleted (%s)", remove, change, c.deleted)
+							t.Fatalf("Uninstall = remove %v, %v; want the file that install created deleted", remove, change)
 						}
 						return
 					}
@@ -221,7 +230,7 @@ func TestInstallUninstallGolden(t *testing.T) {
 					if change != wantChange {
 						t.Fatalf("Uninstall change = %v, want %v", change, wantChange)
 					}
-					out2, remove2, change2, err := Uninstall(out, c.agent)
+					out2, remove2, change2, err := Uninstall(out, c.agent, added)
 					if err != nil || remove2 || change2 != Unchanged || !bytes.Equal(out2, out) {
 						t.Fatalf("second Uninstall = %v, %v, %v; want Unchanged and the same bytes", remove2, change2, err)
 					}
@@ -231,29 +240,40 @@ func TestInstallUninstallGolden(t *testing.T) {
 	}
 }
 
-func TestUninstallCollapsesWhatItEmptied(t *testing.T) {
+func TestUninstallRemovesOnlyTheContainersThatInstallAdded(t *testing.T) {
 	ours := `{"type":"command","command":"/b/openplexer hook claude-code pre-tool"}`
 	user := `{"type":"command","command":"mine"}`
-	cases := []struct{ name, before, want string }{
-		{"a group with other handlers keeps them", `{"hooks":{"PreToolUse":[{"matcher":"x","hooks":[` + user + `,` + ours + `]}]}}`, `{"hooks":{"PreToolUse":[{"matcher":"x","hooks":[` + user + `]}]}}`},
-		{"a group that emptied goes", `{"hooks":{"PreToolUse":[{"hooks":[` + user + `]},{"hooks":[` + ours + `]}]}}`, `{"hooks":{"PreToolUse":[{"hooks":[` + user + `]}]}}`},
-		{"an event list that emptied loses its key", `{"hooks":{"PreToolUse":[{"hooks":[` + ours + `]}],"Stop":[{"hooks":[` + user + `]}]}}`, `{"hooks":{"Stop":[{"hooks":[` + user + `]}]}}`},
-		{"a hooks object that emptied loses its key", `{"a":1,"hooks":{"PreToolUse":[{"hooks":[` + ours + `]}]}}`, `{"a":1}`},
-		{"a list that was already empty stays", `{"hooks":{"Stop":[],"PreToolUse":[{"hooks":[` + ours + `]}]}}`, `{"hooks":{"Stop":[]}}`},
-		{"ours under another event is removed too", `{"hooks":{"Stop":[{"hooks":[` + ours + `,` + user + `]}]}}`, `{"hooks":{"Stop":[{"hooks":[` + user + `]}]}}`},
-		{"a handler for the other agent stays", `{"hooks":{"PreToolUse":[{"hooks":[{"command":"/b/openplexer hook codex pre-tool"},` + ours + `]}]}}`, `{"hooks":{"PreToolUse":[{"hooks":[{"command":"/b/openplexer hook codex pre-tool"}]}]}}`},
+	alone := `{"hooks":{"PreToolUse":[{"hooks":[` + ours + `]}]}}`
+	cases := []struct {
+		name, before string
+		added        Level
+		want         string
+	}{
+		{"a group with other handlers keeps them", `{"hooks":{"PreToolUse":[{"matcher":"x","hooks":[` + user + `,` + ours + `]}]}}`, AddedFile, `{"hooks":{"PreToolUse":[{"matcher":"x","hooks":[` + user + `]}]}}`},
+		{"a group that emptied goes", `{"hooks":{"PreToolUse":[{"hooks":[` + user + `]},{"hooks":[` + ours + `]}]}}`, AddedUnknown, `{"hooks":{"PreToolUse":[{"hooks":[` + user + `]}]}}`},
+		{"an event list that install added loses its key", `{"hooks":{"PreToolUse":[{"hooks":[` + ours + `]}],"Stop":[{"hooks":[` + user + `]}]}}`, AddedEventList, `{"hooks":{"Stop":[{"hooks":[` + user + `]}]}}`},
+		{"an event list that install did not add stays empty", `{"hooks":{"PreToolUse":[{"hooks":[` + ours + `]}],"Stop":[{"hooks":[` + user + `]}]}}`, AddedGroup, `{"hooks":{"PreToolUse":[],"Stop":[{"hooks":[` + user + `]}]}}`},
+		{"a hooks object that install added loses its key", `{"a":1,"hooks":{"PreToolUse":[{"hooks":[` + ours + `]}]}}`, AddedHooksObject, `{"a":1}`},
+		{"a hooks object that install did not add stays empty", `{"a":1,"hooks":{"PreToolUse":[{"hooks":[` + ours + `]}]}}`, AddedEventList, `{"a":1,"hooks":{}}`},
+		{"a top level that install did not add stays empty", alone, AddedHooksObject, `{}`},
+		{"a hook with no record takes its containers and leaves the top level", alone, AddedUnknown, `{}`},
+		{"a hook that install put into a list that was there leaves the list", alone, AddedGroup, `{"hooks":{"PreToolUse":[]}}`},
+		{"a document that install wrote into a blank file goes, and the file stays", "  \n" + alone + "\n", AddedDocument, "  \n"},
+		{"a list that was already empty stays", `{"hooks":{"Stop":[],"PreToolUse":[{"hooks":[` + ours + `]}]}}`, AddedFile, `{"hooks":{"Stop":[]}}`},
+		{"ours under another event is removed too", `{"hooks":{"Stop":[{"hooks":[` + ours + `,` + user + `]}]}}`, AddedFile, `{"hooks":{"Stop":[{"hooks":[` + user + `]}]}}`},
+		{"a handler for the other agent stays", `{"hooks":{"PreToolUse":[{"hooks":[{"command":"/b/openplexer hook codex pre-tool"},` + ours + `]}]}}`, AddedFile, `{"hooks":{"PreToolUse":[{"hooks":[{"command":"/b/openplexer hook codex pre-tool"}]}]}}`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			out, remove, _, err := Uninstall([]byte(c.before), "claude-code")
+			out, remove, _, err := Uninstall([]byte(c.before), "claude-code", c.added)
 			if err != nil || remove || string(out) != c.want {
 				t.Fatalf("got %q remove=%v err=%v\nwant %q", out, remove, err, c.want)
 			}
 		})
 	}
-	t.Run("two handlers of ours leave nothing and the file goes", func(t *testing.T) {
+	t.Run("a file that install created and that holds nothing else goes", func(t *testing.T) {
 		before := `{"hooks":{"PreToolUse":[{"hooks":[` + ours + `]}],"Stop":[{"hooks":[` + ours + `]}]}}`
-		_, remove, change, err := Uninstall([]byte(before), "claude-code")
+		_, remove, change, err := Uninstall([]byte(before), "claude-code", AddedFile)
 		if err != nil || !remove || change != Removed {
 			t.Fatalf("got remove=%v change=%v err=%v", remove, change, err)
 		}
@@ -276,7 +296,8 @@ func TestWhatCountsAsOurs(t *testing.T) {
 		{"another timeout and matcher still ours", `{"hooks":{"PreToolUse":[{"matcher":"Read","hooks":[{"command":"/x/openplexer hook claude-code pre-tool --verbose","timeout":99}]}]}}`, Unchanged, ""},
 		{"the other agent's handler is not ours", wrap(`{"command":"/opt/openplexer hook codex pre-tool"}`), Added, ""},
 		{"a different program is not ours", wrap(`{"command":"/opt/other hook claude-code pre-tool"}`), Added, ""},
-		{"a binary whose name starts with openplexer is ours", wrap(`{"command":"/opt/openplexer.test hook claude-code pre-tool --x"}`), Unchanged, ""},
+		{"a binary whose name only starts with openplexer is not ours", wrap(`{"command":"/opt/openplexer-lint hook claude-code --strict"}`), Added, ""},
+		{"a binary with another extension is not ours", wrap(`{"command":"/opt/openplexer.test hook claude-code pre-tool"}`), Added, ""},
 		{"words in two commands are not one handler", wrap(`{"command":"openplexer && hook claude-code"}`), Added, ""},
 		{"a moved executable is repointed", wrap(`{"command":"/old/bin/openplexer hook claude-code pre-tool"}`), Repointed, wrap(`{"command":"` + h.Command + `"}`)},
 		{"a moved executable in a wrapper is left alone", wrap(`{"command":"env A=1 /old/openplexer hook claude-code pre-tool"}`), Unchanged, ""},
@@ -284,7 +305,7 @@ func TestWhatCountsAsOurs(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			out, change, err := Install([]byte(c.text), true, h)
+			out, change, added, err := Install([]byte(c.text), true, h)
 			if err != nil || change != c.want {
 				t.Fatalf("Install = %v, %v; want %v", change, err, c.want)
 			}
@@ -294,7 +315,7 @@ func TestWhatCountsAsOurs(t *testing.T) {
 			case change == Repointed && string(out) != c.wantText:
 				t.Fatalf("got %q, want %q", out, c.wantText)
 			case change == Added:
-				back, remove, _, err := Uninstall(out, "claude-code")
+				back, remove, _, err := Uninstall(out, "claude-code", added)
 				if err != nil || remove || string(back) != c.text {
 					t.Fatalf("Uninstall after Install gave %q (remove=%v, err=%v), want the original", back, remove, err)
 				}
@@ -306,16 +327,18 @@ func TestWhatCountsAsOurs(t *testing.T) {
 func TestRefusals(t *testing.T) {
 	ours := `{"type":"command","command":"/b/openplexer hook claude-code pre-tool"`
 	cases := []struct{ name, text, want string }{
-		{"trailing comma", "{\n  \"a\": 1,\n}", "line 3"},
-		{"a // comment", "{\n  // note\n  \"a\": 1\n}", "line 2"},
-		{"truncated", `{"hooks": {"PreToolUse": [`, "invalid JSON"},
-		{"root is an array", `[]`, "not an object"},
-		{"hooks is an array", `{"hooks":[]}`, "hooks"},
-		{"PreToolUse is an object", `{"hooks":{"PreToolUse":{}}}`, "PreToolUse"},
-		{"duplicate hooks key", `{"hooks":{},"hooks":{}}`, "duplicate key"},
-		{"duplicate top-level key", `{"a":1,"a":2}`, "duplicate key"},
-		{"duplicate command key in our handler", `{"hooks":{"PreToolUse":[{"hooks":[` + ours + `,"command":"x"}]}]}}`, "duplicate key"},
-		{"duplicate key in a group", `{"hooks":{"Stop":[{"matcher":"a","matcher":"b"}]}}`, "duplicate key"},
+		{"trailing comma", "{\n  \"a\": 1,\n}", "invalid JSON at line 3, column 1"},
+		{"a // comment", "{\n  // note\n  \"a\": 1\n}", "invalid JSON at line 2, column 3"},
+		{"truncated", `{"hooks": {"PreToolUse": [`, "invalid JSON at line 1, column 26"},
+		{"root is an array", `[]`, "the top level is array, not an object at line 1, column 1"},
+		{"hooks is an array", "{\n  \"hooks\": []\n}", `"hooks" is array, not an object at line 2, column 12`},
+		{"hooks is null", "{\n  \"hooks\": null\n}", `"hooks" is null, not an object at line 2, column 12`},
+		{"PreToolUse is an object", `{"hooks":{"PreToolUse":{}}}`, "hooks.PreToolUse is object, not an array at line 1, column 24"},
+		{"duplicate hooks key", "{\n  \"hooks\": {},\n  \"hooks\": {}\n}", `duplicate key "hooks" at the top level at line 3, column 3`},
+		{"duplicate top-level key", `{"a":1,"a":2}`, `duplicate key "a" at the top level at line 1, column 8`},
+		{"duplicate event key", `{"hooks":{"Stop":[],"Stop":[]}}`, `duplicate key "Stop" in "hooks" at line 1, column 21`},
+		{"duplicate command key in our handler", `{"hooks":{"PreToolUse":[{"hooks":[` + ours + `,"command":"x"}]}]}}`, `duplicate key "command" in hooks.PreToolUse[0].hooks[0] at line 1, column 105`},
+		{"duplicate key in a group", `{"hooks":{"Stop":[{"matcher":"a","matcher":"b"}]}}`, `duplicate key "matcher" in hooks.Stop[0] at line 1, column 34`},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -324,8 +347,8 @@ func TestRefusals(t *testing.T) {
 				t.Fatal(err)
 			}
 			for name, run := range map[string]func() (Change, error){
-				"install":   func() (Change, error) { return InstallFile(path, handlerFor("claude-code")) },
-				"uninstall": func() (Change, error) { return UninstallFile(path, "claude-code") },
+				"install":   func() (Change, error) { return testJournal.Install(path, handlerFor("claude-code"), "") },
+				"uninstall": func() (Change, error) { return testJournal.Uninstall(path, "claude-code") },
 			} {
 				change, err := run()
 				if err == nil || !strings.Contains(err.Error(), c.want) || change != Unchanged {
@@ -339,7 +362,7 @@ func TestRefusals(t *testing.T) {
 	}
 }
 
-func TestInstallFile(t *testing.T) {
+func TestJournalInstall(t *testing.T) {
 	h := handlerFor("claude-code")
 
 	t.Run("a symlink stays and its target is edited", func(t *testing.T) {
@@ -355,8 +378,8 @@ func TestInstallFile(t *testing.T) {
 		if err := os.Symlink(filepath.Join("dotfiles", "settings.json"), link); err != nil {
 			t.Fatal(err)
 		}
-		if change, err := InstallFile(link, h); err != nil || change != Added {
-			t.Fatalf("InstallFile = %v, %v", change, err)
+		if change, err := testJournal.Install(link, h, ""); err != nil || change != Added {
+			t.Fatalf("Install = %v, %v", change, err)
 		}
 		if info, err := os.Lstat(link); err != nil || info.Mode()&os.ModeSymlink == 0 {
 			t.Fatalf("the symlink was replaced: %v %v", info, err)
@@ -365,8 +388,8 @@ func TestInstallFile(t *testing.T) {
 		if !strings.Contains(string(got), "openplexer hook claude-code pre-tool") {
 			t.Fatalf("target not edited: %q", got)
 		}
-		if change, err := UninstallFile(link, "claude-code"); err != nil || change != Removed {
-			t.Fatalf("UninstallFile = %v, %v", change, err)
+		if change, err := testJournal.Uninstall(link, "claude-code"); err != nil || change != Removed {
+			t.Fatalf("Uninstall = %v, %v", change, err)
 		}
 		if got, _ := os.ReadFile(target); string(got) != "{\n  \"a\": 1\n}\n" {
 			t.Fatalf("target after uninstall: %q", got)
@@ -383,11 +406,11 @@ func TestInstallFile(t *testing.T) {
 		if err := os.Symlink(target, link); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := InstallFile(link, h); err != nil {
+		if _, err := testJournal.Install(link, h, ""); err != nil {
 			t.Fatal(err)
 		}
-		if change, err := UninstallFile(link, "claude-code"); err != nil || change != Removed {
-			t.Fatalf("UninstallFile = %v, %v", change, err)
+		if change, err := testJournal.Uninstall(link, "claude-code"); err != nil || change != Removed {
+			t.Fatalf("Uninstall = %v, %v", change, err)
 		}
 		if got, err := os.ReadFile(link); err != nil || string(got) != "{}\n" {
 			t.Fatalf("the linked file holds %q (%v), want an empty object", got, err)
@@ -400,7 +423,7 @@ func TestInstallFile(t *testing.T) {
 		if err := os.Symlink("real.json", link); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := InstallFile(link, h); err != nil {
+		if _, err := testJournal.Install(link, h, ""); err != nil {
 			t.Fatal(err)
 		}
 		if _, err := os.Stat(filepath.Join(dir, "real.json")); err != nil {
@@ -416,7 +439,7 @@ func TestInstallFile(t *testing.T) {
 		if err := os.WriteFile(path, []byte("{}\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		if _, err := InstallFile(path, h); err != nil {
+		if _, err := testJournal.Install(path, h, ""); err != nil {
 			t.Fatal(err)
 		}
 		if info, _ := os.Stat(path); info.Mode().Perm() != 0o600 {
@@ -426,8 +449,8 @@ func TestInstallFile(t *testing.T) {
 
 	t.Run("a new file gets 0644 and its parent directories", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "a", "b", "settings.json")
-		if change, err := InstallFile(path, h); err != nil || change != Added {
-			t.Fatalf("InstallFile = %v, %v", change, err)
+		if change, err := testJournal.Install(path, h, ""); err != nil || change != Added {
+			t.Fatalf("Install = %v, %v", change, err)
 		}
 		if info, err := os.Stat(path); err != nil || info.Mode().Perm() != 0o644 {
 			t.Fatalf("stat = %v, %v", info, err)
@@ -436,12 +459,12 @@ func TestInstallFile(t *testing.T) {
 
 	t.Run("nothing is written when nothing changes", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "settings.json")
-		if _, err := InstallFile(path, h); err != nil {
+		if _, err := testJournal.Install(path, h, ""); err != nil {
 			t.Fatal(err)
 		}
 		first, _ := os.Stat(path)
-		if change, err := InstallFile(path, h); err != nil || change != Unchanged {
-			t.Fatalf("InstallFile = %v, %v", change, err)
+		if change, err := testJournal.Install(path, h, ""); err != nil || change != Unchanged {
+			t.Fatalf("Install = %v, %v", change, err)
 		}
 		second, _ := os.Stat(path)
 		if !os.SameFile(first, second) || !first.ModTime().Equal(second.ModTime()) {
@@ -451,19 +474,49 @@ func TestInstallFile(t *testing.T) {
 
 	t.Run("uninstall deletes a file that held only our entry and ignores a missing one", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "settings.json")
-		if change, err := UninstallFile(path, "claude-code"); err != nil || change != Unchanged {
+		if change, err := testJournal.Uninstall(path, "claude-code"); err != nil || change != Unchanged {
 			t.Fatalf("on a missing file: %v, %v", change, err)
 		}
-		if _, err := InstallFile(path, h); err != nil {
+		if _, err := testJournal.Install(path, h, ""); err != nil {
 			t.Fatal(err)
 		}
-		if change, err := UninstallFile(path, "claude-code"); err != nil || change != Removed {
-			t.Fatalf("UninstallFile = %v, %v", change, err)
+		if change, err := testJournal.Uninstall(path, "claude-code"); err != nil || change != Removed {
+			t.Fatalf("Uninstall = %v, %v", change, err)
 		}
 		if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 			t.Fatalf("file still there: %v", err)
 		}
 	})
+}
+
+func TestALaterRunRemovesTheTemporaryFileOfAKilledRun(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.json")
+	stale := filepath.Join(dir, ".settings.json.openplexer-123.tmp")
+	fresh := filepath.Join(dir, ".settings.json.openplexer-456.tmp")
+	other := filepath.Join(dir, ".other.json.openplexer-789.tmp")
+	for _, name := range []string{stale, fresh, other} {
+		if err := os.WriteFile(name, []byte("{"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	old := time.Now().Add(-2 * staleAfter)
+	for _, name := range []string{stale, other} {
+		if err := os.Chtimes(name, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := testJournal.Install(path, handlerFor("claude-code"), ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(stale); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the old temporary file of this hook file is still there: %v", err)
+	}
+	for _, name := range []string{fresh, other} {
+		if _, err := os.Stat(name); err != nil {
+			t.Errorf("%s is gone, want a file that a live run may hold, and a file of another hook file, kept: %v", filepath.Base(name), err)
+		}
+	}
 }
 
 func TestFileChangedWhileEditing(t *testing.T) {
@@ -475,7 +528,7 @@ func TestFileChangedWhileEditing(t *testing.T) {
 	}{
 		{"install", "{}\n", func(path string, steal func()) error {
 			_, err := editFile(path, func(text []byte, exists bool) ([]byte, bool, Change, error) {
-				out, change, err := Install(text, exists, handlerFor("claude-code"))
+				out, change, _, err := Install(text, exists, handlerFor("claude-code"))
 				steal()
 				return out, false, change, err
 			})
@@ -483,7 +536,7 @@ func TestFileChangedWhileEditing(t *testing.T) {
 		}},
 		{"uninstall", `{"a":1,"hooks":{"PreToolUse":[{"hooks":[{"command":"/b/openplexer hook claude-code pre-tool"}]}]}}`, func(path string, steal func()) error {
 			_, err := editFile(path, func(text []byte, exists bool) ([]byte, bool, Change, error) {
-				out, remove, change, err := Uninstall(text, "claude-code")
+				out, remove, change, err := Uninstall(text, "claude-code", AddedFile)
 				steal()
 				return out, remove, change, err
 			})

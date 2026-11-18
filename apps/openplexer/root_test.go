@@ -69,3 +69,43 @@ func TestHookBlocksACallWhenTwoDirectoriesCouldBeTheRoot(t *testing.T) {
 		})
 	}
 }
+
+func TestProjectFlagMeansTheProjectScopeAndUninstallForgetsTheRoot(t *testing.T) {
+	c := loadedCLI(t)
+	root := project(t)
+	web := filepath.Join(root, "web")
+	nestedRepositories["a nested .git directory"](t, web)
+	call := callJSON("Write", web, map[string]string{"file_path": filepath.Join(root, "src", "a.go"), "content": "x"})
+
+	out := c.must(exitOK, "install", "claude-code", "--project", root)
+	if !strings.Contains(out, "in "+filepath.Join(root, ".claude", "settings.json")) || !strings.Contains(out, "recorded "+root+" as the project root") {
+		t.Errorf("install --project printed %q, want the project hook file and the recorded root", out)
+	}
+	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || reason != "" {
+		t.Errorf("with the root recorded: exit %d, reason %q, want the write to src judged and allowed", status, reason)
+	}
+	if status, reason, _ := c.hookCall("codex", callJSON("Bash", web, map[string]string{"command": "touch ../src/b.go"})); status != 0 || !strings.Contains(reason, `denied the command "touch ../src/b.go"`) {
+		t.Errorf("the other agent in the recorded project: exit %d, reason %q, want the call judged from the recorded root", status, reason)
+	}
+	if out := c.must(exitOK, "install", "claude-code", "--project", root); !strings.Contains(out, "already") {
+		t.Errorf("a second install printed %q", out)
+	}
+	c.must(exitOK, "uninstall", "claude-code", "--project", root)
+	if entries, _ := os.ReadDir(filepath.Join(os.Getenv("OPENPLEXER_HOME"), "installs")); len(entries) != 0 {
+		t.Errorf("the journal still holds %d entries after uninstall", len(entries))
+	}
+	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, "more than one directory") {
+		t.Errorf("after uninstall: exit %d, reason %q, want the two candidates named again", status, reason)
+	}
+}
+
+func TestHookBlocksACallWhenItCannotReadTheJournal(t *testing.T) {
+	c := loadedCLI(t)
+	root := project(t)
+	c.must(exitOK, "install", "codex", "--project", root)
+	writeFile(t, filepath.Join(os.Getenv("OPENPLEXER_HOME"), "installs", "broken.json"), "{")
+	call := callJSON("Write", root, map[string]string{"file_path": "src/a.go", "content": "x"})
+	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, "cannot read its record of the installed projects") {
+		t.Errorf("exit %d, reason %q, want a denial that names the record", status, reason)
+	}
+}

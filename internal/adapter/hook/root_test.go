@@ -18,34 +18,73 @@ func mkdirs(t *testing.T, paths ...string) {
 	}
 }
 
-func TestFindRoot(t *testing.T) {
+func TestRootsFind(t *testing.T) {
 	home := t.TempDir()
 	repo := filepath.Join(home, "repo")
 	mkdirs(t, filepath.Join(repo, ".git"), filepath.Join(repo, "web", ".claude"), filepath.Join(home, ".claude"))
 	worktree := filepath.Join(home, "worktree")
 	mkdirs(t, filepath.Join(worktree, "src"))
-	if err := os.WriteFile(filepath.Join(worktree, ".git"), []byte("gitdir: x\n"), 0o644); err != nil {
-		t.Fatal(err)
+	gitlink := func(dir string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(dir, ".git"), []byte("gitdir: x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
+	gitlink(worktree)
 	bare := filepath.Join(home, "bare", "sub")
 	mkdirs(t, filepath.Join(home, "bare", ".codex"), bare)
 	nothing := filepath.Join(home, "nothing", "sub")
 	mkdirs(t, nothing)
+	super := filepath.Join(home, "super")
+	mkdirs(t, filepath.Join(super, ".git"), filepath.Join(super, "web", "src"), filepath.Join(super, "lib", ".git"))
+	gitlink(filepath.Join(super, "web"))
+	planted := filepath.Join(home, "planted")
+	mkdirs(t, filepath.Join(planted, ".claude"), filepath.Join(planted, "web", ".git"))
+	nested := filepath.Join(home, "nested")
+	mkdirs(t, filepath.Join(nested, ".codex"), filepath.Join(nested, "web", ".claude"))
+	alias := filepath.Join(home, "alias")
+	if err := os.Symlink(super, alias); err != nil {
+		t.Fatal(err)
+	}
 
 	for _, c := range []struct {
-		name, cwd, want string
+		name, cwd string
+		recorded  []string
+		want      string
+		ambiguous []string
 	}{
-		{"the nearest .git above cwd", filepath.Join(repo, "web"), repo},
-		{"a .claude below the .git does not move the root", filepath.Join(repo, "web"), repo},
-		{"a .git file of a worktree", filepath.Join(worktree, "src"), worktree},
-		{"an agent marker when there is no .git", bare, filepath.Join(home, "bare")},
-		{"the home directory is never a root", nothing, ""},
-		{"cwd is the root", repo, repo},
+		{name: "the one .git above cwd", cwd: filepath.Join(repo, "web"), want: repo},
+		{name: "a .claude below the .git does not move the root", cwd: filepath.Join(repo, "web"), want: repo},
+		{name: "a .git file of a worktree", cwd: filepath.Join(worktree, "src"), want: worktree},
+		{name: "an agent marker when there is no .git", cwd: bare, want: filepath.Join(home, "bare")},
+		{name: "the home directory is never a root", cwd: nothing},
+		{name: "cwd is the root", cwd: repo, want: repo},
+		{name: "a submodule with a gitlink file has two candidates", cwd: filepath.Join(super, "web", "src"), ambiguous: []string{filepath.Join(super, "web"), super}},
+		{name: "a nested .git directory has two candidates", cwd: filepath.Join(super, "lib"), ambiguous: []string{filepath.Join(super, "lib"), super}},
+		{name: "a .git below a directory that only an agent marker names has two candidates", cwd: filepath.Join(planted, "web"), ambiguous: []string{filepath.Join(planted, "web"), planted}},
+		{name: "two agent markers and no .git have two candidates", cwd: filepath.Join(nested, "web"), ambiguous: []string{filepath.Join(nested, "web"), nested}},
+		{name: "a recorded root wins over a submodule below it", cwd: filepath.Join(super, "web", "src"), recorded: []string{super}, want: super},
+		{name: "a recorded root wins over a nested .git directory", cwd: filepath.Join(super, "lib"), recorded: []string{super}, want: super},
+		{name: "the nearest recorded root wins", cwd: filepath.Join(super, "web", "src"), recorded: []string{super, filepath.Join(super, "web")}, want: filepath.Join(super, "web")},
+		{name: "a recorded root is spelled as cwd spells it", cwd: filepath.Join(alias, "web"), recorded: []string{super}, want: alias},
+		{name: "a recorded root that is gone is not used", cwd: filepath.Join(repo, "web"), recorded: []string{filepath.Join(home, "gone")}, want: repo},
+		{name: "a recorded root elsewhere is not used", cwd: filepath.Join(super, "web"), recorded: []string{repo}, ambiguous: []string{filepath.Join(super, "web"), super}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			got, ok := FindRoot(c.cwd, home)
-			if got != c.want || ok != (c.want != "") {
-				t.Fatalf("FindRoot(%q) = %q, %v, want %q", c.cwd, got, ok, c.want)
+			got, err := Roots{Home: home, Recorded: c.recorded}.Find(c.cwd)
+			switch {
+			case c.want != "":
+				if got != c.want || err != nil {
+					t.Fatalf("Find(%q) = %q, %v, want %q", c.cwd, got, err, c.want)
+				}
+			case c.ambiguous != nil:
+				if got != "" || err == nil || !strings.Contains(err.Error(), "more than one directory") || !strings.Contains(err.Error(), strings.Join(c.ambiguous, " and ")) {
+					t.Fatalf("Find(%q) = %q, %v, want an error that names %v", c.cwd, got, err, c.ambiguous)
+				}
+			default:
+				if got != "" || err == nil || !strings.Contains(err.Error(), "no project root") {
+					t.Fatalf("Find(%q) = %q, %v, want an error that says no project root", c.cwd, got, err)
+				}
 			}
 		})
 	}
@@ -64,7 +103,7 @@ func TestPathsAreMeasuredFromTheRootWhenCwdIsBelowIt(t *testing.T) {
 	home := t.TempDir()
 	root := filepath.Join(home, "proj")
 	mkdirs(t, filepath.Join(root, ".git"), filepath.Join(root, "web"), filepath.Join(root, "api"))
-	env := Env{Root: func(cwd string) (string, bool) { return FindRoot(cwd, home) }}
+	env := Env{Root: Roots{Home: home}.Find}
 	tools := Tools{"Write": FileTool("file_path"), "Bash": ShellTool}
 	web := filepath.Join(root, "web")
 	for _, c := range []struct{ name, input, want string }{
@@ -94,7 +133,7 @@ func TestWithNoRootEveryWriteAndGatedCommandIsDenied(t *testing.T) {
 	call := func(tool, field, value string) []byte {
 		return []byte(`{"hook_event_name":"PreToolUse","tool_name":"` + tool + `","cwd":"` + cwd + `","tool_input":{"` + field + `":"` + value + `"}}`)
 	}
-	root := func(cwd string) (string, bool) { return FindRoot(cwd, home) }
+	root := Roots{Home: home}.Find
 	for _, c := range []struct {
 		name      string
 		input     []byte
