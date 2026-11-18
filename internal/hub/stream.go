@@ -2,7 +2,6 @@ package hub
 
 import (
 	"bufio"
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -143,7 +142,7 @@ func readResumes(ctx context.Context, r *http.Request, resumes chan<- room.Resum
 	scanner := bufio.NewScanner(r.Body)
 	scanner.Buffer(make([]byte, 4096), maxRoomBody)
 	for scanner.Scan() {
-		message, err := room.ParseMessage(bytes.TrimSpace(scanner.Bytes()))
+		message, err := room.ParseMessage(scanner.Bytes())
 		if err != nil || message.V() != 1 || message.Room() != r.PathValue("room") {
 			continue
 		}
