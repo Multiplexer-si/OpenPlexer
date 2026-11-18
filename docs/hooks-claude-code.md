@@ -108,7 +108,7 @@ Record the repository, and not a worktree or a submodule inside it. A recorded d
 
 If a record cannot be read, the hook denies every write and every judged command, and the reason names the file. `install` for the same hook file writes the record again. A file in `installs` that belongs to no install, or to a hook file that you no longer have, stays damaged, so delete it yourself. The hook does not let an agent delete it. The loss of a record costs only what it held: run `openplexer install claude-code --project <dir>` again to record the root, and with no record `uninstall` leaves `{}` in a file that `install` created.
 
-`install` and `uninstall` lock the `installs` directory while they run, so two of them at the same time do not lose a record.
+On macOS and Linux, `install` and `uninstall` lock the `installs` directory while they run, so two of them at the same time do not lose a record.
 
 ## What the hook does not see
 
@@ -122,8 +122,9 @@ Each item is an action that Claude Code can take and the hook cannot see, or a w
 
 - A write by a program that a command starts, such as `npm test`, `make`, `python script.py`, or `bash -c "..."`.
 - A write by a command that is not in the list, such as `git rm`, `git checkout`, `git apply`, `patch`, `tar`, `unzip`, `dd`, `curl -o`, or `wget -O`.
-- A command that follows another word, such as `sudo rm`, `env rm`, or `X=1 rm`.
+- A command that follows another word or an opening parenthesis, such as `sudo rm`, `env rm`, `X=1 rm`, `(rm ...)`, or `then rm`.
 - A target with a variable, a command substitution, or a wildcard.
+- A source of `mv` under `~` is read as a path of the project, as every `~` in a shell command is, so `mv ~/Downloads/a.txt src/` is judged as a write to `~/Downloads/a.txt` and a policy with no area for it denies the call. Spell the path in full.
 - A relative path after `cd`. The hook reads it from the directory of the hook call.
 - A write by a tool that Claude Code runs with a path that the hook cannot expand, such as `~`.
 
@@ -135,7 +136,7 @@ There is no check after the command. A write that the hook did not name stays un
 
 **Commands that the policy matches by their first words.** A granted `npm test` allows whatever script `npm test` runs. A granted command with a quoted `;`, `|`, `&`, `<`, or `>` is denied, as [the open questions of the adapter contract](../spec/adapter/README.md#open-questions) say.
 
-**A hook that does not run.** The hook does not run before you accept the workspace trust dialog. A session started with `claude -p` or the SDK treats the folder as trusted. A person or a program that can write a settings file, or that passes `--settings '{"disableAllHooks": true}'`, can switch the hook off. The hook denies a write through `Write`, `Edit`, `NotebookEdit`, or `Bash` to the user and project settings files of Claude Code and Codex, and to the OpenPlexer home, whatever the policy says. For a shell command, that is a write that the hook finds, as the list above says, and it includes a move of one of these files to another place. A write that the hook does not find is not seen. Three more ways reach these files: a command that removes or moves a directory above a settings file, such as `rm -rf ~/.claude`, a path through a symbolic link, and on macOS a path through `/System/Volumes/Data` or the `/tmp` spelling of `/private/tmp`. [The trust model](trust-model.md#decisions-settled-by-install-and-the-hook-command) lists them all. A write by anything else than these tools is not seen.
+**A hook that does not run.** The hook does not run before you accept the workspace trust dialog. A session started with `claude -p` or the SDK treats the folder as trusted. A person or a program that can write a settings file, or that passes `--settings '{"disableAllHooks": true}'`, can switch the hook off. The hook denies a write through `Write`, `Edit`, `NotebookEdit`, or `Bash` to the user and project settings files of Claude Code and Codex, and to the OpenPlexer home, whatever the policy says. For a shell command, that is a write that the hook finds, as the list above says, and it includes a move of one of these files to another place. A write that the hook does not find is not seen. More ways reach these files: a command that removes or moves a directory above a settings file, such as `rm -rf ~/.claude`, a command that copies or moves a file into that directory and names only the directory, such as `cp settings.json ~/.claude/`, a path through a symbolic link, and on macOS a path through `/System/Volumes/Data` or the `/tmp` spelling of `/private/tmp`. [The trust model](trust-model.md#decisions-settled-by-install-and-the-hook-command) gives the list. A write by anything else than these tools is not seen.
 
 **A failed hook.** The entry that `install` writes sets `onFailure` to `block`. If you remove that field, a hook that crashes, times out, or exits with a code other than 0 or 2 lets the call run.
 

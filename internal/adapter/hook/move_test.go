@@ -46,6 +46,9 @@ func TestMovingAGuardedPathAwayIsDenied(t *testing.T) {
 		"git mv -k src/a.go .claude/settings.json src/",
 		"git -C .claude mv settings.json s.json",
 		"git -c core.editor=true mv .claude/settings.json src/s.json",
+		"git -C src -C " + root + " mv .claude/settings.json src/s.json",
+		"git --attr-source HEAD mv .claude/settings.json src/s.json",
+		"git -C $PWD mv " + userSettings + " /private/tmp/s.json",
 	} {
 		t.Run(command, func(t *testing.T) {
 			v := Decide(bash(command), env, allow, Tools{"Bash": ShellTool})

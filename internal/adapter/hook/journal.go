@@ -83,9 +83,6 @@ func (j Journal) put(r record) error {
 // The record is written before the file, and Uninstall removes it after the
 // file, so a run that is killed leaves a record too many and never a hook
 // without one.
-//
-// Install and Uninstall hold a lock on the directory of the journal, so two
-// runs cannot undo the record of each other.
 func (j Journal) Install(path string, h Handler, root string) (Change, error) {
 	if err := os.MkdirAll(j.Dir, 0o700); err != nil {
 		return Unchanged, fmt.Errorf("%w. The file is unchanged", err)

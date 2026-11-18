@@ -364,12 +364,8 @@ func WriteTargets(command string) []string {
 	return targets
 }
 
-var gitValueOptions = map[string]bool{"-C": true, "-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--config-env": true}
+var gitValueOptions = map[string]bool{"-C": true, "-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--config-env": true, "--attr-source": true}
 
-// MovedPaths lists every operand of mv and of git mv, in the order that the
-// command names them. A move takes its source away, which WriteTargets does
-// not report, because the reference reads only the destination of mv and
-// nothing of git mv.
 func MovedPaths(command string) []string {
 	var moved []string
 	for _, words := range Segments(command) {
@@ -379,7 +375,7 @@ func MovedPaths(command string) []string {
 			for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 				if gitValueOptions[args[0]] && len(args) > 1 {
 					if args[0] == "-C" {
-						dir = filepath.Join(dir, args[1])
+						dir = under(dir, args[1])
 					}
 					args = args[1:]
 				}
@@ -392,9 +388,6 @@ func MovedPaths(command string) []string {
 		} else if verb != "mv" {
 			continue
 		}
-		if dynamic.MatchString(dir) {
-			continue
-		}
 		ended := false
 		for k := 0; k < len(args); k++ {
 			a := args[k]
@@ -405,16 +398,22 @@ func MovedPaths(command string) []string {
 				if a == "" || dynamic.MatchString(a) {
 					continue
 				}
-				if dir != "" && !filepath.IsAbs(a) && a != "~" && !strings.HasPrefix(a, "~/") {
-					a = filepath.Join(dir, a)
+				if a = under(dir, a); !dynamic.MatchString(a) {
+					moved = append(moved, a)
 				}
-				moved = append(moved, a)
 			case verb == "mv" && (targetDirOpt.MatchString(a) || valueOptions["mv"].MatchString(a)):
 				k++
 			}
 		}
 	}
 	return moved
+}
+
+func under(dir, path string) string {
+	if dir == "" || filepath.IsAbs(path) || path == "~" || strings.HasPrefix(path, "~/") {
+		return path
+	}
+	return filepath.Join(dir, path)
 }
 
 var substitution = regexp.MustCompile("\\$\\(|`|[<>]\\(")

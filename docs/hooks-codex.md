@@ -97,7 +97,7 @@ Record the repository, and not a worktree or a submodule inside it. A recorded d
 
 If a record cannot be read, the hook denies every write and every judged command, and the reason names the file. `install` for the same hook file writes the record again. A file in `installs` that belongs to no install, or to a hook file that you no longer have, stays damaged, so delete it yourself. The hook does not let an agent delete it. The loss of a record costs only what it held: run `openplexer install codex --project <dir>` again to record the root, and with no record `uninstall` leaves `{}` in a file that `install` created.
 
-`install` and `uninstall` lock the `installs` directory while they run, so two of them at the same time do not lose a record.
+On macOS and Linux, `install` and `uninstall` lock the `installs` directory while they run, so two of them at the same time do not lose a record.
 
 ## What the hook does not see
 
@@ -111,8 +111,9 @@ Each item is an action that Codex can take and the hook cannot see, or a way to 
 
 - A write by a program that a command starts, such as `npm test`, `make`, `python script.py`, or `bash -c "..."`.
 - A write by a command that is not in the list, such as `git rm`, `git checkout`, `git apply`, `patch`, `tar`, `unzip`, `dd`, `curl -o`, or `wget -O`.
-- A command that follows another word, such as `sudo rm`, `env rm`, or `X=1 rm`.
+- A command that follows another word or an opening parenthesis, such as `sudo rm`, `env rm`, `X=1 rm`, `(rm ...)`, or `then rm`.
 - A target with a variable, a command substitution, or a wildcard.
+- A source of `mv` under `~` is read as a path of the project, as every `~` in a shell command is, so `mv ~/Downloads/a.txt src/` is judged as a write to `~/Downloads/a.txt` and a policy with no area for it denies the call. Spell the path in full.
 - A relative path after `cd`. The hook reads it from the directory of the hook call.
 
 There is no check after the command. A write that the hook did not name stays unseen.
@@ -125,7 +126,7 @@ There is no check after the command. A write that the hook did not name stays un
 
 **Commands that the policy matches by their first words.** A granted `npm test` allows whatever script `npm test` runs. A granted command with a quoted `;`, `|`, `&`, `<`, or `>` is denied, as [the open questions of the adapter contract](../spec/adapter/README.md#open-questions) say.
 
-**A hook that does not run.** Codex runs no hook of a project until the project is trusted and the hook is trusted, and it skips a changed hook until you trust it again. A person who sets `hooks = false` under `[features]` in `config.toml` turns every hook off. The hook denies a write through `apply_patch` or `Bash` to `hooks.json` and `config.toml` of the user and of the project, to the settings files of Claude Code, and to the OpenPlexer home, whatever the policy says. For a shell command, that is a write that the hook finds, as the list above says, and it includes a move of one of these files to another place. A write that the hook does not find is not seen. Three more ways reach these files: a command that removes or moves a directory above a settings file, such as `rm -rf ~/.claude`, a path through a symbolic link, and on macOS a path through `/System/Volumes/Data` or the `/tmp` spelling of `/private/tmp`. [The trust model](trust-model.md#decisions-settled-by-install-and-the-hook-command) lists them all. A write by anything else than these tools is not seen.
+**A hook that does not run.** Codex runs no hook of a project until the project is trusted and the hook is trusted, and it skips a changed hook until you trust it again. A person who sets `hooks = false` under `[features]` in `config.toml` turns every hook off. The hook denies a write through `apply_patch` or `Bash` to `hooks.json` and `config.toml` of the user and of the project, to the settings files of Claude Code, and to the OpenPlexer home, whatever the policy says. For a shell command, that is a write that the hook finds, as the list above says, and it includes a move of one of these files to another place. A write that the hook does not find is not seen. More ways reach these files: a command that removes or moves a directory above a settings file, such as `rm -rf ~/.claude`, a command that copies or moves a file into that directory and names only the directory, such as `cp settings.json ~/.claude/`, a path through a symbolic link, and on macOS a path through `/System/Volumes/Data` or the `/tmp` spelling of `/private/tmp`. [The trust model](trust-model.md#decisions-settled-by-install-and-the-hook-command) gives the list. A write by anything else than these tools is not seen.
 
 **A failed hook.** The Codex documentation says that a `PreToolUse` error, a timeout, or a malformed response can let the tool run. Codex has no option that blocks the call when a hook fails, so a hook that cannot start, is killed, or runs past its `timeout` lets the call run. The hook blocks on its own errors with exit status 2, and it ends itself with exit status 2 after 4 seconds, before the `timeout` of 5 seconds. It cannot block when the binary is missing or the process never starts.
 

@@ -8,8 +8,8 @@ import (
 	"syscall"
 )
 
-// lockDir blocks until this process holds the lock on dir. The end of the
-// process releases it, so a run that is killed does not block the next one.
+// The end of the process releases the lock, so a run that is killed does not
+// block the next one.
 func lockDir(dir string) (unlock func(), err error) {
 	file, err := os.Open(dir)
 	if err != nil {
