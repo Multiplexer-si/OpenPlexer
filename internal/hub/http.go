@@ -46,6 +46,7 @@ func (s *Store) Handler() http.Handler {
 		}
 		return signed, s.save(st)
 	}))
+	s.roomRoutes(mux)
 	return mux
 }
 

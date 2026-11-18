@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 )
@@ -43,17 +44,22 @@ type Project struct {
 }
 
 type state struct {
-	SigningKey []byte                  `json:"signing_key"`
-	Members    map[string]member       `json:"members"`
-	Projects   map[string]Project      `json:"projects"`
-	Policies   map[string]SignedBundle `json:"policies"`
+	SigningKey []byte                   `json:"signing_key"`
+	Members    map[string]member        `json:"members"`
+	Projects   map[string]Project       `json:"projects"`
+	Policies   map[string]SignedBundle  `json:"policies"`
+	Rooms      map[string][]eventRecord `json:"rooms,omitempty"`
+	Claims     map[string]lease         `json:"claims,omitempty"`
 }
 
 // Store is a data directory shared by the server and local admin commands.
 // Every operation reloads state while holding the same process-safe lock.
-type Store struct{ dir string }
+type Store struct {
+	dir string
+	now func() time.Time
+}
 
-func Open(dir string) *Store { return &Store{dir: dir} }
+func Open(dir string) *Store { return &Store{dir: dir, now: time.Now} }
 
 func (s *Store) Init() error {
 	if err := os.MkdirAll(s.dir, 0700); err != nil {
@@ -173,6 +179,12 @@ func (s *Store) load() (*state, error) {
 	}
 	if st.Members == nil || st.Projects == nil || st.Policies == nil {
 		return nil, errors.New("hub state is missing required data")
+	}
+	if st.Rooms == nil {
+		st.Rooms = make(map[string][]eventRecord)
+	}
+	if st.Claims == nil {
+		st.Claims = make(map[string]lease)
 	}
 	return &st, nil
 }
