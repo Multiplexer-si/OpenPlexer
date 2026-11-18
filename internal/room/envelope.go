@@ -49,9 +49,10 @@ func readEnvelope(text []byte) (envelope, []Issue) {
 	field(r, "", o, "event_id", optional, r.nonEmptyText)
 	field(r, "", o, "ts", optional, r.nonEmptyText)
 	if _, e.hasPayload = o["payload"]; e.hasPayload {
-		var parts struct{ Payload json.RawMessage }
-		_ = json.Unmarshal(text, &parts)
-		e.payload = compact(parts.Payload)
+		// A map, because a struct field also takes a key in another case.
+		var members map[string]json.RawMessage
+		_ = json.Unmarshal(text, &members)
+		e.payload = compact(members["payload"])
 	}
 	return e, r.issues
 }
