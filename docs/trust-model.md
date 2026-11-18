@@ -293,7 +293,7 @@ Each item below is a compatibility or trust decision that is not settled. The is
 The [single-team hub](hub.md) implements these choices from [issue 19](https://github.com/Multiplexer-si/OpenPlexer/issues/19).
 
 - **Where the hub keeps its keys.** Initialization generates one ES256 policy key. The hub keeps the private key in its owner-only state file and serves the public key as a JWKS. Bearer tokens are random and the hub stores SHA-256 token hashes. Key rotation stays open with the daemon key refresh and revocation decisions.
-- **What the hub retains.** The hub keeps all Room history and the latest signed policy for each project. It deletes ended leases from the active claim store and removes a member's token hash on revocation. The history has no automatic pruning. Audit storage and checkpoints belong to [issue 23](https://github.com/Multiplexer-si/OpenPlexer/issues/23).
+- **What the hub retains.** The hub keeps all Room history and the latest signed policy for each project. It deletes ended leases from the active claim store and removes a member's token hash on revocation. The history has no automatic pruning. Audit storage belongs to the append, export, and verifier work in [issue 24](https://github.com/Multiplexer-si/OpenPlexer/issues/24).
 
 ## Decisions settled by the hook adapters
 

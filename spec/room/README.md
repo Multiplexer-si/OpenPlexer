@@ -111,7 +111,7 @@ The four sections below give the rules that a hub and a receiver follow on a con
 - **Reference** means that the rule is the behavior of the reference at commit `7d80045a`, and the last column names the file.
 - **Chosen** means that version 1 sets the rule. The reference differs or has no rule, and [Intentional differences from the reference](#intentional-differences-from-the-reference) gives the reason.
 
-The Go package `internal/room` holds each rule as a model: `Subscription` for the hub side of a connection, `Receiver` for the other side, and one table for the error codes. Where a fixture pins a rule, the last column names the fixture. The tests of `internal/room` pin every other rule that a `Subscription` or a `Receiver` follows. Rules O1, E5, E8, and C5 are rules of the storage and of the claim service of the hub. `internal/room` has no model of them and no test, and [issue 19](https://github.com/Multiplexer-si/OpenPlexer/issues/19) builds the hub and pins them.
+The Go package `internal/room` models connection behavior with `Subscription` for the hub, `Receiver` for the other side, and one table for the error codes. Where a fixture pins a rule, the last column names the fixture. The tests of `internal/room` pin every other rule that a `Subscription` or a `Receiver` follows. The hub implements and tests the storage and claim rules O1, E5, and E8 under [issue 19](https://github.com/Multiplexer-si/OpenPlexer/issues/19).
 
 ### Order
 
@@ -152,6 +152,8 @@ A receiver builds the claims of a Room from the `claim` and `release` events tha
 | C4 | The hub accepts a `last_seq` that is higher than the `seq` of the last event of the Room. It then sends nothing until an event passes `last_seq`. A receiver never sends a `last_seq` that it did not receive. | Reference | fixture `deliver` |
 | C5 | A second `resume` for a Room on one connection replaces the first. | Reference | `apps/hub/src/ws/server.ts` |
 | C6 | An `error` with the code `behind` and a `room` means that the hub has stopped sending the events of that Room on this connection. The receiver sends a `resume` for the Room at once, even if it already sent one. | Reference | `apps/hub/src/ws/server.ts`, `apps/daemon/src/sync/client.ts` |
+
+C5 needs a live Room connection that can receive multiple `resume` messages. The single-team hub serves replay through independent HTTP requests. Same-connection subscription replacement belongs with live Room delivery in [issue 20](https://github.com/Multiplexer-si/OpenPlexer/issues/20).
 
 How long a receiver waits before it opens a new connection is not part of the contract. The message `snapshot_required` of the reference belongs to retention, which is out of scope.
 

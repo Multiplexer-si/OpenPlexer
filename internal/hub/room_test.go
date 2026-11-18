@@ -67,7 +67,7 @@ func TestRoomSequenceAndResume(t *testing.T) {
 	}
 
 	// A replay request uses its own cursor, including after another request
-	// for this Room supplied a higher cursor (the HTTP counterpart of C5).
+	// for this Room supplied a higher cursor.
 	tail := first.Expected.Sent[1:]
 	assertSequences(t, events(t, restarted, fmt.Sprintf("%s?last_seq=%d", path, tail[0]), token), tail[1:])
 	last := first.Expected.Sent[len(first.Expected.Sent)-1]
@@ -183,6 +183,27 @@ func TestClaimRenewalAndExpiry(t *testing.T) {
 	}
 	wantStatus(t, call(h, "POST", prefix+"/renew", token, validRenew, ""), http.StatusNotFound)
 	assertSequences(t, events(t, h, path, token), []int64{source.Seq(), expired.Seq()})
+}
+
+func TestClaimRenewalCanShortenLease(t *testing.T) {
+	source, _, _ := claimFixtures(t)
+	s, token := roomStore(t, source.Mission(), source.OnBehalfOf())
+	now := parseTime(t, source.At())
+	s.now = func() time.Time { return now }
+	h := s.Handler()
+	path := claimsURL(source.Mission())
+	claim, _ := createFrom(t, h, path, token, source, map[string]any{"ttl_seconds": 30})
+
+	now = now.Add(5 * time.Second)
+	body := encode(t, map[string]any{"session_id": source.Agent().ID, "ttl_seconds": 10})
+	res := call(h, "POST", path+"/"+claim.ID+"/renew", token, body, "")
+	wantStatus(t, res, http.StatusOK)
+	var renewed lease
+	decode(t, res.Body.Bytes(), &renewed)
+	if want := now.Add(10 * time.Second); !renewed.ExpiresAt.Equal(want) || !renewed.ExpiresAt.Before(claim.ExpiresAt) {
+		t.Fatalf("renewed expiry = %v, want %v before original %v", renewed.ExpiresAt, want, claim.ExpiresAt)
+	}
+	assertSequences(t, events(t, h, eventsURL(source.Mission()), token), []int64{source.Seq()})
 }
 
 func TestClaimConflictsAndRelease(t *testing.T) {
