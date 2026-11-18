@@ -105,7 +105,7 @@ func TestHookBlocksACallWhenItCannotReadTheJournal(t *testing.T) {
 	c.must(exitOK, "install", "codex", "--project", root)
 	writeFile(t, filepath.Join(os.Getenv("OPENPLEXER_HOME"), "installs", "broken.json"), "{")
 	call := callJSON("Write", root, map[string]string{"file_path": "src/a.go", "content": "x"})
-	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, "cannot read its record of the installed projects") {
+	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, "the record of the installed projects cannot be read") {
 		t.Errorf("exit %d, reason %q, want a denial that names the record", status, reason)
 	}
 }

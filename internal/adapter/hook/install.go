@@ -285,12 +285,10 @@ func (l *layout) repoint(text []byte, h Handler) ([]byte, Change, error) {
 	return out, Repointed, err
 }
 
-// Uninstall removes every handler of ours for agent, and each group that this
-// empties. With a level from Install, it removes an emptied event list, hooks
-// object, or document only when install put it there. With AddedUnknown, it
-// removes each emptied container and keeps an empty top level. When added is
-// AddedFile and nothing is left, remove is true and the caller deletes the
-// file.
+// Uninstall removes every handler of ours for agent, and each container that
+// this empties and that install added. With AddedUnknown, it cannot tell, so
+// it removes each emptied container and keeps the top level. remove tells the
+// caller to delete the file.
 func Uninstall(text []byte, agent string, added Level) (out []byte, remove bool, change Change, err error) {
 	if added == AddedUnknown {
 		added = AddedHooksObject
@@ -307,17 +305,17 @@ func Uninstall(text []byte, agent string, added Level) (out []byte, remove bool,
 		if len(l.ours) == 0 {
 			return cur, false, change, nil
 		}
-		edit, whole, err := l.removal(l.ours[0], added)
+		edit, wholeDocument, err := l.removal(l.ours[0], added)
 		if err != nil {
 			return nil, false, Unchanged, err
 		}
-		if whole && added == AddedFile {
+		if wholeDocument && added == AddedFile {
 			return nil, true, Removed, nil
 		}
 		if cur, err = l.doc.Apply(edit); err != nil {
 			return nil, false, Unchanged, err
 		}
-		if whole {
+		if wholeDocument {
 			// Install wrote the document and one line break after it.
 			cur = bytes.TrimSuffix(cur, []byte("\n"))
 		}
@@ -326,15 +324,13 @@ func Uninstall(text []byte, agent string, added Level) (out []byte, remove bool,
 }
 
 // removal returns the edit that takes o out, with the largest container that
-// o alone filled and that install added. whole means that the edit removes
-// the document itself.
-func (l *layout) removal(o ours, added Level) (edit jsonedit.Edit, whole bool, err error) {
+// o alone filled and that install added.
+func (l *layout) removal(o ours, added Level) (edit jsonedit.Edit, wholeDocument bool, err error) {
 	parents := []struct {
 		container jsonedit.Node
 		child     int
-		// emptied is the level that install must have added for the
-		// container to go when the child was its only one.
-		emptied Level
+		// An emptied container goes only when install added this much.
+		removableFrom Level
 	}{
 		{o.list, o.handlerIdx, AddedUnknown},
 		{o.event, o.groupIdx, AddedEventList},
@@ -342,7 +338,7 @@ func (l *layout) removal(o ours, added Level) (edit jsonedit.Edit, whole bool, e
 		{l.root, l.hooksIdx, AddedDocument},
 	}
 	for _, p := range parents {
-		if len(p.container.Elems)+len(p.container.Members) > 1 || added < p.emptied {
+		if len(p.container.Elems)+len(p.container.Members) > 1 || added < p.removableFrom {
 			edit, err = l.doc.RemoveChild(p.container, p.child)
 			return edit, false, err
 		}
@@ -461,9 +457,8 @@ func replace(target string, parsed []byte, existed bool, out []byte, remove bool
 }
 
 // writeAtomic puts out at target through a temporary file and a rename, so a
-// reader sees the old file or the new one. It runs check last before the
-// rename.
-func writeAtomic(target string, out []byte, mode fs.FileMode, check func() error) error {
+// reader sees the old file or the new one.
+func writeAtomic(target string, out []byte, mode fs.FileMode, beforeRename func() error) error {
 	tmp, err := os.CreateTemp(filepath.Dir(target), tempPattern(target))
 	if err != nil {
 		return err
@@ -484,7 +479,7 @@ func writeAtomic(target string, out []byte, mode fs.FileMode, check func() error
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := check(); err != nil {
+	if err := beforeRename(); err != nil {
 		return err
 	}
 	return os.Rename(tmp.Name(), target)

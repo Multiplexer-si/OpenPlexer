@@ -12,8 +12,7 @@ var agentMarkers = []string{".claude", ".codex", ".mcp.json"}
 // Roots places a working directory in a project.
 type Roots struct {
 	// Home is never a project root, and the search stops below it.
-	Home string
-	// Recorded holds the project roots that install recorded.
+	Home     string
 	Recorded []string
 }
 
@@ -22,7 +21,7 @@ type Roots struct {
 // The nearest recorded root at or above cwd wins, whatever markers lie below
 // it, so a nested repository does not move the root. With no recorded root,
 // the one directory that holds .git is the root, or else the one directory
-// that holds .claude, .codex, or .mcp.json. When more than one directory could
+// that holds an agent marker. When more than one directory could
 // be the root, Find returns an error, because a root that is too small lets a
 // write outside it pass unjudged.
 func (r Roots) Find(cwd string) (string, error) {
@@ -63,11 +62,11 @@ func (r Roots) Find(cwd string) (string, error) {
 	}
 	switch len(candidates) {
 	case 0:
-		return "", fmt.Errorf("it found no project root above %s: no directory there is a recorded project, and none holds .git, .claude, .codex, or .mcp.json, so the paths of the call cannot be placed in a project", cwd)
+		return "", fmt.Errorf("no project root above %s: no directory there is a recorded project, and none holds .git, .claude, .codex, or .mcp.json", cwd)
 	case 1:
 		return candidates[0], nil
 	}
-	return "", fmt.Errorf("more than one directory could be the project root of %s: %s. None of them is a recorded project, and a nested repository must not move the root, so the paths of the call cannot be placed in a project", cwd, strings.Join(candidates, " and "))
+	return "", fmt.Errorf("more than one directory could be the project root of %s: %s. None of them is a recorded project, and a nested repository must not move the root", cwd, strings.Join(candidates, " and "))
 }
 
 func holds(dir string, names ...string) bool {

@@ -11,9 +11,8 @@ import (
 	"path/filepath"
 )
 
-// Journal is the directory that holds one record for each hook file that
-// install wrote. Each record is its own file, so two installs never write the
-// same one.
+// Journal is the directory that holds what install wrote, with one record
+// file for each agent and hook file.
 type Journal struct {
 	Dir string
 }
@@ -23,8 +22,7 @@ type Journal struct {
 type Level int
 
 const (
-	// AddedUnknown is the level of a hook that has no record. Uninstall then
-	// removes each container that it emptied, and keeps the file.
+	// AddedUnknown is the level of a hook that has no record.
 	AddedUnknown Level = iota
 	AddedGroup
 	AddedEventList
@@ -53,7 +51,6 @@ func (a *Level) UnmarshalText(text []byte) error {
 type record struct {
 	Agent string `json:"agent"`
 	File  string `json:"file"`
-	// Root is the project of a project-scope install, and empty otherwise.
 	Root  string `json:"root,omitempty"`
 	Added Level  `json:"added"`
 }
@@ -83,9 +80,8 @@ func (j Journal) put(r record) error {
 	return writeAtomic(j.recordPath(r.Agent, r.File), append(text, '\n'), 0o600, func() error { return nil })
 }
 
-// Install installs h into the hook file at path, creating the file when it is
-// missing, and records what it added. A root that is not empty is recorded as
-// the project root of the file.
+// Install installs h into the hook file at path and records what it added,
+// with root as the project root when root is not empty.
 //
 // The record is written before the file, and Uninstall removes it after the
 // file, so a run that is killed leaves a record too many and never a hook

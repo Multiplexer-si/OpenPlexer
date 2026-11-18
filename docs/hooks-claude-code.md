@@ -38,7 +38,7 @@ A denial reaches Claude Code as the `deny` verdict of `PreToolUse` with the reas
    openplexer install claude-code
    ```
 
-   The command adds one entry to `~/.claude/settings.json`, or to `$CLAUDE_CONFIG_DIR/settings.json` if that variable is set. It keeps every other byte of the file. To connect one project only, run `openplexer install claude-code --scope project` in the project, or pass `--project <dir>`. That writes `.claude/settings.json` of the project. `--file <path>` writes another file, such as `.claude/settings.local.json`.
+   The command adds one entry to `~/.claude/settings.json`, or to `$CLAUDE_CONFIG_DIR/settings.json` if that variable is set. It keeps every other byte of the file. To connect one project only, run `openplexer install claude-code --scope project` in the project, or pass `--project <dir>`, which means the project scope. That writes `.claude/settings.json` of the project, and it records the directory as a project root, as [The project root](#the-project-root) describes. `--file <path>` writes another file, such as `.claude/settings.local.json`.
 3. For a project file, start Claude Code in the project and accept the workspace trust dialog. Claude Code holds back the hooks of a project until you do. It reads a change to a settings file while it runs.
 4. Type `/hooks` and check that the entry is listed under `PreToolUse`.
 
@@ -70,21 +70,39 @@ The matcher is the value of `claudecode.Agent.Matcher()`, and a test pins the en
 
 A project file is often committed. The entry names the binary on your machine, so a teammate who has no binary at that path gets every matched call blocked. In a shared repository, use the user scope, or `--file .claude/settings.local.json`.
 
-`install` refuses a file that is not valid JSON, a file whose `hooks` or `hooks.PreToolUse` has another type, and a file in which a key on the path of the entry appears twice. It leaves the file unchanged, names the line and column, and exits with status 1. Claude Code reads settings files as strict JSON, so a file with a comment or a trailing comma is refused.
+`install` refuses a file that is not valid JSON, and a file whose top level, `hooks`, or `hooks.PreToolUse` has another type. It also refuses a file in which a key appears twice at the top level, in `hooks`, in a group, or in a handler, because readers disagree on which value wins. It leaves the file unchanged, names the line and column of the problem, and exits with status 1. Claude Code reads settings files as strict JSON, so a file with a comment or a trailing comma is refused.
 
 ## Remove
 
 1. Run `openplexer uninstall claude-code`, with the same `--scope`, `--project`, or `--file` as the install.
 2. Type `/hooks` to check that the entry is gone.
 
-`uninstall` removes every entry whose command runs a binary named `openplexer` with `hook claude-code`, also after you moved the entry, changed its timeout or matcher, or added your own hooks next to it. It removes the group, the event list, and the `hooks` object that held nothing but that entry. It deletes the file if the file held nothing else, and it leaves a file that a symbolic link names as `{}`. A second `uninstall` changes nothing.
+`uninstall` removes every entry whose command runs a binary named exactly `openplexer`, or `openplexer.exe`, with `hook claude-code`, also after you moved the entry, changed its timeout or matcher, or added your own hooks next to it. A hook of yours that runs another binary, such as `openplexer-lint`, is not an entry of OpenPlexer and stays.
+
+`install` records what it added in the `installs` directory of the OpenPlexer home. `uninstall` reads the record and removes only that. It removes the group that held nothing but the entry. It removes the event list, the `hooks` object, or the file only if `install` added it and it now holds nothing else. So a file that held `{}`, an empty `PreToolUse` list, only white space, only a byte order mark, or no bytes gets its bytes back. A file that `install` created is deleted, and a file that a symbolic link names is left as `{}`. A second `uninstall` changes nothing.
 
 What `uninstall` cannot keep:
 
-- An empty `hooks` object or an empty `PreToolUse` list that the file held before `install` goes with the entry.
-- A file that held only `{}` is deleted.
+- The white space inside an empty object or an empty list that `install` filled. `{ }` comes back as `{}`.
+- With no record, `uninstall` cannot tell what `install` added. This happens after you add the entry by hand, or run `uninstall` with another OpenPlexer home. It then removes each container that the entry alone filled, and it leaves the top level as `{}` and does not delete the file.
+
+`install` and `uninstall` write through a temporary file next to the hook file. A run that is killed can leave that file, with a name that starts with a dot and ends in `.tmp`. The hook file itself is whole. The next `install` or `uninstall` of the same hook file removes a temporary file that is more than one minute old.
 
 Every other byte stays as it was, including key order, indentation, line endings, the spelling of numbers and escapes, and a missing final newline. The goldens in `internal/adapter/hook/testdata/install` pin this.
+
+## The project root
+
+The hook reads each path of a call from the project root. It finds the root in this order.
+
+1. The nearest directory at or above `cwd` that a project-scope `install` recorded. A hook of the user scope uses the record too. A submodule, a worktree, or another `.git` below a recorded root does not move the root, wherever the agent runs `cd`.
+2. With no recorded root, the one directory at or above `cwd` that holds `.git`.
+3. With no `.git`, the one directory that holds `.claude`, `.codex`, or `.mcp.json`.
+
+Your home directory and the root of the file system are never the project root.
+
+The hook does not choose between two directories. If two directories at or above `cwd` hold `.git`, or if a directory above the one that holds `.git` holds only an agent directory, the hook denies every write and every judged command, and the reason names the directories. This happens inside a submodule and inside a worktree that lies in its repository. Record the root that you mean with `openplexer install claude-code --project <dir>`. For a worktree that is a project of its own, record the worktree.
+
+`uninstall` with the same `--project` removes the record. If you move the project, run `install` again.
 
 ## What the hook does not see
 
@@ -118,6 +136,8 @@ There is no check after the command. A write that the hook did not name stays un
 
 **No policy.** With no verified policy, the hook denies every call that it judges, and it judges every `Bash` command as a command. The reason says how to load a policy. A tool that the matcher does not name still runs.
 
-**No project root.** The hook reads the paths of a call from the project root, which is the nearest directory at or above `cwd` that holds `.git`, or else `.claude`, `.codex`, or `.mcp.json`. Your home directory is never the root. If the hook finds no root, it denies every write and every judged command. A `.git` in a subdirectory, such as a submodule or one that an agent creates, moves the root there while `cwd` is inside it, and a write that climbs out of that directory is not judged.
+**The project root.** The hook reads the paths of a call from the project root, as [The project root](#the-project-root) describes. A call that the hook cannot place in a project is denied, if it writes a file or runs a judged command.
+
+**A path in another case.** On a file system that ignores case, a path that spells the project root in another case names a file of the project, and the hook reads it as a path outside the project. With the root at `/Users/dev/CaseProj`, a write to `/Users/dev/caseproj/api/server.ts` is not judged. The existing implementation reads the path the same way.
 
 **The repository.** The hook does not know which repository of the bundle the project is. The gate then allows a write only when every repository of the bundle allows it, as [Local policy gate](local-policy.md) describes.

@@ -77,8 +77,8 @@ func position(b []byte, offset int) (line, col int) {
 	return 1 + bytes.Count(b[:offset], []byte("\n")), offset - bytes.LastIndexByte(b[:offset], '\n')
 }
 
-// Position returns the line and the column of an offset of a node, both
-// counted from 1.
+// Position returns the line and the column of a source offset, both counted
+// from 1.
 func (d *Doc) Position(offset int) (line, col int) { return position(d.src, offset) }
 
 func (d *Doc) Root() Node { return d.root }

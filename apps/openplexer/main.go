@@ -40,7 +40,8 @@ install adds the OpenPlexer hook to the hook file of the agent, and uninstall
 removes it. The user scope is the file in $CLAUDE_CONFIG_DIR or ~/.claude for
 claude-code, and in $CODEX_HOME or ~/.codex for codex. The project scope is
 the file in the .claude or .codex directory of the project, the current
-directory by default. --file names the hook file itself.
+directory by default. --project means the project scope, and install records
+the project as a project root. --file names the hook file itself.
 `
 
 const (

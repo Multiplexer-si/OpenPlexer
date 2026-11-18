@@ -12,8 +12,6 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/daemon"
 )
 
-// hookFile reads the flags of install and uninstall. It returns the hook file
-// that they name, and the project root for the project scope.
 func (c command) hookFile(name string, args []string) (agent hook.Agent, path, root string, ok bool) {
 	flags := c.flags(name)
 	scope := flags.String("scope", "", "")

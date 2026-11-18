@@ -19,10 +19,9 @@ type Env struct {
 	Overrides      []policy.Override
 	// Root finds the project root of the working directory of a call. When it
 	// returns an error, every write and every command that the policy would
-	// judge is denied, and the error completes the sentence "OpenPlexer
-	// blocked this call because". With no Root, a path is read as a path under
-	// the working directory, as the reference reads it when it finds no root,
-	// and the adapter fixtures run that way.
+	// judge is denied, and the reason gives the error. With no Root, a path is
+	// read as a path under the working directory, as the reference reads it
+	// when it finds no root, and the adapter fixtures run that way.
 	Root   func(cwd string) (string, error)
 	Guards []Guard
 	Home   string
@@ -224,7 +223,7 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	}
 	if noRoot != nil {
 		if len(effect.Writes) > 0 || env.ExecGated && len(effect.Commands) > 0 {
-			return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked this call because %v.", noRoot)}
+			return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked this call because it cannot place the paths of the call in a project: %v.", noRoot)}
 		}
 		return Verdict{}
 	}
