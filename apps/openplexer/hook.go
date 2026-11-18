@@ -34,10 +34,9 @@ func (c command) hook(agent hook.Agent) int {
 	}
 	userHome, _ := os.UserHomeDir()
 	gate, openErr := daemon.Open(c.home, c.now)
+	roleUnknown := openErr != nil || !gate.Status().Enforced()
 	env := hook.Env{
-		// With no verified policy the role of the member is not known, so every
-		// command is judged.
-		ExecGated: openErr != nil || !gate.Status().Enforced() || gate.ExecGated(),
+		ExecGated: roleUnknown || gate.ExecGated(),
 		Root:      func(cwd string) (string, bool) { return hook.FindRoot(cwd, userHome) },
 		Guards:    c.guards(userHome),
 		Home:      userHome,

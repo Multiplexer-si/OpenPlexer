@@ -16,8 +16,6 @@ import (
 	"time"
 )
 
-// TestMain moves every home that a command reads or writes into a temporary
-// directory, so that no test can reach the developer's own configuration.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "openplexer-test")
 	if err != nil {

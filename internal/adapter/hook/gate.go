@@ -20,14 +20,11 @@ type Env struct {
 	// Root finds the project root above the working directory of a call.
 	// When it finds none, every write and every command that the policy would
 	// judge is denied. With no Root, a path is read as a path under the
-	// working directory.
-	Root func(cwd string) (string, bool)
-	// Guards are the paths that no agent may write through a gated tool,
-	// whatever the policy says.
+	// working directory, as the reference reads it when it finds no root, and
+	// the adapter fixtures run that way.
+	Root   func(cwd string) (string, bool)
 	Guards []Guard
-	// Home is the home directory of the developer. A guard reads a leading ~
-	// of a path as it.
-	Home string
+	Home   string
 	// ExecGated is set when the role of the member lists commands. A shell
 	// command is then also judged as `exec`. Otherwise the commands of the
 	// member are not limited, and the command is judged by its write targets.
@@ -92,8 +89,6 @@ func (c Call) Text(field string) (string, error) {
 	return text, nil
 }
 
-// Effect is what one tool call does, as the call names it and before any
-// policy: the paths that it is clear to write, and the commands that it runs.
 type Effect struct {
 	Writes   []string
 	Commands []string
@@ -119,10 +114,6 @@ func FileTool(field string) Translate {
 	}
 }
 
-// ShellTool translates a call to a tool that runs the command in the input
-// field `command`. The effect writes the paths that the command is clear to
-// write, and runs the whole line if the line holds a substitution, and
-// otherwise each command of the line that is not a bare `tee`.
 func ShellTool(call Call) (Effect, error) {
 	command, err := call.Text("command")
 	if err != nil {
@@ -163,8 +154,6 @@ func (e Env) queries(call Call, root string, effect Effect) []policy.Query {
 // makes them. The adapter calls it only for a call that makes a query.
 type Judge func(first policy.Query, rest ...policy.Query) Verdict
 
-// FirstDeny judges each query with evaluate, and denies the call at the first
-// query that evaluate denies.
 func FirstDeny(evaluate func(policy.Query) policy.Result) Judge {
 	return func(first policy.Query, rest ...policy.Query) Verdict {
 		for _, q := range append([]policy.Query{first}, rest...) {
@@ -176,8 +165,6 @@ func FirstDeny(evaluate func(policy.Query) policy.Result) Judge {
 	}
 }
 
-// Denied is the verdict for a call whose query q the policy denied with
-// result. The reason names the action and the rule that denied it.
 func Denied(q policy.Query, result policy.Result) Verdict {
 	where := ""
 	if result.Area != nil {
@@ -209,8 +196,7 @@ type Verdict struct {
 
 // Decide reads one hook input and judges it. An event other than PreToolUse,
 // and a tool that the table does not name, are allowed. Input that is not JSON,
-// and a call to a gated tool that cannot be read, are refused. A call that
-// makes no query is allowed without asking judge.
+// and a call to a gated tool that cannot be read, are refused.
 func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	call, err := ParseCall(stdin)
 	if err != nil {

@@ -14,14 +14,14 @@ import (
 
 func (c command) hookFile(name string, args []string) (hook.Agent, string, bool) {
 	flags := c.flags(name)
-	scope := flags.String("scope", string(hook.User), "")
+	scope := flags.String("scope", "user", "")
 	project := flags.String("project", "", "")
 	file := flags.String("file", "", "")
 	if len(args) == 0 || flags.Parse(args[1:]) != nil || flags.NArg() != 0 {
 		return hook.Agent{}, "", false
 	}
 	agent, ok := adapter.Lookup(args[0])
-	if !ok || (*project != "" && hook.Scope(*scope) != hook.Project) {
+	if !ok || (*project != "" && *scope != "project") {
 		return hook.Agent{}, "", false
 	}
 	if *file != "" {
@@ -30,15 +30,15 @@ func (c command) hookFile(name string, args []string) (hook.Agent, string, bool)
 	}
 	userHome, _ := os.UserHomeDir()
 	userDir := agent.UserDir(os.Getenv, userHome)
-	switch hook.Scope(*scope) {
-	case hook.User:
+	switch *scope {
+	case "user":
 		if !filepath.IsAbs(userDir) {
 			return hook.Agent{}, "", false
 		}
-		return agent, agent.File(hook.User, userDir, ""), true
-	case hook.Project:
+		return agent, agent.UserFile(userDir), true
+	case "project":
 		dir, err := filepath.Abs(*project)
-		return agent, agent.File(hook.Project, "", dir), err == nil
+		return agent, agent.ProjectFile(dir), err == nil
 	}
 	return hook.Agent{}, "", false
 }

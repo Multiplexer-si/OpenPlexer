@@ -7,7 +7,6 @@ import (
 	"strings"
 )
 
-// Guard is a file or directory that no agent may write through a gated tool.
 type Guard struct {
 	// Path is absolute, or relative to the project root. A write to the path,
 	// or to a path under it, is denied.

@@ -39,21 +39,21 @@ func TestHookFilesPerScope(t *testing.T) {
 		return ""
 	}
 	for _, c := range []struct {
-		agent string
-		scope hook.Scope
-		want  string
+		agent      string
+		user, proj string
 	}{
-		{"claude-code", hook.User, "/home/a/.claude/settings.json"},
-		{"claude-code", hook.Project, "/work/p/.claude/settings.json"},
-		{"codex", hook.User, "/env/codex/hooks.json"},
-		{"codex", hook.Project, "/work/p/.codex/hooks.json"},
+		{"claude-code", "/home/a/.claude/settings.json", "/work/p/.claude/settings.json"},
+		{"codex", "/env/codex/hooks.json", "/work/p/.codex/hooks.json"},
 	} {
 		agent, ok := adapter.Lookup(c.agent)
 		if !ok {
 			t.Fatalf("no agent %q", c.agent)
 		}
-		if got := agent.File(c.scope, agent.UserDir(getenv, "/home/a"), "/work/p"); got != c.want {
-			t.Errorf("%s %s file = %q, want %q", c.agent, c.scope, got, c.want)
+		if got := agent.UserFile(agent.UserDir(getenv, "/home/a")); got != c.user {
+			t.Errorf("%s user file = %q, want %q", c.agent, got, c.user)
+		}
+		if got := agent.ProjectFile("/work/p"); got != c.proj {
+			t.Errorf("%s project file = %q, want %q", c.agent, got, c.proj)
 		}
 	}
 }
