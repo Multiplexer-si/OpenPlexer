@@ -2,6 +2,7 @@ package hook
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,13 +18,6 @@ type Roots struct {
 }
 
 // Find returns the project root of cwd, spelled as the ancestor of cwd.
-//
-// The nearest recorded root at or above cwd wins, whatever markers lie below
-// it, so a nested repository does not move the root. With no recorded root,
-// the one directory that holds .git is the root, or else the one directory
-// that holds an agent marker. When more than one directory could
-// be the root, Find returns an error, because a root that is too small lets a
-// write outside it pass unjudged.
 func (r Roots) Find(cwd string) (string, error) {
 	var dirs []string
 	home := filepath.Clean(r.Home)
@@ -37,8 +31,9 @@ func (r Roots) Find(cwd string) (string, error) {
 			recorded = append(recorded, info)
 		}
 	}
-	var repos, marked []string
-	for _, dir := range dirs {
+	outermostRepo := -1
+	var marked []int
+	for i, dir := range dirs {
 		if info, err := os.Stat(dir); err == nil {
 			for _, root := range recorded {
 				if os.SameFile(info, root) {
@@ -47,26 +42,38 @@ func (r Roots) Find(cwd string) (string, error) {
 			}
 		}
 		if holds(dir, ".git") {
-			repos = append(repos, dir)
+			outermostRepo = i
 		} else if holds(dir, agentMarkers...) {
-			marked = append(marked, dir)
+			marked = append(marked, i)
 		}
 	}
 
-	candidates := marked
-	if len(repos) > 0 {
-		candidates = repos
-		if len(marked) > 0 && len(marked[len(marked)-1]) < len(repos[0]) {
-			candidates = append(candidates, marked[len(marked)-1])
+	noRepo := outermostRepo < 0
+	markerAboveRepo := !noRepo && len(marked) > 0 && marked[len(marked)-1] > outermostRepo
+	var candidates []string
+	switch {
+	case noRepo && len(marked) == 0:
+		return "", fmt.Errorf("no project root above %s: no directory there is a recorded project, and none holds .git, .claude, .codex, or .mcp.json", cwd)
+	case noRepo && len(marked) == 1:
+		return dirs[marked[0]], nil
+	case noRepo:
+		for _, i := range marked {
+			candidates = append(candidates, dirs[i])
+		}
+	case markerAboveRepo:
+		candidates = []string{dirs[outermostRepo], dirs[marked[len(marked)-1]]}
+	}
+	if candidates != nil {
+		return "", fmt.Errorf("more than one directory could be the project root of %s: %s. None of them is a recorded project, and no repository holds them all", cwd, strings.Join(candidates, " and "))
+	}
+
+	root := dirs[outermostRepo]
+	for i := outermostRepo - 1; i >= 0; i-- {
+		if registersWorktree(root, dirs[i]) {
+			root = dirs[i]
 		}
 	}
-	switch len(candidates) {
-	case 0:
-		return "", fmt.Errorf("no project root above %s: no directory there is a recorded project, and none holds .git, .claude, .codex, or .mcp.json", cwd)
-	case 1:
-		return candidates[0], nil
-	}
-	return "", fmt.Errorf("more than one directory could be the project root of %s: %s. None of them is a recorded project, and a nested repository must not move the root", cwd, strings.Join(candidates, " and "))
+	return root, nil
 }
 
 func holds(dir string, names ...string) bool {
@@ -76,4 +83,68 @@ func holds(dir string, names ...string) bool {
 		}
 	}
 	return false
+}
+
+func registersWorktree(root, dir string) bool {
+	admin, commonDir := gitDirs(dir)
+	_, rootCommon := gitDirs(root)
+	if admin == "" || rootCommon == "" {
+		return false
+	}
+	back, ok := pathIn(filepath.Join(admin, "gitdir"), "", admin)
+	return ok && sameFile(commonDir, rootCommon) &&
+		sameFile(filepath.Dir(admin), filepath.Join(rootCommon, "worktrees")) &&
+		sameFile(back, filepath.Join(dir, ".git"))
+}
+
+func gitDirs(dir string) (gitDir, commonDir string) {
+	dotGit := filepath.Join(dir, ".git")
+	info, err := os.Stat(dotGit)
+	if err != nil {
+		return "", ""
+	}
+	if info.IsDir() {
+		return dotGit, dotGit
+	}
+	if !info.Mode().IsRegular() {
+		return "", ""
+	}
+	gitDir, ok := pathIn(dotGit, "gitdir: ", dir)
+	if !ok {
+		return "", ""
+	}
+	if commonDir, ok := pathIn(filepath.Join(gitDir, "commondir"), "", gitDir); ok {
+		return gitDir, commonDir
+	}
+	return gitDir, gitDir
+}
+
+func pathIn(file, prefix, base string) (string, bool) {
+	f, err := os.Open(file)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, 1<<16))
+	if err != nil {
+		return "", false
+	}
+	path, ok := strings.CutPrefix(strings.TrimRight(string(data), "\r\n"), prefix)
+	if !ok || path == "" {
+		return "", false
+	}
+	path = filepath.FromSlash(path)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(base, path)
+	}
+	return path, true
+}
+
+func sameFile(a, b string) bool {
+	x, err := os.Stat(a)
+	if err != nil {
+		return false
+	}
+	y, err := os.Stat(b)
+	return err == nil && os.SameFile(x, y)
 }

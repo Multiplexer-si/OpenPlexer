@@ -38,8 +38,28 @@ func TestRootsFind(t *testing.T) {
 	super := filepath.Join(home, "super")
 	mkdirs(t, filepath.Join(super, ".git"), filepath.Join(super, "web", "src"), filepath.Join(super, "lib", ".git"))
 	gitlink(filepath.Join(super, "web"))
+	pointer := func(path, text string) {
+		t.Helper()
+		mkdirs(t, filepath.Dir(path))
+		if err := os.WriteFile(path, []byte(text+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	linked := func(name, admin, commondir string) string {
+		t.Helper()
+		dir := filepath.Join(super, name)
+		pointer(filepath.Join(dir, ".git"), "gitdir: "+admin)
+		pointer(filepath.Join(admin, "gitdir"), filepath.Join(dir, ".git"))
+		if commondir != "" {
+			pointer(filepath.Join(admin, "commondir"), commondir)
+		}
+		return dir
+	}
+	registered := linked("registered", filepath.Join(super, ".git", "worktrees", "registered"), "../..")
+	noCommondir := linked("no-commondir", filepath.Join(super, ".git", "worktrees", "no-commondir"), "")
+	unregistered := linked("unregistered", filepath.Join(super, "unregistered", "admin"), filepath.Join(super, ".git"))
 	planted := filepath.Join(home, "planted")
-	mkdirs(t, filepath.Join(planted, ".claude"), filepath.Join(planted, "web", ".git"))
+	mkdirs(t, filepath.Join(planted, ".claude"), filepath.Join(planted, "web", ".git"), filepath.Join(planted, "web", "deep", ".git"))
 	nested := filepath.Join(home, "nested")
 	mkdirs(t, filepath.Join(nested, ".codex"), filepath.Join(nested, "web", ".claude"))
 	alias := filepath.Join(home, "alias")
@@ -59,16 +79,20 @@ func TestRootsFind(t *testing.T) {
 		{name: "an agent marker when there is no .git", cwd: bare, want: filepath.Join(home, "bare")},
 		{name: "the home directory is never a root", cwd: nothing},
 		{name: "cwd is the root", cwd: repo, want: repo},
-		{name: "a submodule with a gitlink file has two candidates", cwd: filepath.Join(super, "web", "src"), ambiguous: []string{filepath.Join(super, "web"), super}},
-		{name: "a nested .git directory has two candidates", cwd: filepath.Join(super, "lib"), ambiguous: []string{filepath.Join(super, "lib"), super}},
+		{name: "a .git file below a repository does not move the root", cwd: filepath.Join(super, "web", "src"), want: super},
+		{name: "a .git directory below a repository does not move the root", cwd: filepath.Join(super, "lib"), want: super},
 		{name: "a .git below a directory that only an agent marker names has two candidates", cwd: filepath.Join(planted, "web"), ambiguous: []string{filepath.Join(planted, "web"), planted}},
 		{name: "two agent markers and no .git have two candidates", cwd: filepath.Join(nested, "web"), ambiguous: []string{filepath.Join(nested, "web"), nested}},
+		{name: "a worktree that the repository registers is the root", cwd: registered, want: registered},
+		{name: "a worktree record with no commondir does not move the root", cwd: noCommondir, want: super},
+		{name: "a worktree record outside the repository does not move the root", cwd: unregistered, want: super},
 		{name: "a recorded root wins over a submodule below it", cwd: filepath.Join(super, "web", "src"), recorded: []string{super}, want: super},
 		{name: "a recorded root wins over a nested .git directory", cwd: filepath.Join(super, "lib"), recorded: []string{super}, want: super},
 		{name: "the nearest recorded root wins", cwd: filepath.Join(super, "web", "src"), recorded: []string{super, filepath.Join(super, "web")}, want: filepath.Join(super, "web")},
 		{name: "a recorded root is spelled as cwd spells it", cwd: filepath.Join(alias, "web"), recorded: []string{super}, want: alias},
 		{name: "a recorded root that is gone is not used", cwd: filepath.Join(repo, "web"), recorded: []string{filepath.Join(home, "gone")}, want: repo},
-		{name: "a recorded root elsewhere is not used", cwd: filepath.Join(super, "web"), recorded: []string{repo}, ambiguous: []string{filepath.Join(super, "web"), super}},
+		{name: "a recorded root elsewhere is not used", cwd: filepath.Join(super, "web"), recorded: []string{repo}, want: super},
+		{name: "an agent marker above the outermost .git has two candidates", cwd: filepath.Join(planted, "web", "deep"), ambiguous: []string{filepath.Join(planted, "web"), planted}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got, err := Roots{Home: home, Recorded: c.recorded}.Find(c.cwd)
