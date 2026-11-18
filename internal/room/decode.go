@@ -36,7 +36,7 @@ func decodeJSON(text []byte) (any, error) {
 	decoder.UseNumber()
 	var doc any
 	if err := decoder.Decode(&doc); err != nil {
-		return nil, &ValidationError{Issues: []Issue{{Reason: "is not JSON: " + err.Error()}}}
+		return nil, &ValidationError{Issues: []Issue{{Reason: "is not valid JSON"}}}
 	}
 	if _, err := decoder.Token(); err != io.EOF {
 		return nil, &ValidationError{Issues: []Issue{{Reason: "has text after the JSON value"}}}

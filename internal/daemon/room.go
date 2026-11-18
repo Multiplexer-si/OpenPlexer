@@ -185,7 +185,7 @@ func (h hubClient) followRoom(ctx context.Context, now func() time.Time, receive
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		return err
+		return hubIOError{"could not read the Room stream", err}
 	}
 	return io.EOF
 }

@@ -56,7 +56,7 @@ func (st *state) publishPolicy(project string, text []byte) (SignedBundle, error
 	}
 	canonical, err := audit.Canonical(text)
 	if err != nil {
-		return SignedBundle{}, fmt.Errorf("%w: canonical policy: %w", errInvalid, err)
+		return SignedBundle{}, fmt.Errorf("%w: policy cannot be canonicalized", errInvalid)
 	}
 	if latest, exists := st.Policies[project]; exists && bundle.Version <= latest.Version {
 		// The display copy may have been escaped by the file's JSON encoder.
@@ -71,12 +71,12 @@ func (st *state) publishPolicy(project string, text []byte) (SignedBundle, error
 	}
 	for id := range bundle.Members {
 		if _, exists := st.Members[id]; !exists {
-			return SignedBundle{}, fmt.Errorf("%w: unknown member %q", errInvalid, id)
+			return SignedBundle{}, fmt.Errorf("%w: members references an unknown member", errInvalid)
 		}
 	}
 	for _, grant := range bundle.TemporaryGrants {
 		if _, exists := st.Members[grant.MemberID]; !exists {
-			return SignedBundle{}, fmt.Errorf("%w: unknown member %q", errInvalid, grant.MemberID)
+			return SignedBundle{}, fmt.Errorf("%w: temporary_grants member_id references an unknown member", errInvalid)
 		}
 	}
 	key, err := signingKey(st)
