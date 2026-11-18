@@ -541,6 +541,69 @@
       "if": {
         "properties": {
           "operation": {
+            "const": "close-code"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Give the WebSocket close code that the hub sends after an error with the code in `input.code`, or null if the hub keeps the connection.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "close_code": {
+                      "oneOf": [
+                        {
+                          "type": "integer"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "close_code"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "code"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "room"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
             "const": "canonicalize"
           }
         },
@@ -1084,6 +1147,7 @@
         "path-sets-overlap",
         "deliver",
         "active-claims",
+        "close-code",
         "canonicalize",
         "verify-chain",
         "bash-targets",

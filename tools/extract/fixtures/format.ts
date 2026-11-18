@@ -117,6 +117,12 @@ const OPERATIONS: Record<string, Operation> = {
       },
     }),
   },
+  "close-code": {
+    contract: ["room"],
+    description: "Give the WebSocket close code that the hub sends after an error with the code in `input.code`, or null if the hub keeps the connection.",
+    input: strict({ code: { type: "string" } }),
+    expected: strict({ close_code: { oneOf: [{ type: "integer" }, { type: "null" }] } }),
+  },
   canonicalize: {
     contract: ["canonical-json"],
     description: "Parse the JSON text in `input.json` and write the value as canonical JSON.",

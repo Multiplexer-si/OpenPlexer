@@ -144,6 +144,7 @@ To run a case, do the operation on `shared` and `input`, and compare the whole r
 | `path-sets-overlap` | room | None | Two lists of patterns, `a` and `b` | `overlap` |
 | `deliver` | room | None | `since`, and `steps`: stored events that the hub replays, new events, and the end of the replay | `sent`, the `seq` of each event that the hub sends, and `last_seq` |
 | `active-claims` | room | None | `events`, in the order that a receiver accepts them, and `now` | `claims`, the active claims in the order of their events |
+| `close-code` | room | None | `code`, the code of an error | `close_code`, the close code that the hub sends after the error, or null if it keeps the connection |
 | `canonicalize` | canonical-json | None | `json`, a JSON text | `canonical`, and `sha256` of its UTF-8 bytes |
 | `verify-chain` | audit | None | `records`, in chain order | A chain verification result |
 | `bash-targets` | adapter | None | `command`, a shell command line | `targets`, the paths that the line writes |

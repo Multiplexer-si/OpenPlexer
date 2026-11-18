@@ -77,6 +77,7 @@ var operations = map[string]func(t *testing.T, file fixtureFile) func(t *testing
 	},
 	"patterns-overlap":  func(*testing.T, fixtureFile) func(*testing.T, fixtureCase) { return runPatternsOverlap },
 	"path-sets-overlap": func(*testing.T, fixtureFile) func(*testing.T, fixtureCase) { return runPathSetsOverlap },
+	"close-code":        func(*testing.T, fixtureFile) func(*testing.T, fixtureCase) { return runCloseCode },
 	"deliver":           func(*testing.T, fixtureFile) func(*testing.T, fixtureCase) { return runDeliver },
 	"active-claims":     func(*testing.T, fixtureFile) func(*testing.T, fixtureCase) { return runActiveClaims },
 }
@@ -155,6 +156,22 @@ func runPathSetsOverlap(t *testing.T, c fixtureCase) {
 	decodeStrict(t, c.Expected, &want)
 	if got := PathsOverlap(in.A, in.B); got != want.Overlap {
 		t.Errorf("PathsOverlap = %v, want %v", got, want.Overlap)
+	}
+}
+
+func runCloseCode(t *testing.T, c fixtureCase) {
+	var in struct{ Code string }
+	var want struct {
+		CloseCode *int `json:"close_code"`
+	}
+	decodeStrict(t, c.Input, &in)
+	decodeStrict(t, c.Expected, &want)
+	keeps := 0
+	if want.CloseCode == nil {
+		want.CloseCode = &keeps
+	}
+	if got := ErrorCode(in.Code).CloseCode(); got != *want.CloseCode {
+		t.Errorf("CloseCode = %d, want %d", got, *want.CloseCode)
 	}
 }
 

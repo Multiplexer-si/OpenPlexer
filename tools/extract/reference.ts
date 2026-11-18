@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { hubErrorCodes } from "./hub-errors.ts";
 import type { Json } from "./output.ts";
 
 /** The commit of the existing TypeScript implementation that the committed files under `spec/` come from. */
@@ -83,6 +84,8 @@ export interface Reference {
   Subscription: new (room: string, kind: "daemon" | "dashboard", sinceSeq: number, send: (message: { seq: number }) => void) => SubscriptionModel;
   /** The claims that the daemon holds as active after the events, read at `now`, in milliseconds since the epoch. */
   activeClaims(events: Json[], now: number): Json[];
+  /** Each error code that the socket server of the hub names, with the close code that follows it. null: the hub keeps the connection. */
+  hubErrorCodes: Map<string, number | null>;
   genesisHash: string;
   computeAuditHash(prevHash: string, fields: object): string;
   policyJwsTyp: string;
@@ -143,7 +146,9 @@ export async function loadReference(root: string): Promise<Reference> {
   const adapters = await loadAdapters(root, load, store.PolicyStore);
   const subscriptions = await load(join(root, "apps/hub/src/ws/subscriptions.ts"));
   const cache = await load(join(root, "apps/daemon/src/sync/cache.ts"));
+  const { MPX_OUTDATED_CLOSE } = await load(join(root, "apps/hub/src/ws/client-version.ts"));
   return {
+    hubErrorCodes: hubErrorCodes(root, { MPX_OUTDATED_CLOSE }),
     Subscription: subscriptions.Subscription,
     activeClaims(events, now) {
       const work = mkdtempSync(join(tmpdir(), "extract-claims-"));
