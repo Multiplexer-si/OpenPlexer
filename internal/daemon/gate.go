@@ -42,6 +42,12 @@ func (g *Gate) read() *policy.Verified {
 	status.Member = g.config.MemberID
 	g.bundle = nil
 	if verified != nil {
+		if err := g.config.checkBundle(verified.Bundle); err != nil {
+			status = Status{State: Rejected, Detail: err.Error(), Member: g.config.MemberID}
+			verified = nil
+		}
+	}
+	if verified != nil {
 		g.bundle = verified.Bundle
 		status.Role = verified.Bundle.Members[status.Member]
 	}
@@ -130,6 +136,9 @@ func (g *Gate) admit(token string, inForce *policy.Verified) (*policy.Verified, 
 	if err != nil {
 		return nil, "", err
 	}
+	if err := g.config.checkBundle(candidate.Bundle); err != nil {
+		return nil, "", err
+	}
 	if inForce == nil {
 		return candidate, "policy.loaded", nil
 	}
@@ -177,7 +186,7 @@ func (v Verdict) Result() (policy.Result, bool) {
 //
 // The gate owns three fields of each query and replaces them: the member is
 // the configured identity, the time is the clock of the gate, and the
-// overrides are empty, because Phase 1 has no source of overrides. A read
+// overrides are empty, pending a signed override contract. A read
 // or a write with no repo is evaluated in every repo of the bundle. All the
 // evaluations of the call share one budget. The first deny decides the call.
 //
@@ -224,6 +233,8 @@ func (g *Gate) evaluate(queries []policy.Query) (policy.Query, policy.Result) {
 func (g *Gate) candidateRepos(query policy.Query) []string {
 	fileAction := query.Action == policy.Read || query.Action == policy.Write
 	switch {
+	case fileAction && g.config.ProjectID != "":
+		return g.bundle.Repos
 	case query.Repo != "" || !fileAction:
 		return []string{query.Repo}
 	case len(g.bundle.Repos) > 0:

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 )
 
@@ -15,9 +16,8 @@ type Source interface {
 }
 
 // FileSource reads a message of spec/policy/v1/signed-bundle.schema.json
-// from a file and delivers its signature. It does not read the bundle and
-// version copies of the message, because the signed payload is the
-// authority.
+// from a file and delivers its signature. Only the signed payload is used
+// for policy decisions.
 func FileSource(path string) Source {
 	return fileSource(path)
 }
@@ -29,14 +29,25 @@ func (path fileSource) Fetch(context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	var message struct {
-		Signature *string `json:"signature"`
-	}
-	if err := json.Unmarshal(text, &message); err != nil {
+	token, err := signedToken(text)
+	if err != nil {
 		return "", fmt.Errorf("%s is not a signed bundle message: %w", string(path), err)
 	}
-	if message.Signature == nil {
-		return "", errors.New(string(path) + " is not a signed bundle message: it has no signature")
+	return token, nil
+}
+
+func signedToken(text []byte) (string, error) {
+	// Exact names and last-member semantics, as in the policy contract.
+	var message map[string]json.RawMessage
+	if err := json.Unmarshal(text, &message); err != nil {
+		return "", err
 	}
-	return *message.Signature, nil
+	var version *float64
+	var signature *string
+	if json.Unmarshal(message["version"], &version) != nil || version == nil ||
+		math.Abs(*version) > 1<<53-1 || math.Trunc(*version) != *version || message["bundle"] == nil ||
+		json.Unmarshal(message["signature"], &signature) != nil || signature == nil {
+		return "", errors.New("expected bundle, integer version and string signature")
+	}
+	return *signature, nil
 }

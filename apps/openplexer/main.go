@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/adapter"
@@ -22,6 +23,8 @@ import (
 
 const usage = `usage:
   openplexer configure [--keys <jwks.json>] [--member <member-id>] [--stale-after-days <days>]
+  openplexer configure --hub <url> --project <id> --member <id> --keys <jwks.json> --token-file <file>
+  openplexer policy sync
   openplexer policy load <signed-bundle.json>
   openplexer policy status
   openplexer policy check [--agent <name>] [--session <id>] [--repo <repo>] <action> <target>
@@ -75,6 +78,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() ti
 		return c.configure(args[1:])
 	case len(args) == 3 && args[0] == "policy" && args[1] == "load":
 		return c.load(args[2])
+	case len(args) == 2 && args[0] == "policy" && args[1] == "sync":
+		return c.load("")
 	case len(args) == 2 && args[0] == "policy" && args[1] == "status":
 		return c.status()
 	case len(args) >= 2 && args[0] == "policy" && args[1] == "check":
@@ -119,12 +124,25 @@ func (c command) configure(args []string) int {
 	flags := c.flags("configure")
 	keys := flags.String("keys", "", "")
 	member := flags.String("member", "", "")
+	hub := flags.String("hub", "", "")
+	project := flags.String("project", "", "")
+	tokenFile := flags.String("token-file", "", "")
 	staleAfterDays := flags.Int("stale-after-days", 0, "")
 	if flags.Parse(args) != nil || flags.NArg() != 0 || flags.NFlag() == 0 {
 		fmt.Fprint(c.stderr, usage)
 		return exitUsage
 	}
-	change := daemon.Settings{MemberID: *member, StaleAfterDays: *staleAfterDays}
+	change := daemon.Settings{MemberID: *member, StaleAfterDays: *staleAfterDays, HubURL: *hub, ProjectID: *project}
+	if *tokenFile != "" {
+		token, err := os.ReadFile(*tokenFile)
+		if err != nil {
+			return c.fail(err)
+		}
+		change.Token = strings.TrimSpace(string(token))
+		if change.Token == "" {
+			return c.fail(errors.New("token file is empty"))
+		}
+	}
 	if *keys != "" {
 		var err error
 		if change.KeySet, err = os.ReadFile(*keys); err != nil {
@@ -142,7 +160,12 @@ func (c command) load(path string) int {
 	if err != nil {
 		return c.fail(err)
 	}
-	status, err := gate.Load(context.Background(), daemon.FileSource(path))
+	var status daemon.Status
+	if path == "" {
+		status, err = gate.Sync(context.Background())
+	} else {
+		status, err = gate.Load(context.Background(), daemon.FileSource(path))
+	}
 	if err != nil && !errors.Is(err, daemon.ErrNotRecorded) {
 		return c.fail(err)
 	}

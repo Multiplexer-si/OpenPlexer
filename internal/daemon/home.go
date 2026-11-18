@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/multiplexer-si/openplexer/internal/jsonedit"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
 
@@ -25,6 +26,9 @@ const defaultStaleAfterDays = 14
 type config struct {
 	MemberID       string `json:"member_id,omitempty"`
 	StaleAfterDays int    `json:"stale_after_days,omitempty"`
+	HubURL         string `json:"hub_url,omitempty"`
+	ProjectID      string `json:"project_id,omitempty"`
+	Token          string `json:"token,omitempty"`
 }
 
 func (c config) staleAfter() time.Duration {
@@ -35,33 +39,53 @@ func (c config) staleAfter() time.Duration {
 	return time.Duration(days) * 24 * time.Hour
 }
 
-func readJSON[T any](home, name string) (*T, error) {
+func readJSON(home, name string, fields map[string]any) (bool, error) {
 	text, err := os.ReadFile(filepath.Join(home, name))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
+		return false, nil
 	}
 	if err != nil {
-		return nil, err
+		return false, err
 	}
-	var value T
-	if err := json.Unmarshal(text, &value); err != nil {
-		return nil, fmt.Errorf("%s is not valid: %w", name, err)
+	doc, err := jsonedit.Parse(text)
+	if err != nil {
+		return false, fmt.Errorf("%s: %w", name, err)
 	}
-	return &value, nil
+	root := doc.Root()
+	if root.Kind != jsonedit.Object {
+		return false, fmt.Errorf("%s must be a JSON object", name)
+	}
+	if member, duplicate := root.DuplicateKey(); duplicate {
+		return false, fmt.Errorf("%s: duplicate key %q", name, member.Key)
+	}
+	for _, member := range root.Members {
+		if target, ok := fields[member.Key]; ok {
+			if member.Value.Kind == jsonedit.Null || doc.Decode(member.Value, target) != nil {
+				return false, fmt.Errorf("%s: invalid %s", name, member.Key)
+			}
+		}
+	}
+	return true, nil
 }
 
 func readConfig(home string) (config, error) {
-	c, err := readJSON[config](home, configFile)
+	var c config
+	_, err := readJSON(home, configFile, map[string]any{
+		"member_id": &c.MemberID, "stale_after_days": &c.StaleAfterDays,
+		"hub_url": &c.HubURL, "project_id": &c.ProjectID, "token": &c.Token,
+	})
 	if err != nil {
 		return config{}, err
-	}
-	if c == nil {
-		return config{}, nil
 	}
 	if c.StaleAfterDays < 0 {
 		return config{}, fmt.Errorf("%s: stale_after_days must not be negative", configFile)
 	}
-	return *c, nil
+	if c.hasHubSettings() {
+		if err := c.checkHub(); err != nil {
+			return config{}, err
+		}
+	}
+	return c, nil
 }
 
 func readKeys(home string) (*policy.KeySet, error) {
@@ -80,11 +104,17 @@ func readKeys(home string) (*policy.KeySet, error) {
 }
 
 func readStoredPolicy(home string) (*storedPolicy, error) {
-	stored, err := readJSON[storedPolicy](home, policyFile)
-	if err == nil && stored != nil && stored.Token == "" {
+	var stored storedPolicy
+	found, err := readJSON(home, policyFile, map[string]any{
+		"token": &stored.Token, "confirmed_at": &stored.ConfirmedAt,
+	})
+	if err != nil || !found {
+		return nil, err
+	}
+	if stored.Token == "" {
 		return nil, fmt.Errorf("%s holds no token", policyFile)
 	}
-	return stored, err
+	return &stored, nil
 }
 
 // Readers of the home take no lock, so writeFile replaces a file by rename:
@@ -130,6 +160,9 @@ type Settings struct {
 	// StaleAfterDays is the number of days after which a policy that its
 	// source has not confirmed is stale.
 	StaleAfterDays int
+	HubURL         string
+	ProjectID      string
+	Token          string
 }
 
 // Configure applies a change to the configuration in the home directory.
@@ -151,21 +184,42 @@ func Configure(home string, change Settings) error {
 	if err != nil {
 		return err
 	}
+	next := current
+	if change.HubURL != "" {
+		next.HubURL = change.HubURL
+	}
+	if change.ProjectID != "" {
+		next.ProjectID = change.ProjectID
+	}
+	if change.Token != "" {
+		next.Token = change.Token
+	}
+	if change.MemberID != "" {
+		next.MemberID = change.MemberID
+	}
+	if change.StaleAfterDays != 0 {
+		next.StaleAfterDays = change.StaleAfterDays
+	}
+	if next.hasHubSettings() {
+		if err := next.checkHub(); err != nil {
+			return err
+		}
+		if current.HubURL == "" && change.KeySet == nil {
+			return errors.New("configure the hub with a trusted key set (--keys)")
+		}
+		if current.HubURL != "" && (next.HubURL != current.HubURL || next.ProjectID != current.ProjectID || next.MemberID != current.MemberID) {
+			return errors.New("use a separate OpenPlexer home to change the hub, project or member")
+		}
+	}
 	if change.KeySet != nil {
 		if err := writeFile(home, keysFile, change.KeySet); err != nil {
 			return err
 		}
 	}
-	if change.MemberID == "" && change.StaleAfterDays == 0 {
+	if next == current {
 		return nil
 	}
-	if change.MemberID != "" {
-		current.MemberID = change.MemberID
-	}
-	if change.StaleAfterDays != 0 {
-		current.StaleAfterDays = change.StaleAfterDays
-	}
-	return writeJSON(home, configFile, current)
+	return writeJSON(home, configFile, next)
 }
 
 func lockHome(home string) (unlock func(), err error) {
