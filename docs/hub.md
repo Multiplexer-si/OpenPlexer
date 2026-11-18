@@ -1,6 +1,7 @@
 # Run the single-team hub
 
 `openplexer-hub` serves signed policy bundles and Room events for one team. Each project names one repository and has one Room with the same ID. All active team members can access every project and Room.
+For a walkthrough from a clean machine to a three-person hub, see [Self-host the OpenPlexer hub](self-host.md).
 
 ## Start the server
 
