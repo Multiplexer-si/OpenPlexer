@@ -1,28 +1,22 @@
 package claudecode
 
-import (
-	"maps"
-	"slices"
-	"strings"
+import "github.com/multiplexer-si/openplexer/internal/adapter/hook"
 
-	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
-)
-
-var tools = hook.Tools{
-	"Write":        hook.FileTool("file_path"),
-	"Edit":         hook.FileTool("file_path"),
-	"NotebookEdit": hook.FileTool("notebook_path"),
-	"Bash":         hook.ShellTool,
-}
-
-// Matcher is the matcher of the PreToolUse hook entry, built from the table so
-// that the hook runs for exactly the tools that the adapter gates.
-func Matcher() string {
-	return strings.Join(slices.Sorted(maps.Keys(tools)), "|")
-}
-
-// Handle reads the PreToolUse input that Claude Code writes to the hook and returns
-// what the hook process writes and its exit status.
-func Handle(stdin []byte, env hook.Env, evaluate hook.Evaluator) hook.Output {
-	return hook.Render(hook.Decide(stdin, env, evaluate, tools))
+// Agent is Claude Code 2.1.326. Its hook entry sets onFailure to block, which
+// needs 2.1.295 or later, so that a hook that cannot answer blocks the call.
+var Agent = hook.Agent{
+	Name: "claude-code",
+	Tools: hook.Tools{
+		"Write":        hook.FileTool("file_path"),
+		"Edit":         hook.FileTool("file_path"),
+		"NotebookEdit": hook.FileTool("notebook_path"),
+		"Bash":         hook.ShellTool,
+	},
+	UserDirEnv:   "CLAUDE_CONFIG_DIR",
+	ConfigDir:    ".claude",
+	HookFile:     "settings.json",
+	GuardedFiles: []string{"settings.json", "settings.local.json"},
+	Timeout:      5,
+	OnFailure:    "block",
+	NextStep:     "Claude Code reads the change at once. It runs the hooks of a project file after you accept the workspace trust dialog of the project.",
 }

@@ -31,6 +31,10 @@ var rules = []rule{
 		deny:     []string{"internal/daemon", "internal/hub"},
 	},
 	{
+		subjects: []string{"internal/jsonedit"},
+		deny:     []string{"internal/..."},
+	},
+	{
 		subjects: []string{"internal/daemon"},
 		deny:     []string{"internal/hub"},
 	},

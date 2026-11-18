@@ -8,7 +8,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
+	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/jsonedit"
 )
@@ -51,7 +53,6 @@ type groupJSON struct {
 	Hooks   []handlerJSON `json:"hooks"`
 }
 
-// eventHooks is the `hooks` object that Install creates, with one event.
 type eventHooks struct {
 	event  string
 	groups []groupJSON
@@ -79,23 +80,21 @@ func isBlank(text []byte) bool {
 	return len(bytes.TrimSpace(bytes.TrimPrefix(text, utf8BOM))) == 0
 }
 
-// ours is one handler of ours and where it sits.
 type ours struct {
 	command            jsonedit.Node
 	commandText        string
-	list               jsonedit.Node // the group's hooks array
-	event              jsonedit.Node // the event's array of groups
+	list               jsonedit.Node
+	event              jsonedit.Node
 	eventIdx, groupIdx int
 	handlerIdx         int
 }
 
-// layout is what Install and Uninstall learn about a hook file.
 type layout struct {
 	doc      *jsonedit.Doc
 	root     jsonedit.Node
-	hooksIdx int // member of root, -1 when absent
+	hooksIdx int
 	hooks    jsonedit.Node
-	eventIdx int // member of hooks for the install event, -1 when absent
+	eventIdx int
 	ours     []ours
 }
 
@@ -106,20 +105,20 @@ func inspect(text []byte, agent, event string) (*layout, error) {
 	}
 	l := &layout{doc: doc, root: doc.Root(), hooksIdx: -1, eventIdx: -1}
 	if l.root.Kind != jsonedit.Object {
-		return nil, fmt.Errorf("the top level is %s, not an object", l.root.Kind)
+		return nil, l.refuse(l.root.Start, "the top level is %s, not an object", l.root.Kind)
 	}
-	if key, dup := l.root.DuplicateKey(); dup {
-		return nil, fmt.Errorf("duplicate key %q at the top level", key)
+	if m, dup := l.root.DuplicateKey(); dup {
+		return nil, l.refuse(m.KeyStart, "duplicate key %q at the top level", m.Key)
 	}
 	if l.hooksIdx, err = l.root.MemberIndex("hooks"); err != nil || l.hooksIdx < 0 {
 		return l, err
 	}
 	l.hooks = l.root.Members[l.hooksIdx].Value
 	if l.hooks.Kind != jsonedit.Object {
-		return nil, fmt.Errorf(`"hooks" is %s, not an object`, l.hooks.Kind)
+		return nil, l.refuse(l.hooks.Start, `"hooks" is %s, not an object`, l.hooks.Kind)
 	}
-	if key, dup := l.hooks.DuplicateKey(); dup {
-		return nil, fmt.Errorf(`duplicate key %q in "hooks"`, key)
+	if m, dup := l.hooks.DuplicateKey(); dup {
+		return nil, l.refuse(m.KeyStart, `duplicate key %q in "hooks"`, m.Key)
 	}
 	for ei, em := range l.hooks.Members {
 		if em.Key == event {
@@ -127,7 +126,7 @@ func inspect(text []byte, agent, event string) (*layout, error) {
 		}
 		if em.Value.Kind != jsonedit.Array {
 			if em.Key == event {
-				return nil, fmt.Errorf("hooks.%s is %s, not an array", event, em.Value.Kind)
+				return nil, l.refuse(em.Value.Start, "hooks.%s is %s, not an array", event, em.Value.Kind)
 			}
 			continue
 		}
@@ -136,8 +135,8 @@ func inspect(text []byte, agent, event string) (*layout, error) {
 				continue
 			}
 			where := fmt.Sprintf("hooks.%s[%d]", em.Key, gi)
-			if key, dup := group.DuplicateKey(); dup {
-				return nil, fmt.Errorf("duplicate key %q in %s", key, where)
+			if m, dup := group.DuplicateKey(); dup {
+				return nil, l.refuse(m.KeyStart, "duplicate key %q in %s", m.Key, where)
 			}
 			list, ok, _ := group.Get("hooks")
 			if !ok || list.Kind != jsonedit.Array {
@@ -147,8 +146,8 @@ func inspect(text []byte, agent, event string) (*layout, error) {
 				if handler.Kind != jsonedit.Object {
 					continue
 				}
-				if key, dup := handler.DuplicateKey(); dup {
-					return nil, fmt.Errorf("duplicate key %q in %s.hooks[%d]", key, where, hi)
+				if m, dup := handler.DuplicateKey(); dup {
+					return nil, l.refuse(m.KeyStart, "duplicate key %q in %s.hooks[%d]", m.Key, where, hi)
 				}
 				if cmd, text, ok := l.ownedBy(handler, agent); ok {
 					l.ours = append(l.ours, ours{
@@ -162,8 +161,11 @@ func inspect(text []byte, agent, event string) (*layout, error) {
 	return l, nil
 }
 
-// ownedBy reports whether handler runs `openplexer hook <agent>`. It returns
-// the command value and its decoded text.
+func (l *layout) refuse(offset int, format string, args ...any) error {
+	line, col := l.doc.Position(offset)
+	return fmt.Errorf("%s at line %d, column %d", fmt.Sprintf(format, args...), line, col)
+}
+
 func (l *layout) ownedBy(handler jsonedit.Node, agent string) (jsonedit.Node, string, bool) {
 	node, ok, _ := handler.Get("command")
 	var command string
@@ -196,42 +198,53 @@ func (l *layout) ownedBy(handler jsonedit.Node, agent string) (jsonedit.Node, st
 }
 
 func isOpenplexer(word string) bool {
-	base := word[strings.LastIndexAny(word, `/\`)+1:]
-	return base == "openplexer" || base == "openplexer.exe"
+	name := word[strings.LastIndexAny(word, `/\`)+1:]
+	return name == "openplexer" || strings.EqualFold(name, "openplexer.exe")
 }
 
 // Install returns the text of a hook file that has h in it. It adds h as the
 // last group of its event when no handler of ours for h.Agent is there, points
 // a canonical handler of ours at h.Command when only the executable differs,
-// and otherwise changes nothing.
-func Install(text []byte, exists bool, h Handler) ([]byte, Change, error) {
+// and otherwise changes nothing. When it adds h, it also says how much it
+// added, and Uninstall takes that level back.
+func Install(text []byte, exists bool, h Handler) ([]byte, Change, Level, error) {
 	if h.Agent == "" || h.Event == "" || h.Command == "" {
-		return nil, Unchanged, errors.New("handler needs an agent, an event, and a command")
+		return nil, Unchanged, AddedUnknown, errors.New("handler needs an agent, an event, and a command")
 	}
-	if !exists || isBlank(text) {
-		return newFile(h), Added, nil
+	if !canonical(h.Command, h.Agent) {
+		return nil, Unchanged, AddedUnknown, fmt.Errorf("the command %q does not run a binary named openplexer, so uninstall could not find the entry. Rename the binary to openplexer", h.Command)
+	}
+	if !exists {
+		return newFile(h), Added, AddedFile, nil
+	}
+	if isBlank(text) {
+		return append(slices.Clone(text), newFile(h)...), Added, AddedDocument, nil
 	}
 	l, err := inspect(text, h.Agent, h.Event)
 	if err != nil {
-		return nil, Unchanged, err
+		return nil, Unchanged, AddedUnknown, err
 	}
 	if len(l.ours) > 0 {
-		return l.repoint(text, h)
+		out, change, err := l.repoint(text, h)
+		return out, change, AddedUnknown, err
 	}
 	var edit jsonedit.Edit
+	level := AddedGroup
 	switch {
 	case l.hooksIdx < 0:
+		level = AddedHooksObject
 		edit, err = l.doc.AppendMember(l.root, "hooks", eventHooks{h.Event, []groupJSON{h.group()}})
 	case l.eventIdx < 0:
+		level = AddedEventList
 		edit, err = l.doc.AppendMember(l.hooks, h.Event, []groupJSON{h.group()})
 	default:
 		edit, err = l.doc.AppendElem(l.hooks.Members[l.eventIdx].Value, h.group())
 	}
 	if err != nil {
-		return nil, Unchanged, err
+		return nil, Unchanged, AddedUnknown, err
 	}
 	out, err := l.doc.Apply(edit)
-	return out, Added, err
+	return out, Added, level, err
 }
 
 func newFile(h Handler) []byte {
@@ -245,7 +258,6 @@ func newFile(h Handler) []byte {
 	return b.Bytes()
 }
 
-// canonical reports whether command is exactly `<openplexer> hook <agent> pre-tool`.
 func canonical(command, agent string) bool {
 	segments := Segments(command)
 	if len(segments) != 1 || len(segments[0]) != 4 {
@@ -256,9 +268,6 @@ func canonical(command, agent string) bool {
 }
 
 func (l *layout) repoint(text []byte, h Handler) ([]byte, Change, error) {
-	if !canonical(h.Command, h.Agent) {
-		return text, Unchanged, nil
-	}
 	var edits []jsonedit.Edit
 	for _, o := range l.ours {
 		if o.commandText != h.Command && canonical(o.commandText, h.Agent) {
@@ -276,12 +285,19 @@ func (l *layout) repoint(text []byte, h Handler) ([]byte, Change, error) {
 	return out, Repointed, err
 }
 
-// Uninstall removes every handler of ours for agent, and each group, event
-// list, and hooks object that this empties. When that empties the whole file,
-// remove is true and the caller deletes it.
-func Uninstall(text []byte, agent string) (out []byte, remove bool, change Change, err error) {
+// Uninstall removes every handler of ours for agent, and each container that
+// this empties and that install added. With AddedUnknown, it cannot tell, so
+// it removes each emptied container and keeps the top level. remove tells the
+// caller to delete the file.
+func Uninstall(text []byte, agent string, added Level) (out []byte, remove bool, change Change, err error) {
+	if added == AddedUnknown {
+		added = AddedHooksObject
+	}
 	cur := text
 	for {
+		if isBlank(cur) {
+			return cur, false, change, nil
+		}
 		l, err := inspect(cur, agent, preToolUse)
 		if err != nil {
 			return nil, false, Unchanged, err
@@ -289,57 +305,45 @@ func Uninstall(text []byte, agent string) (out []byte, remove bool, change Chang
 		if len(l.ours) == 0 {
 			return cur, false, change, nil
 		}
-		edit, whole, err := l.removal(l.ours[0])
+		edit, wholeDocument, err := l.removal(l.ours[0], added)
 		if err != nil {
 			return nil, false, Unchanged, err
 		}
-		if whole {
+		if wholeDocument && added == AddedFile {
 			return nil, true, Removed, nil
 		}
 		if cur, err = l.doc.Apply(edit); err != nil {
 			return nil, false, Unchanged, err
 		}
+		if wholeDocument {
+			// Install wrote the document and one line break after it.
+			cur = bytes.TrimSuffix(cur, []byte("\n"))
+		}
 		change = Removed
 	}
 }
 
-// removal removes the handler, and climbs while that leaves its container
-// empty: the group, then the event, then the hooks object, then the file.
-func (l *layout) removal(o ours) (edit jsonedit.Edit, whole bool, err error) {
-	levels := []struct {
+// removal returns the edit that takes o out, with the largest container that
+// o alone filled and that install added.
+func (l *layout) removal(o ours, added Level) (edit jsonedit.Edit, wholeDocument bool, err error) {
+	parents := []struct {
 		container jsonedit.Node
 		child     int
+		// An emptied container goes only when install added this much.
+		removableFrom Level
 	}{
-		{o.list, o.handlerIdx},
-		{o.event, o.groupIdx},
-		{l.hooks, o.eventIdx},
-		{l.root, l.hooksIdx},
+		{o.list, o.handlerIdx, AddedUnknown},
+		{o.event, o.groupIdx, AddedEventList},
+		{l.hooks, o.eventIdx, AddedHooksObject},
+		{l.root, l.hooksIdx, AddedDocument},
 	}
-	for _, lv := range levels {
-		if len(lv.container.Elems)+len(lv.container.Members) > 1 {
-			edit, err = l.doc.RemoveChild(lv.container, lv.child)
+	for _, p := range parents {
+		if len(p.container.Elems)+len(p.container.Members) > 1 || added < p.removableFrom {
+			edit, err = l.doc.RemoveChild(p.container, p.child)
 			return edit, false, err
 		}
 	}
-	return jsonedit.Edit{}, true, nil
-}
-
-// InstallFile installs h into the file at path, creating it when missing.
-func InstallFile(path string, h Handler) (Change, error) {
-	return editFile(path, func(text []byte, exists bool) ([]byte, bool, Change, error) {
-		out, change, err := Install(text, exists, h)
-		return out, false, change, err
-	})
-}
-
-// UninstallFile removes the handlers of ours for agent from the file at path.
-func UninstallFile(path string, agent string) (Change, error) {
-	return editFile(path, func(text []byte, exists bool) ([]byte, bool, Change, error) {
-		if !exists {
-			return nil, false, Unchanged, nil
-		}
-		return Uninstall(text, agent)
-	})
+	return jsonedit.Edit{Start: l.root.Start, End: l.root.End}, true, nil
 }
 
 type transform func(text []byte, exists bool) (out []byte, remove bool, change Change, err error)
@@ -349,6 +353,7 @@ func editFile(path string, edit transform) (Change, error) {
 	if err != nil {
 		return Unchanged, err
 	}
+	removeStaleTemps(target)
 	text, err := os.ReadFile(target)
 	exists := err == nil
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
@@ -366,6 +371,9 @@ func editFile(path string, edit transform) (Change, error) {
 	if err != nil {
 		return Unchanged, fmt.Errorf("%s: %w", path, err)
 	}
+	if info, err := os.Lstat(path); remove && err == nil && info.Mode()&fs.ModeSymlink != 0 {
+		out, remove = []byte("{}\n"), false
+	}
 	if change == Unchanged || (exists && !remove && bytes.Equal(out, text)) {
 		return Unchanged, nil
 	}
@@ -375,8 +383,6 @@ func editFile(path string, edit transform) (Change, error) {
 	return change, nil
 }
 
-// resolveLink follows symlinks, including a dangling one, so that an edit
-// lands on the file that the link names and the link stays.
 func resolveLink(path string, depth int) (string, error) {
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		return resolved, nil
@@ -402,6 +408,29 @@ func resolveLink(path string, depth int) (string, error) {
 
 var errChanged = errors.New("the file changed while openplexer edited it; run the command again")
 
+// A run that was killed leaves its temporary file. A later run removes it
+// once it is older than any run that could still write it.
+const staleAfter = time.Minute
+
+func tempPattern(target string) string {
+	return "." + filepath.Base(target) + ".openplexer-*.tmp"
+}
+
+func removeStaleTemps(target string) {
+	dir := filepath.Dir(target)
+	prefix, suffix, _ := strings.Cut(tempPattern(target), "*")
+	entries, _ := os.ReadDir(dir)
+	for _, entry := range entries {
+		name := entry.Name()
+		if !strings.HasPrefix(name, prefix) || !strings.HasSuffix(name, suffix) {
+			continue
+		}
+		if info, err := entry.Info(); err == nil && info.Mode().IsRegular() && time.Since(info.ModTime()) > staleAfter {
+			os.Remove(filepath.Join(dir, name))
+		}
+	}
+}
+
 func replace(target string, parsed []byte, existed bool, out []byte, remove bool, mode fs.FileMode) error {
 	unchanged := func() error {
 		now, err := os.ReadFile(target)
@@ -421,11 +450,16 @@ func replace(target string, parsed []byte, existed bool, out []byte, remove bool
 		}
 		return os.Remove(target)
 	}
-	dir := filepath.Dir(target)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(dir, ".openplexer-*.tmp")
+	return writeAtomic(target, out, mode, unchanged)
+}
+
+// writeAtomic puts out at target through a temporary file and a rename, so a
+// reader sees the old file or the new one.
+func writeAtomic(target string, out []byte, mode fs.FileMode, beforeRename func() error) error {
+	tmp, err := os.CreateTemp(filepath.Dir(target), tempPattern(target))
 	if err != nil {
 		return err
 	}
@@ -445,7 +479,7 @@ func replace(target string, parsed []byte, existed bool, out []byte, remove bool
 	if err := tmp.Close(); err != nil {
 		return err
 	}
-	if err := unchanged(); err != nil {
+	if err := beforeRename(); err != nil {
 		return err
 	}
 	return os.Rename(tmp.Name(), target)

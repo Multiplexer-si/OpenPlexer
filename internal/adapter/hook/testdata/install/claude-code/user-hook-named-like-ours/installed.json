@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/opt/openplexer-lint hook claude-code --strict"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|Edit|NotebookEdit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "/usr/local/bin/openplexer hook claude-code pre-tool",
+            "timeout": 5,
+            "onFailure": "block"
+          }
+        ]
+      }
+    ]
+  }
+}

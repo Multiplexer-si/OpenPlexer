@@ -2,7 +2,7 @@
 
 This page describes the gate that `openplexer` runs on a developer's machine in Phase 1: its commands, its files, the states of a policy, and its rules. The gate needs no hub and no network. The [trust model](trust-model.md) explains what the gate does not protect against.
 
-The commands that connect a coding agent to the gate, `openplexer hook` and `openplexer install`, do not exist yet. Until they do, `openplexer policy check` is the way to ask the gate about one action.
+`openplexer install` connects a coding agent to the gate, and the hook that it writes runs `openplexer hook`. [Claude Code hooks](hooks-claude-code.md) and [Codex hooks](hooks-codex.md) describe both. `openplexer policy check` asks the gate about one action by hand.
 
 ## Set up the gate
 
@@ -68,9 +68,10 @@ The gate keeps its files in the directory that `OPENPLEXER_HOME` names, or in `.
 | `config.json` | `member_id` and `stale_after_days` | `configure` |
 | `policy.json` | The signed token of the policy in force, and the time `confirmed_at` at which a load last confirmed it | `policy load` |
 | `audit.jsonl` | The audit log, one record on each line | `policy load` and `policy check` |
+| `installs/` | The install journal, one record for each hook file: the agent, the file, the project root of a project-scope install, and what `install` added ([The project root](hooks-claude-code.md#the-project-root)) | `install` and `uninstall` |
 | `lock` | An empty file that the commands lock while they write | Every command that writes |
 
-The gate stores the signed token and not the bundle. Each command verifies the token against `keys.json` again before it uses the policy. A token with a bad signature is rejected, and the gate then enforces no policy. A token that the key set verifies is enforced, even when it is an older version than the one `policy load` last stored. `policy load` refuses an older version, but a program that writes a validly signed older bundle straight into `policy.json` rolls the policy back, and the gate reports that bundle as verified. The protection against an agent that writes the file is the hook's denial of writes into the OpenPlexer home, which [issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15) adds. A program that runs as you can still do it ([what a same-user attacker can still do](trust-model.md#what-a-same-user-attacker-can-still-do-with-the-policy)). If you remove a key from `keys.json`, every bundle that the key signed stops being enforced.
+The gate stores the signed token and not the bundle. Each command verifies the token against `keys.json` again before it uses the policy. A token with a bad signature is rejected, and the gate then enforces no policy. A token that the key set verifies is enforced, even when it is an older version than the one `policy load` last stored. `policy load` refuses an older version, but a program that writes a validly signed older bundle straight into `policy.json` rolls the policy back, and the gate reports that bundle as verified. The protection against an agent that writes the file is the hook's denial of writes into the OpenPlexer home, which [issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15) added. A program that runs as you can still do it ([what a same-user attacker can still do](trust-model.md#what-a-same-user-attacker-can-still-do-with-the-policy)). If you remove a key from `keys.json`, every bundle that the key signed stops being enforced.
 
 ## The states of a policy
 
@@ -98,7 +99,7 @@ stateDiagram-v2
 
 A load that fails changes no state. The policy in force stays as it was.
 
-With no verified policy, the gate does not answer allow or deny. It answers that no policy is in force, and the command that calls the gate chooses what the coding agent may do. [Issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15) decides that choice for the hooks.
+With no verified policy, the gate does not answer allow or deny. It answers that no policy is in force, and the command that calls the gate chooses what the coding agent may do. The hook denies every call that it judges, with a reason ([the trust model](trust-model.md#decisions-settled-by-install-and-the-hook-command)).
 
 ## What a load accepts
 

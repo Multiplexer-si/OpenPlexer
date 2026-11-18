@@ -1,6 +1,7 @@
 // Command openplexer is the local CLI. It configures the local gate, loads
 // a signed policy bundle, reports the state of the policy, and checks one
-// action against it.
+// action against it. It installs the hook of a coding agent, and it is the
+// command that the hook runs.
 package main
 
 import (
@@ -13,6 +14,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/multiplexer-si/openplexer/internal/adapter"
+	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
 	"github.com/multiplexer-si/openplexer/internal/daemon"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
@@ -22,11 +25,23 @@ const usage = `usage:
   openplexer policy load <signed-bundle.json>
   openplexer policy status
   openplexer policy check [--agent <name>] [--session <id>] [--repo <repo>] <action> <target>
+  openplexer install <agent> [--scope user|project] [--project <dir>] [--file <path>]
+  openplexer uninstall <agent> [--scope user|project] [--project <dir>] [--file <path>]
+  openplexer hook <agent> pre-tool
+
+An agent is claude-code or codex.
 
 An action is read, write, exec, or git.push. The target is a path for read
 and write, a command for exec, and a repo for git.push.
 
 The home directory is $OPENPLEXER_HOME, or .openplexer in your home directory.
+
+install adds the OpenPlexer hook to the hook file of the agent, and uninstall
+removes it. The user scope is the file in $CLAUDE_CONFIG_DIR or ~/.claude for
+claude-code, and in $CODEX_HOME or ~/.codex for codex. The project scope is
+the file in the .claude or .codex directory of the project, the current
+directory by default. --project means the project scope, and install records
+the project as a project root. --file names the hook file itself.
 `
 
 const (
@@ -39,17 +54,18 @@ const (
 )
 
 func main() {
-	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr, time.Now))
+	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, time.Now))
 }
 
 type command struct {
+	stdin          io.Reader
 	stdout, stderr io.Writer
 	now            func() time.Time
 	home           string
 }
 
-func run(args []string, stdout, stderr io.Writer, now func() time.Time) int {
-	c := command{stdout: stdout, stderr: stderr, now: now}
+func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() time.Time) int {
+	c := command{stdin: stdin, stdout: stdout, stderr: stderr, now: now}
 	var err error
 	if c.home, err = homeDirectory(); err != nil {
 		return c.fail(err)
@@ -63,6 +79,14 @@ func run(args []string, stdout, stderr io.Writer, now func() time.Time) int {
 		return c.status()
 	case len(args) >= 2 && args[0] == "policy" && args[1] == "check":
 		return c.check(args[2:])
+	case len(args) >= 1 && args[0] == "install":
+		return c.install(args[1:])
+	case len(args) >= 1 && args[0] == "uninstall":
+		return c.uninstall(args[1:])
+	case len(args) == 3 && args[0] == "hook" && args[2] == hook.PreTool:
+		if agent, ok := adapter.Lookup(args[1]); ok {
+			return c.hook(agent)
+		}
 	}
 	fmt.Fprint(stderr, usage)
 	return exitUsage

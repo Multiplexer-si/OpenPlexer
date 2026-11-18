@@ -16,8 +16,9 @@ const policySpec = "../../spec/policy/v1"
 var loadedAt = time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 
 type cli struct {
-	t   *testing.T
-	now time.Time
+	t     *testing.T
+	now   time.Time
+	stdin string
 }
 
 // run gives the exit status, the standard output, and the standard error
@@ -25,7 +26,7 @@ type cli struct {
 func (c cli) run(args ...string) (int, string, string) {
 	c.t.Helper()
 	var stdout, stderr bytes.Buffer
-	status := run(args, &stdout, &stderr, func() time.Time { return c.now })
+	status := run(args, strings.NewReader(c.stdin), &stdout, &stderr, func() time.Time { return c.now })
 	return status, stdout.String(), stderr.String()
 }
 
