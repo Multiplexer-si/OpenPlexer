@@ -1,2 +1,2 @@
-// Package hub owns the single-team hub server.
+// Package hub runs a single-team hub with a file store and an HTTP API.
 package hub
