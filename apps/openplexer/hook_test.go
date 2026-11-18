@@ -284,8 +284,8 @@ func TestHookBlocksAWriteWhenItFindsNoProjectRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	call := callJSON("Write", loose, map[string]string{"file_path": "src/a.go", "content": "x"})
-	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, "no project root") {
-		t.Fatalf("exit %d, reason %q, want a denial that names the missing project root", status, reason)
+	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, "no project root") || !strings.Contains(reason, "openplexer install claude-code --project <dir>") {
+		t.Fatalf("exit %d, reason %q, want a denial that names the missing project root and how to record one", status, reason)
 	}
 }
 

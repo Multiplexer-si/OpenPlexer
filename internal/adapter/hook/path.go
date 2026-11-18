@@ -1,7 +1,6 @@
 package hook
 
 import (
-	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -29,21 +28,6 @@ func normalizePath(path, cwd string) string {
 		return p[len(prefix):]
 	}
 	return p
-}
-
-func normalizeTarget(path, cwd, root string) string {
-	if root == "" {
-		return normalizePath(path, cwd)
-	}
-	abs := filepath.Clean(path)
-	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(cwd, path)
-	}
-	rel, err := filepath.Rel(root, abs)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, "../") || strings.HasPrefix(rel, `..\`) || filepath.IsAbs(rel) {
-		return filepath.ToSlash(abs)
-	}
-	return filepath.ToSlash(rel)
 }
 
 func inProject(path string) bool {

@@ -8,26 +8,30 @@ import (
 )
 
 type Guard struct {
-	// Path is absolute, or relative to the project root. A write to the path,
-	// or to a path under it, is denied.
+	// Path is absolute, or relative to the root of the project of the working
+	// directory and of the project that holds the written file. A write to
+	// the path, or to a path under it, is denied.
 	Path string
 	// Why completes the sentence "OpenPlexer blocked a write to X, because".
 	Why string
 }
 
-func (e Env) guard(cwd, root string, writes []string) (Verdict, bool) {
-	for _, write := range writes {
-		target := e.absolute(write, cwd)
+func (e Env) guard(cwdRoot string, targets []target) (Verdict, bool) {
+	for _, t := range targets {
 		for _, g := range e.Guards {
-			path := g.Path
-			if !filepath.IsAbs(path) {
-				if root == "" {
-					continue
+			guarded := []string{g.Path}
+			if !filepath.IsAbs(g.Path) {
+				guarded = nil
+				for _, root := range []string{cwdRoot, t.root} {
+					if root != "" {
+						guarded = append(guarded, filepath.Join(root, g.Path))
+					}
 				}
-				path = filepath.Join(root, path)
 			}
-			if within(target, path) {
-				return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked a write to %s, because %s. An agent may not change it. Change it yourself if you need to.", write, g.Why)}, true
+			for _, path := range guarded {
+				if within(t.absolute, path) {
+					return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked a write to %s, because %s. An agent may not change it. Change it yourself if you need to.", t.named, g.Why)}, true
+				}
 			}
 		}
 	}

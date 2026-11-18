@@ -81,17 +81,39 @@ Every other byte stays as it was, including key order, a top-level `description`
 
 ## The project root
 
-The hook reads each path of a call from the project root. It finds the root in this order.
+The hook reads each path of a call from a project root. It finds the root of `cwd`, and the root of each file that the call writes, in this order.
 
 1. The nearest directory at or above `cwd` that a project-scope `install` recorded. A hook of the user scope uses the record too. A submodule, a worktree, or another `.git` below a recorded root does not move the root, wherever the agent runs `cd`.
-2. With no recorded root, the one directory at or above `cwd` that holds `.git`.
-3. With no `.git`, the one directory that holds `.codex`, `.claude`, or `.mcp.json`.
+2. With no recorded root, the outermost directory at or above `cwd` that holds `.git`. A submodule lies below that directory, and so does a repository that `git init` or `mkdir` makes in a subfolder, so neither moves the root. In a submodule at `web`, a write to `web/src/a.go` is judged as `web/src/a.go`, and `rm ../api/server.ts` is judged as `api/server.ts`.
+3. A linked worktree of that repository, while `cwd` is inside the worktree. The root is then the top directory of the worktree. In `.claude/worktrees/x`, a write to `src/a.go` is judged as `src/a.go`.
+4. With no `.git`, the one directory that holds `.codex`, `.claude`, or `.mcp.json`.
 
 Your home directory and the root of the file system are never the project root.
 
-The hook does not choose between two directories. If two directories at or above `cwd` hold `.git`, or if a directory above the one that holds `.git` holds only an agent directory, the hook denies every write and every judged command, and the reason names the directories. This happens inside a submodule and inside a worktree that lies in its repository. Record the root that you mean with `openplexer install codex --project <dir>`.
+The hook reads the directories only. It does not run `git`, and it does not read `GIT_DIR` or `GIT_WORK_TREE`. A bare repository holds no `.git`, so it is not a root.
 
-Record the repository, and not a worktree or a submodule inside it. A recorded directory is the whole project to the hook. The hook does not judge a write outside it, and the guard covers only the project hook files of that directory. So after you record a worktree that lies in its repository, a write from the worktree into the main checkout passes, and that includes `<repo>/.codex/hooks.json`. The same holds for any recorded directory inside another recorded directory, because the nearest one is the root. With the repository recorded, the hook reads a file of the worktree as a path of the repository, such as `.claude/worktrees/x/src/a.go`, and the policy denies the write unless an area holds that path.
+A `.git` file alone does not make a linked worktree, because an agent can write that file. The git directory of the outermost repository must register the worktree. The `.git` file must name a directory in the `worktrees` directory of that git directory, the `commondir` file there must name the git directory, and the `gitdir` file there must name the `.git` file. The root stays the outermost repository for each of these:
+
+- a worktree of a submodule
+- a worktree of a repository other than the outermost one
+- a worktree that you moved without `git worktree repair`
+
+The hook judges each write by the project that holds the written file, which is not always the project of `cwd`.
+
+- From a linked worktree at `.claude/worktrees/x`, a write to `../../../src/a.go` is a write to the main checkout, and it is judged as `src/a.go`. An edit of `.claude/settings.json` of the main checkout is denied by the guard.
+- From a recorded project that lies inside another recorded project, a write into the outer project is judged from the outer root.
+- A write to a file that no project holds is not judged. The existing implementation does the same.
+- A write to a file whose project the hook cannot tell is denied, as the list below describes for `cwd`.
+
+The hook denies every write and every judged command in these cases, and the reason gives the `install` command that records the root:
+
+- No directory at or above `cwd` holds `.git` or an agent directory.
+- Two directories hold an agent directory and none holds `.git`.
+- A directory above the outermost `.git` holds only an agent directory. The reason names both directories.
+
+Record the root that you mean with `openplexer install codex --project <dir>`.
+
+You do not need to record a linked worktree or a submodule. A linked worktree is its own root, and the hook judges a write from it into the main checkout by the main checkout, so a write to `<repo>/.codex/hooks.json` is denied by the guard. A write that climbs out of a submodule, or out of a recorded directory inside another project, is judged by the project that holds the written file. A recorded root wins over the git layout. So with the repository recorded, the hook reads a file of a worktree as a path of the repository, such as `.claude/worktrees/x/src/a.go`, and the policy denies the write unless an area holds that path.
 
 `uninstall` with the same `--project` removes the record. If you move the project, run `install` again.
 
@@ -136,6 +158,6 @@ There is no check after the command. A write that the hook did not name stays un
 
 **The project root.** The hook reads the paths of a call from the project root, as [The project root](#the-project-root) describes. A call that the hook cannot place in a project is denied, if it writes a file or runs a judged command.
 
-**A path in another case.** On a file system that ignores case, a path that spells the project root in another case names a file of the project, and the hook reads it as a path outside the project. With the root at `/Users/dev/CaseProj`, a write to `/Users/dev/caseproj/api/server.ts` is not judged. The existing implementation reads the path the same way.
+**A path in another spelling.** The hook finds the project of a written file from the path as the call spells it. On a file system that ignores case, it finds the same project for a path in another case. With the root at `/Users/dev/CaseProj`, a write to `/Users/dev/caseproj/api/server.ts` is judged as `api/server.ts`. A path through a symbolic link to a project directory is judged in the same way. A path through a symbolic link that lies outside every project, to a file inside a project, is not judged.
 
 **The repository.** The hook does not know which repository of the bundle the project is. The gate then allows a write only when every repository of the bundle allows it, as [Local policy gate](local-policy.md) describes.
