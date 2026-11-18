@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"math"
 	"slices"
@@ -74,7 +75,7 @@ func parse[T any](text []byte, read func(*reader, any) T) (T, error) {
 	if err := decoder.Decode(&doc); err != nil {
 		return none, &ValidationError{Issues: []Issue{{Reason: "is not valid JSON"}}}
 	}
-	if decoder.More() {
+	if _, err := decoder.Token(); err != io.EOF {
 		return none, &ValidationError{Issues: []Issue{{Reason: "has text after the JSON value"}}}
 	}
 	if hasLoneSurrogate(text[:decoder.InputOffset()]) {
