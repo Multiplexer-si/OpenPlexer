@@ -24,6 +24,7 @@ The field descriptions are in the schemas. This page gives the rules that a sche
 | `v1/fixtures/deliver.json` | What one subscription of the hub sends, for a replay and new events in several orders. |
 | `v1/fixtures/active-claims.json` | The claims that a receiver holds as active after a list of events. |
 | `v1/fixtures/claims-patterns-overlap.json`, `v1/fixtures/claims-path-sets-overlap.json` | Pairs of patterns and pairs of path lists, with whether they overlap. |
+| `v1/fixtures/claims-class-syntax.json` | Pairs of patterns in which a class starts with `]` or holds a range that is out of order, with whether they overlap or whether the reference throws. |
 
 ## Events
 
@@ -84,9 +85,11 @@ Before two entries are compared, each one is normalized: replace every `\` with 
 |---|---|
 | Two paths | The two are equal. |
 | A glob and a path | The glob matches the path. |
-| Two globs | One literal prefix is a prefix of the other. The literal prefix of a glob is the text before its first `*`, `?`, or `[`. |
+| Two globs | One literal prefix is a prefix of the other, or one glob matches the literal prefix of the other. The literal prefix of a glob is the text before its first `*`, `?`, or `[`. |
 
-The reference also tests whether one glob matches the literal prefix of the other. That test never changes the result, because a glob matches only text that starts with its own literal prefix.
+The second test for two globs changes the result only for a glob that holds a class whose first character is `]`. Every other glob matches only text that starts with its own literal prefix, so the first test holds for it whenever the second does. `ab[]|c]` and `zc]*` overlap by the second test alone. Neither literal prefix, `ab` and `zc]`, starts the other, and the first glob matches `zc]`, as the [seventh open question](#open-questions) explains.
+
+If the reference throws an error when it compares two entries, the two entries overlap. A claim is a warning, so the comparison fails closed.
 
 The rule for two globs reports more overlaps than exist. Two globs with the same literal prefix overlap even if no path matches both. A claim is advice to other agents and not a lock, so a false overlap costs little.
 
@@ -94,6 +97,8 @@ The glob rules are the rules of [the policy glob dialect](../policy/README.md#th
 
 - The claims dialect compares letters with case. `src/Cart.ts` and `src/cart.ts` do not overlap.
 - `dir/**` does not match `dir` itself.
+
+A class whose first character is `]`, and a range that is out of order, follow the seventh open question.
 
 The rule for line terminators is the same in both dialects. `**` matches no line feed, carriage return, U+2028, or U+2029, and every other part of a glob matches them. A claim on `src/**` therefore does not overlap a path under `src/` that has a line feed in it, and a claim on `src/*` does.
 
@@ -106,7 +111,7 @@ The four sections below give the rules that a hub and a receiver follow on a con
 - **Reference** means that the rule is the behavior of the reference at commit `7d80045a`, and the last column names the file.
 - **Chosen** means that version 1 sets the rule. The reference differs or has no rule, and [Intentional differences from the reference](#intentional-differences-from-the-reference) gives the reason.
 
-The Go package `internal/room` holds each rule as a model: `Subscription` for the hub side of a connection, `Receiver` for the other side, and one table for the error codes. Where a fixture pins a rule, the last column names the fixture. The tests of `internal/room` pin every other rule.
+The Go package `internal/room` holds each rule as a model: `Subscription` for the hub side of a connection, `Receiver` for the other side, and one table for the error codes. Where a fixture pins a rule, the last column names the fixture. The tests of `internal/room` pin every other rule that a `Subscription` or a `Receiver` follows. Rules O1, E5, E8, and C5 are rules of the storage and of the claim service of the hub. `internal/room` has no model of them and no test, and [issue 19](https://github.com/Multiplexer-si/OpenPlexer/issues/19) builds the hub and pins them.
 
 ### Order
 
@@ -222,6 +227,7 @@ The reference is at commit `7d80045a`.
 | A receiver does not record a claim whose `at` is not a timestamp of RFC 3339 (rule E9). The daemon of the reference reads `at` with the date parser of JavaScript, which accepts more forms, and it counts from its own clock when `at` has no form that it knows. | The expiry is then a function of the events alone, and two receivers agree on it. The hub of the reference writes `at` in RFC 3339 only. |
 | `right_to_post` always refuses a post for good (rule X5). The daemon of the reference sends the post again unless `message` starts with `agents may not post`. | The wording of `message` is not part of the contract. A post that the hub refuses for the right to post fails the same way when it is sent again. |
 | A receiver that skips an event records the `seq` of that event. The daemon of the reference does not. | A receiver that has recorded the `seq` does not ask for the same event after every reconnection. Both behaviors work with the hub of the reference. |
+| The Go implementation reports an overlap for a glob whose size is more than 3000. The size is the number of characters of the normalized glob plus the number of states of the automaton that matches it against a path of 4,096 characters, so the limit refuses a plain glob of more than about 1,500 characters. For a path of more than 4,096 characters, the size is counted again for the length of that path. The reference has no limit. | The time of a match grows with the size of the glob times the length of the path, and the schema puts no limit on the length of an entry. The reference gives no answer on a glob of many `*`: on Node.js 22.16, `*a` 14 times and then `c`, against 28 `a`, takes 0.3 s, and the same glob with `*a` 1,500 times gives no answer in 20 s. A false overlap costs little, because a claim is a warning. |
 | A receiver keeps an unknown field of `agent`, of `sender`, and of `needs`. The reference drops an unknown field of these three objects when it parses a message, and it keeps an unknown field of an event, of a body, and of an envelope. | [The general rule](../README.md#writers-and-receivers) has no exception. No conforming writer sends such a field today, so the two behaviors differ only after version 1 adds a field to one of the three objects. |
 
 No fixture case depends on one of these differences. The fixture `active-claims` uses only timestamps of RFC 3339. Every expected value is the value that the reference returns. One case needs a note. In `validate-envelope`, the case `a type that no message defines is valid` records the verdict of the envelope schema of the reference. The message schema of the reference, which its hub and its daemon parse with, rejects that message.
@@ -246,5 +252,19 @@ Each item is behavior of the reference that looks unintended, or a choice that t
 4. **`action` in a `policy.denied` body, and `actions` and `scope` in a `policy.override` body, are open strings.** The policy contract has closed lists for the same values.
 5. **The envelope schema accepts any `v` greater than zero and any `type` that is not empty. The reference is stricter.** Its hub and its daemon parse every message with a schema that lists their message types. A message with another `type`, or with a payload that does not fit its `type`, fails. The hub answers such a message with an `error` message, the daemon drops it, and both keep the connection. The hub closes a connection that sends a `v` other than 1. Version 1 defines the payloads of `event`, `resume`, and `error`, and rule O8 says what a receiver does with another `v`. What the hub does with a `type` that it does not take is settled with the hub in [issue 19](https://github.com/Multiplexer-si/OpenPlexer/issues/19).
 6. **The reference removes the white space around `text` and `addressed_to` when it parses a `question` or an `answer`.** Version 1 says only that the value needs one character that is not white space. It does not say whether a receiver stores the trimmed value.
-7. **Some classes make the overlap check of the reference fail, or give a result that the glob rules do not.** The causes are those of the second open question of the [policy contract](../policy/README.md#open-questions): a range that is out of order, such as `[z-a]`, makes the check throw an error, and a class whose first character is `]` is read as regular expression syntax. Version 1 does not define the result of a glob that throws, or of a class whose first character is `]` and whose rest holds a syntax character. The fixture `claims-patterns-overlap` pins the classes that match no path, and no fixture covers the others.
+7. **Some classes make the overlap check of the reference fail, or give a result that the glob rules do not.** The reference copies the text of a class into an ECMA-262 regular expression without the `i` flag and without the `u` flag. Two kinds of class show it.
+    - A range that is out of order, such as `[z-a]`, makes the reference throw an error.
+    - In a class whose first character is `]`, ECMA-262 reads `[]` as a class that matches nothing, and it reads the rest of the class, with its `]`, as regular expression syntax. If the rest holds none of the syntax characters `^ $ . * + ? ( ) [ { } |`, the glob matches no path: `src/[]x]` matches neither `src/x` nor `src/]`. Otherwise the reference can match paths that the glob does not seem to describe, or throw. `a[]*]` matches `a]`. `ab[]|c]` matches every path that ends in `c]`, because the `|` splits the whole glob in two alternatives, and only the first is held to the start of the path. `[](]` and `[]**]` make the reference throw.
+
+    Version 1 keeps the result of the reference wherever the reference returns one. For a class whose first character is `]`, an implementation must therefore read the rest of the class as the regular expression that the reference builds. Where the reference throws, the two entries overlap.
+
+    The reference reads a glob only when it needs it, and it stops at the first test that holds. So it returns an overlap for `**` and `[z-a]` in that order, because `**` matches the empty literal prefix of `[z-a]`, and it throws for the same two entries in the other order. Both results are an overlap in version 1, so the order of two entries never changes the result.
+
+    Version 1 does not define the result in these cases. The Go implementation reports an overlap in each one.
+    - The rest of the class holds a group that starts with `(?`, and the group is not one of `(?:`, `(?=`, `(?!`, `(?<=`, `(?<!`, and a group with a name of ASCII letters, digits, `$`, and `_`, such as `(?<n>`. A group with flags, such as `(?i:`, is an example. The result of the reference depends on the version of its JavaScript engine.
+    - The glob holds more than 1000 groups.
+    - The rest of the class holds a count with a large minimum, and the group that it counts can match the empty string, as in `(?:a*){10000000}`. On Node.js 22.16 the reference returns a result for a minimum of 1,000,000, and it throws `Maximum call stack size exceeded` for a minimum of 10,000,000.
+    - The glob is too large to match. [The differences from the reference](#intentional-differences-from-the-reference) give the limit of the Go implementation.
+
+    The fixture `claims-patterns-overlap` pins the classes that match no path. The fixture `claims-class-syntax` pins the classes that match a path, and it records the cases where the reference throws with the expected value `{"throws": true}`. The fixture `claims-path-sets-overlap` holds two lists with a glob that throws. No fixture covers the cases that version 1 does not define, and the tests of `internal/room` pin what the Go implementation does with them.
 8. **`dir/**` matches `dir` in the policy dialect and not in the claims dialect.** A claim on `src/**` does not overlap a claim on the path `src`.
