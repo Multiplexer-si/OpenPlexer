@@ -9,6 +9,7 @@ const (
 	UnsupportedVersion   ErrorCode = "unsupported_version"
 	Unauthorized         ErrorCode = "unauthorized"
 	TokenExpired         ErrorCode = "token_expired"
+	MpxOutdated          ErrorCode = "mpx_outdated"
 	AlreadyAuthenticated ErrorCode = "already_authenticated"
 	BadMessage           ErrorCode = "bad_message"
 	Schema               ErrorCode = "schema"
@@ -40,6 +41,7 @@ var errorCodes = map[ErrorCode]struct {
 	UnsupportedVersion:   {closeWith: 4400},
 	Unauthorized:         {closeWith: 4401},
 	TokenExpired:         {closeWith: 4401},
+	MpxOutdated:          {closeWith: 4426},
 	AlreadyAuthenticated: {},
 	BadMessage:           {},
 	Schema:               {},
@@ -52,8 +54,8 @@ var errorCodes = map[ErrorCode]struct {
 	Behind:               {resumes: true},
 }
 
-// CloseCode is the WebSocket close code that follows an error with this code.
-// 0 keeps the connection.
+// CloseCode is the WebSocket close code that the hub sends after an error with
+// this code. 0 keeps the connection.
 func (c ErrorCode) CloseCode() int { return errorCodes[c].closeWith }
 
 func (c ErrorCode) PostOutcome() PostOutcome { return errorCodes[c].onPost }

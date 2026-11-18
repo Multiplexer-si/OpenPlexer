@@ -20,6 +20,7 @@ The field descriptions are in the schemas. This page gives the rules that a sche
 | `v1/examples/resume/`, `v1/examples/error/` | Valid payloads of the two messages. |
 | `v1/fixtures/validate-envelope.json` | Valid and invalid envelopes. |
 | `v1/fixtures/validate-resume.json`, `v1/fixtures/validate-error.json` | Valid and invalid payloads of the two messages. |
+| `v1/fixtures/error-close-codes.json` | The close code that follows each error code of the hub. |
 | `v1/fixtures/deliver.json` | What one subscription of the hub sends, for a replay and new events in several orders. |
 | `v1/fixtures/active-claims.json` | The claims that a receiver holds as active after a list of events. |
 | `v1/fixtures/claims-patterns-overlap.json`, `v1/fixtures/claims-path-sets-overlap.json` | Pairs of patterns and pairs of path lists, with whether they overlap. |
@@ -155,10 +156,10 @@ The hub reports an error in a message with the `type` `error`. Its payload has `
 
 | # | Rule | Source | Evidence |
 |---|---|---|---|
-| X1 | After an error with the code `unsupported_version`, the hub closes the connection with the close code 4400. After `unauthorized` or `token_expired`, it closes with 4401. After every other code it keeps the connection. | Reference | `apps/hub/src/ws/server.ts` |
+| X1 | After an error with the code `unsupported_version`, the hub closes the connection with the close code 4400. After `unauthorized` or `token_expired`, it closes with 4401. After `mpx_outdated`, it closes with 4426. After every other code that it sends, it keeps the connection. | Reference | `apps/hub/src/ws/server.ts`, fixture `error-close-codes` |
 | X2 | A receiver sends no `error` message. It skips a message that it cannot read, and it keeps the connection. | Reference | `apps/daemon/src/sync/client.ts` |
 | X3 | An error that answers a post has the `client_event_id` of the post. The poster sends the post again after `rate_limit` or `internal`. It treats `coalesced` as success: the hub stored nothing new, and the post needs nothing more. Every other code refuses the post for good. | Reference | `apps/daemon/src/sync/client.ts` |
-| X4 | A code that this table does not list has the effect of the last row: the connection stays open, and a post is refused for good. | Reference | `apps/daemon/src/sync/client.ts` |
+| X4 | A receiver never closes the connection because of a code. Only the hub closes it, by rule X1. A receiver treats a code that this table does not list as the last row: the post is refused for good. | Reference | `apps/daemon/src/sync/client.ts` |
 | X5 | `right_to_post` refuses a post for good, whatever its `message`. | Chosen | |
 
 | `code` | Meaning | After it the hub | A post that it answers |
@@ -166,6 +167,7 @@ The hub reports an error in a message with the `type` `error`. Its payload has `
 | `unsupported_version` | The `v` of a message is not 1, or the client offers no version that the hub has. | closes with 4400 | is refused |
 | `unauthorized` | The client sent a message before it proved who it is, or its proof is not valid. | closes with 4401 | is refused |
 | `token_expired` | The token of the agent session expired. | closes with 4401 | is refused |
+| `mpx_outdated` | The program of the client is older than the oldest version that the hub accepts. | closes with 4426 | is refused |
 | `already_authenticated` | The client proved who it is a second time. | keeps the connection | is refused |
 | `bad_message` | The hub cannot read the message. | keeps the connection | is refused |
 | `schema` | A post does not fit the schema of its event type. | keeps the connection | is refused |
@@ -179,6 +181,8 @@ The hub reports an error in a message with the `type` `error`. Its payload has `
 | any other code | | keeps the connection | is refused |
 
 The messages that carry a post and prove who a client is belong to the hub, which [issue 19](https://github.com/Multiplexer-si/OpenPlexer/issues/19) builds. Version 1 lists their codes here so that a receiver built on this contract reacts to each one.
+
+The fixture `error-close-codes` lists every code that the socket server of the reference names in its source, with the close code that follows it. It holds eight codes that the table does not list: `bind_failed`, `claim_failed`, `claim_forbidden`, `claim_not_found`, `claim_repo_required`, `code`, `secret`, and `size`. Each one belongs to a message that version 1 does not define, and the hub keeps the connection after each one, as the last row says. The hub of the reference can also send a code that it takes from another service at run time, which the fixture cannot list. It sends such a code with a function that keeps the connection.
 
 ## Compatibility
 
@@ -206,7 +210,7 @@ The reference is at commit `7d80045a`.
 | The `if` and `then` in `envelope` that tie `payload` to the `type` `event` | Authored. The reference does the same check in `packages/protocol/src/ws-messages.ts`, in the schema that its hub and its daemon parse every message with. |
 | Every `description` | Authored. |
 | The overlap rules on this page | Authored from `apps/hub/src/claims/overlap.ts`. |
-| Every expected value in the fixtures | Computed by the schemas, by the `patternsOverlap` and `pathSetsOverlap` functions, by the `Subscription` class of the hub for `deliver`, and by the `OfflineCache` class of the daemon for `active-claims`. In `validate-envelope`, the verdict of a message with the `type` `event` comes from the message schema in `ws-messages.ts`, and the verdict of every other message comes from the envelope schema in `envelope.ts`. |
+| Every expected value in the fixtures | Computed by the schemas, by the `patternsOverlap` and `pathSetsOverlap` functions, by the `Subscription` class of the hub for `deliver`, and by the `OfflineCache` class of the daemon for `active-claims`. The reference does not compute the values of `error-close-codes`: its socket server needs a database, so the extractor reads them from the calls in the source of the server. In `validate-envelope`, the verdict of a message with the `type` `event` comes from the message schema in `ws-messages.ts`, and the verdict of every other message comes from the envelope schema in `envelope.ts`. |
 
 ## Intentional differences from the reference
 
