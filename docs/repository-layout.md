@@ -22,14 +22,14 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 | Directory | Binary | Role |
 |---|---|---|
 | `apps/openplexer` | `openplexer` | The CLI on a developer's machine |
-| `apps/openplexer-hub` | `openplexer-hub` | The hub server |
+| `apps/openplexer-hub` | `openplexer-hub` | The single-team hub server and its local admin commands |
 | `apps/openplexer-verify` | `openplexer-verify` | The standalone verifier for audit logs |
 
-`openplexer` configures the local gate, loads a signed policy bundle, reports the state of the policy, and checks one action. [Local policy gate](local-policy.md) lists those commands. It also installs and removes the hook of Claude Code and Codex, and it is the command that each hook runs. [Claude Code hooks](hooks-claude-code.md) and [Codex hooks](hooks-codex.md) give those commands. The other two binaries print "not implemented yet" to standard error and exit with status 1.
+`openplexer` configures the local gate, loads a signed policy bundle, reports the state of the policy, and checks one action. [Local policy gate](local-policy.md) lists those commands. It also installs and removes the hook of Claude Code and Codex, and it is the command that each hook runs. [Claude Code hooks](hooks-claude-code.md) and [Codex hooks](hooks-codex.md) give those commands. `openplexer-hub` manages members, projects, and signed policies and serves the Room HTTP API. [Run the single-team hub](hub.md) gives the commands and endpoints. `openplexer-verify` prints "not implemented yet" to standard error and exits with status 1.
 
 ## Packages
 
-`internal/policy`, `internal/audit`, and `internal/daemon` hold the policy evaluator and the verification of a signed bundle, the audit record, and the local gate. The four adapter packages hold the hook adapters and their list, and `internal/jsonedit` edits a JSON file in place. `internal/room` holds the Room protocol. `internal/hub` holds a `doc.go` file with a package comment and no other code. The last three packages hold only tests.
+`internal/policy`, `internal/audit`, and `internal/daemon` hold the policy evaluator and the verification of a signed bundle, the audit record, and the local gate. The four adapter packages hold the hook adapters and their list, and `internal/jsonedit` edits a JSON file in place. `internal/room` holds the Room protocol. `internal/hub` runs the single-team hub. The last three packages hold only tests.
 
 | Package | Owns |
 |---|---|
@@ -42,7 +42,7 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 | `internal/adapter/claudecode` | The `Agent` value of Claude Code: its table of gated tools, its settings files, and its hook entry. |
 | `internal/adapter/codex` | The `Agent` value of Codex: its table of gated tools, the reader of `apply_patch` patches, its hook files, and its hook entry. |
 | `internal/jsonedit` | Edits of JSON text that keep every byte they do not change. It imports nothing from the module. |
-| `internal/hub` | The single-team hub server. |
+| `internal/hub` | The hub file store, membership, repository scope, policy signing, Room sequencing, and HTTP API. |
 | `internal/layering` | The tests that enforce the dependency rules, and the rule that only a test may import another module. |
 | `internal/doclinks` | The test that checks the relative links in the documentation. |
 | `internal/spectest` | The tests that check the contracts: every file under `spec/` is in its place, every schema compiles, every example validates against its schema, every fixture file validates against the fixture-file schema, and every hash follows from its rule. |
