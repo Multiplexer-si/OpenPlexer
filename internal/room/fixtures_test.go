@@ -47,9 +47,24 @@ func decodeStrict(t *testing.T, text []byte, into any) {
 
 var validators = map[string]func(text []byte) error{
 	"urn:openplexer:spec:room:v1:room-event": func(text []byte) error { _, err := ParseEvent(text); return err },
-	"urn:openplexer:spec:room:v1:envelope":   func(text []byte) error { _, err := readMessage(text, false); return err },
+	"urn:openplexer:spec:room:v1:envelope":   validateEnvelope,
 	"urn:openplexer:spec:room:v1:resume":     func(text []byte) error { _, err := parse(text, (*reader).resume); return err },
 	"urn:openplexer:spec:room:v1:error":      func(text []byte) error { _, err := parse(text, (*reader).errorPayload); return err },
+}
+
+// The envelope schema checks the payload of an event and of no other message.
+func validateEnvelope(text []byte) error {
+	env, issues := readEnvelope(text)
+	if len(issues) == 0 && env.typ == "event" {
+		_, issues = env.event()
+	}
+	if len(issues) == 0 && !env.hasPayload {
+		issues = []Issue{{Path: "payload", Reason: "is required"}}
+	}
+	if len(issues) > 0 {
+		return &ValidationError{Issues: issues}
+	}
+	return nil
 }
 
 var operations = map[string]func(t *testing.T, file fixtureFile) func(t *testing.T, c fixtureCase){

@@ -68,7 +68,6 @@ func (r *reader) sender(path string, value any) Sender {
 	return s
 }
 
-// event reads the payload as a stored event.
 func (e envelope) event() (Event, []Issue) {
 	if !e.hasPayload {
 		return Event{}, []Issue{{Path: "payload", Reason: "is required"}}
@@ -80,9 +79,7 @@ func (e envelope) event() (Event, []Issue) {
 	return ev, nil
 }
 
-// readPayload reads the payload by type. With versionOne false only an event
-// is read, which is all that the envelope schema asks for.
-func (e envelope) readPayload(versionOne bool) (Payload, []Issue) {
+func (e envelope) readPayload() (Payload, []Issue) {
 	if !e.hasPayload {
 		return nil, []Issue{{Path: "payload", Reason: "is required"}}
 	}
@@ -92,9 +89,9 @@ func (e envelope) readPayload(versionOne bool) (Payload, []Issue) {
 	case e.typ == "event":
 		ev, issues := e.event()
 		return ev, issues
-	case versionOne && e.typ == "resume":
+	case e.typ == "resume":
 		payload, err = parse(e.payload, (*reader).resume)
-	case versionOne && e.typ == "error":
+	case e.typ == "error":
 		payload, err = parse(e.payload, (*reader).errorPayload)
 	default:
 		return Other{Raw: e.payload}, nil

@@ -20,6 +20,9 @@ type Message struct {
 	payload Payload
 }
 
+// personVendor is the `agent.vendor` of an event that a person caused.
+const personVendor = "human"
+
 // Payload is an Event, Resume, Error, or Other.
 type Payload interface{ payload() }
 
@@ -43,16 +46,10 @@ func (Other) payload()  {}
 // spec/room/v1/envelope.schema.json and, by type, the payload schemas. The
 // error is a *ValidationError.
 func ParseMessage(text []byte) (Message, error) {
-	return readMessage(text, true)
-}
-
-// readMessage with versionOne false checks only what the envelope schema
-// checks: the payload of an event, and no other payload.
-func readMessage(text []byte, versionOne bool) (Message, error) {
 	env, issues := readEnvelope(text)
 	var payload Payload
 	if len(issues) == 0 {
-		payload, issues = env.readPayload(versionOne)
+		payload, issues = env.readPayload()
 	}
 	if len(issues) > 0 {
 		return Message{}, &ValidationError{Issues: issues}
@@ -105,7 +102,7 @@ func (r *reader) errorPayload(doc any) Error {
 // a dashboard for a person and a daemon for an agent session.
 func EventMessage(ev Event) Message {
 	kind := Daemon
-	if ev.agent.Vendor == "human" {
+	if ev.agent.Vendor == personVendor {
 		kind = Dashboard
 	}
 	return build(object{

@@ -26,9 +26,7 @@ const (
 type PostOutcome uint8
 
 const (
-	// Rejected: refused for good; report it.
 	Rejected PostOutcome = iota
-	// Retry: keep the post queued and send it again.
 	Retry
 	// Done: the post needs nothing more, and nothing new is stored.
 	Done
@@ -58,5 +56,4 @@ var errorCodes = map[ErrorCode]struct {
 // 0 keeps the connection.
 func (c ErrorCode) CloseCode() int { return errorCodes[c].closeWith }
 
-// PostOutcome is what a poster does when this code answers its post.
 func (c ErrorCode) PostOutcome() PostOutcome { return errorCodes[c].onPost }

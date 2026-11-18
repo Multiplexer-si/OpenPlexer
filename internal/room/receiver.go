@@ -4,8 +4,7 @@ import "time"
 
 // Receiver is the receiving end of a connection, kept across reconnections.
 // Per Room it holds the highest seq received and the claims reduced from the
-// events that Receive delivered. Receive is the only way to change it. A
-// Receiver belongs to one goroutine.
+// events that Receive delivered.
 type Receiver struct {
 	rooms map[string]*roomState
 }
@@ -53,8 +52,8 @@ func (r *Receiver) room(name string) *roomState {
 	return state
 }
 
-// Restore sets the highest seq of a Room from durable storage. Call it before
-// the first Receive of the Room.
+// Restore sets the highest seq of a Room from durable storage. It never lowers
+// the seq.
 func (r *Receiver) Restore(room string, lastSeq int64) {
 	if state := r.room(room); lastSeq > state.last {
 		state.last = lastSeq

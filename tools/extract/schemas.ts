@@ -356,7 +356,6 @@ function policySchemas(reference: Reference): Document[] {
   ];
 }
 
-/** The payload schema of one message type of the reference. */
 export function messagePayload(reference: Reference, type: string): ZodSchema {
   const message = reference.protocol.wsMessageSchema.options.find((option) => option.shape.type!.value === type);
   if (!message) throw new Error(`the reference has no ${type} message`);

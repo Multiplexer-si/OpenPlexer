@@ -5,19 +5,18 @@ import (
 	"time"
 )
 
-// ActiveClaim is a claim that a Receiver holds. Holder is the agent of the
-// claim event.
 type ActiveClaim struct {
 	ID        string
 	Intent    string
 	Paths     []string
 	ExpiresAt time.Time
-	Holder    Agent
+	// Holder is the agent of the claim event: for a sub-agent, its own
+	// session and not its parent.
+	Holder Agent
 }
 
-// reduceClaim applies one event to the claims of a Room. Only claim and
-// release events change them. An expired claim stays until it is replaced:
-// no event ends it, and active filters it out.
+// An expired claim stays until it is replaced: no event ends it, and active
+// filters it out.
 func reduceClaim(claims []ActiveClaim, ev Event) []ActiveClaim {
 	switch body := ev.Body().(type) {
 	case *Claim:
@@ -25,8 +24,8 @@ func reduceClaim(claims []ActiveClaim, ev Event) []ActiveClaim {
 		if err != nil {
 			return claims
 		}
-		id, ok := ev.body["claim_id"].(string)
-		if !ok {
+		id := body.ClaimID
+		if id == "" {
 			id = ev.id
 		}
 		expires := at.UnixMilli() + body.TTLSeconds*1000

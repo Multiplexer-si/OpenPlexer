@@ -48,7 +48,6 @@ func normalize(pattern string) string {
 
 func isGlob(pattern string) bool { return strings.ContainsAny(pattern, "*?[") }
 
-// literalPrefix is the text before the first `*`, `?`, or `[`.
 func literalPrefix(pattern string) string {
 	if i := strings.IndexAny(pattern, "*?["); i >= 0 {
 		return pattern[:i]
@@ -81,9 +80,8 @@ func PathsOverlap(a, b []string) bool {
 	})
 }
 
-// globMatches reports whether a normalized glob matches a normalized path. A
-// glob with a class range whose ends are out of order, such as [z-a], matches
-// no path.
+// A glob with a class range whose ends are out of order, such as [z-a],
+// matches no path.
 func globMatches(glob, path string) bool {
 	tokens, ok := compileGlob(glob)
 	return ok && matchTokens(tokens, utf16.Encode([]rune(path)))
@@ -139,8 +137,7 @@ func compileGlob(glob string) ([]token, bool) {
 	return tokens, true
 }
 
-// readClass reads the text between `[` and `]`. A class whose first character
-// is `]` matches nothing. The result is false for a range out of order.
+// A class whose first character is `]` matches nothing.
 func readClass(text []uint16) (class, bool) {
 	if text[0] == ']' {
 		return class{}, true

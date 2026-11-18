@@ -1,22 +1,17 @@
 package room
 
-// Body is the typed body of one event type: a pointer to one of Status, Claim,
-// Release, Decision, DecisionConfirm, Question, Answer, Blocked, Human,
-// PolicyDenied, PolicyOverride, or PolicyOverrideRevoked. A zero optional
-// field is an absent one.
+// Body is a pointer to the typed body of one event type. A zero optional field
+// is an absent one.
 type Body interface {
 	thread() *Thread
 	read(r *reader, path string, o object)
 }
 
-// Thread holds the two fields that every body accepts.
 type Thread struct{ ThreadID, ReplyTo string }
 
 func (t *Thread) thread() *Thread { return t }
 
-// eventTypes is the closed list of event types of version 1 and the only place
-// that names them. The check of `type`, the reader of a body, and the test
-// against the schema all use it.
+// eventTypes is the only place that names the event types of version 1.
 var eventTypes = []struct {
 	name string
 	new  func() Body
@@ -67,6 +62,9 @@ type Status struct {
 
 type Claim struct {
 	Thread
+	// ClaimID is the id that the hub gave the claim, or "". The body schema
+	// does not name the field, so a value that is not a string is ignored.
+	ClaimID      string
 	Item, Intent string
 	Paths        []string
 	TTLSeconds   int64
@@ -140,6 +138,7 @@ func (b *Claim) read(r *reader, path string, o object) {
 	b.Paths, _ = field(r, path, o, "paths", required, list(r, r.text))
 	b.Intent, _ = field(r, path, o, "intent", required, r.text)
 	b.TTLSeconds, _ = field(r, path, o, "ttl_seconds", required, r.integerFrom(1))
+	b.ClaimID, _ = o["claim_id"].(string)
 }
 
 func (b *Release) read(r *reader, path string, o object) {
