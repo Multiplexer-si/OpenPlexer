@@ -4,10 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"flag"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -564,5 +567,39 @@ func TestFileChangedWhileEditing(t *testing.T) {
 				t.Fatalf("a temp file was left behind: %v", entries)
 			}
 		})
+	}
+}
+
+func TestConcurrentInstallsOfOneHookFileKeepTheRecord(t *testing.T) {
+	h := handlerFor("claude-code")
+	for trial := range 40 {
+		dir := t.TempDir()
+		journal := Journal{Dir: filepath.Join(dir, "installs")}
+		root := filepath.Join(dir, "proj")
+		path := filepath.Join(root, ".claude", "settings.json")
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		errs := make([]error, 6)
+		var wg sync.WaitGroup
+		for i := range errs {
+			wg.Go(func() { _, errs[i] = journal.Install(path, h, root) })
+		}
+		wg.Wait()
+		for _, err := range errs {
+			if err != nil {
+				t.Fatalf("trial %d: an install failed: %v", trial, err)
+			}
+		}
+		roots, err := journal.Roots()
+		if err != nil || !slices.Equal(roots, []string{root}) {
+			t.Fatalf("trial %d: recorded roots = %q, %v, want the project root", trial, roots, err)
+		}
+		if change, err := journal.Uninstall(path, "claude-code"); err != nil || change != Removed {
+			t.Fatalf("trial %d: Uninstall = %v, %v", trial, change, err)
+		}
+		if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+			t.Fatalf("trial %d: the file that install created is still there after uninstall: %v", trial, err)
+		}
 	}
 }
