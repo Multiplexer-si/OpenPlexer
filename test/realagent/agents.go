@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -12,25 +14,30 @@ import (
 	"strings"
 )
 
-var hookEvents = []string{"SessionStart", "UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"}
-
 const (
 	claudeModel = "haiku"
 	codexModel  = "gpt-6-luna"
 )
 
 type runSetup struct {
-	project   string
-	state     string
-	sessionID string
+	project           string
+	state             string
+	home              string
+	sessionID         string
+	codexHooks        []string
+	codexSessionHooks []string
 }
 
 type agent struct {
-	name      string
-	model     string
-	prepare   func(d runSetup, s scenario, hookCmd string) (*exec.Cmd, error)
-	leftovers func(d runSetup) ([]string, error)
-	feedback  func(stdout []byte) (said, toolResults string)
+	name         string
+	installName  string
+	model        string
+	seed         func(d runSetup) error
+	afterInstall func(d *runSetup, offline bool) error
+	signedIn     func() error
+	prepare      func(ctx context.Context, d runSetup, s scenario) (*exec.Cmd, error)
+	leftovers    func(d runSetup) ([]string, error)
+	feedback     func(stdout, stderr []byte) (said, toolResults string)
 }
 
 var agents = []agent{claude, codex}
@@ -59,17 +66,11 @@ func claudeSlug(dir string) string {
 }
 
 var claude = agent{
-	name:  "claude",
-	model: claudeModel,
-	prepare: func(d runSetup, s scenario, hookCmd string) (*exec.Cmd, error) {
-		groups := map[string]any{}
-		for _, ev := range hookEvents {
-			groups[ev] = []any{map[string]any{"hooks": []any{map[string]any{
-				"type": "command", "command": hookCmd, "timeout": 30,
-			}}}}
-		}
+	name:        "claude",
+	installName: "claude-code",
+	model:       claudeModel,
+	seed: func(d runSetup) error {
 		settings, _ := json.MarshalIndent(map[string]any{
-			"hooks": groups,
 			"sandbox": map[string]any{
 				"enabled":                  true,
 				"failIfUnavailable":        true,
@@ -79,12 +80,31 @@ var claude = agent{
 			},
 		}, "", "  ")
 		if err := os.MkdirAll(filepath.Join(d.project, ".claude"), 0o755); err != nil {
-			return nil, err
+			return err
 		}
-		if err := os.WriteFile(filepath.Join(d.project, ".claude", "settings.json"), settings, 0o644); err != nil {
-			return nil, err
+		return os.WriteFile(filepath.Join(d.project, ".claude", "settings.json"), settings, 0o644)
+	},
+	afterInstall: func(d *runSetup, offline bool) error {
+		if !offline {
+			return nil
 		}
-		cmd := exec.Command("claude", "-p",
+		return rewriteClaudeSettings(filepath.Join(d.project, ".claude", "settings.json"))
+	},
+	signedIn: func() error {
+		out, runErr := exec.Command("claude", "auth", "status").Output()
+		var status struct {
+			LoggedIn bool `json:"loggedIn"`
+		}
+		if err := json.Unmarshal(out, &status); err != nil {
+			return fmt.Errorf("claude auth status: %w", errors.Join(runErr, err))
+		}
+		if !status.LoggedIn {
+			return errors.New("claude auth status reports no sign-in; run `claude auth login` in a plain terminal")
+		}
+		return nil
+	},
+	prepare: func(ctx context.Context, d runSetup, s scenario) (*exec.Cmd, error) {
+		cmd := exec.CommandContext(ctx, "claude", "-p",
 			"--session-id", d.sessionID,
 			"--model", claudeModel, "--effort", "low",
 			"--setting-sources", "project",
@@ -94,7 +114,7 @@ var claude = agent{
 			"--strict-mcp-config", "--disable-slash-commands", "--no-session-persistence",
 			"--output-format", "stream-json", "--verbose", "--include-hook-events")
 		cmd.Dir = d.project
-		cmd.Env = append(os.Environ(), "CLAUDE_CODE_TMPDIR="+d.state, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1")
+		cmd.Env = append(os.Environ(), "CLAUDE_CODE_TMPDIR="+d.state, "CLAUDE_CODE_DISABLE_AUTO_MEMORY=1", "OPENPLEXER_HOME="+d.home)
 		cmd.Stdin = strings.NewReader(s.prompt)
 		return cmd, nil
 	},
@@ -116,9 +136,28 @@ var claude = agent{
 }
 
 var codex = agent{
-	name:  "codex",
-	model: codexModel,
-	prepare: func(d runSetup, s scenario, hookCmd string) (*exec.Cmd, error) {
+	name:        "codex",
+	installName: "codex",
+	model:       codexModel,
+	afterInstall: func(d *runSetup, offline bool) error {
+		path := filepath.Join(d.project, ".codex", "hooks.json")
+		var err error
+		if d.codexHooks, err = hooksOverrides(path, nil); err != nil {
+			return err
+		}
+		d.codexSessionHooks = d.codexHooks
+		if offline {
+			d.codexSessionHooks, err = hooksOverrides(path, offlineCommand)
+		}
+		return err
+	},
+	signedIn: func() error {
+		if out, err := exec.Command("codex", "login", "status").CombinedOutput(); err != nil {
+			return fmt.Errorf("codex login status: %w: %s; run `codex login` in a plain terminal", err, strings.TrimSpace(string(out)))
+		}
+		return nil
+	},
+	prepare: func(ctx context.Context, d runSetup, s scenario) (*exec.Cmd, error) {
 		args := []string{"exec", "--json", "--ephemeral", "--skip-git-repo-check",
 			"--ignore-user-config", "--ignore-rules", "--dangerously-bypass-hook-trust",
 			"--disable", "plugins", "--disable", "remote_plugin", "--disable", "apps", "--disable", "shell_snapshot",
@@ -131,12 +170,9 @@ var codex = agent{
 			"-c", "sqlite_home=" + strconv.Quote(d.state),
 			"-c", "log_dir=" + strconv.Quote(filepath.Join(d.state, "log")),
 			"-C", d.project}
-		for _, ev := range hookEvents {
-			args = append(args, "-c", fmt.Sprintf(`hooks.%s=[{hooks=[{type="command",command=%s,timeout=30}]}]`,
-				ev, strconv.Quote(hookCmd)))
-		}
-		cmd := exec.Command("codex", args...)
+		cmd := exec.CommandContext(ctx, "codex", append(args, d.codexSessionHooks...)...)
 		cmd.Dir = d.project
+		cmd.Env = append(os.Environ(), "OPENPLEXER_HOME="+d.home)
 		cmd.Stdin = strings.NewReader(s.prompt)
 		return cmd, nil
 	},
