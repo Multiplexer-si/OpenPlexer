@@ -121,3 +121,26 @@ func mustMarshal(t *testing.T, v interface{ MarshalJSON() ([]byte, error) }) []b
 	}
 	return text
 }
+
+// The frame of the verifier of pull request 61: `payload` is an event of a
+// type that version 1 does not define, and `PAYLOAD` is a valid claim.
+func TestAPayloadKeyInAnotherCaseIsNotThePayload(t *testing.T) {
+	claim := eventPayload("claim", 5, `{"item":"i","paths":["src/**"],"intent":"x","ttl_seconds":600}`)
+	frame := `{"v":1,"type":"event",` + sender + `,"room":"mis","seq":5,"payload":` + eventPayload("request", 5, `{}`) + `,"PAYLOAD":` + claim + `}`
+	if _, err := ParseMessage([]byte(frame)); err == nil {
+		t.Error("ParseMessage accepted a frame whose payload is not a valid event")
+	}
+	r := NewReceiver()
+	if step, ok := r.Receive([]byte(frame)).(Skipped); !ok || r.LastSeq("mis") != 5 {
+		t.Errorf("Receive = %#v with the last seq %d, want Skipped and 5", step, r.LastSeq("mis"))
+	}
+	status := eventPayload("status", 6, `{"summary":"s"}`)
+	both := `{"v":1,"type":"event",` + sender + `,"room":"mis","seq":6,"payload":` + status + `,"Payload":` + claim + `}`
+	m, err := ParseMessage([]byte(both))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := string(mustMarshal(t, m.Payload().(Event))); got != status {
+		t.Errorf("ParseMessage read the event %s, want %s", got, status)
+	}
+}
