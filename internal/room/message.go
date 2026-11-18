@@ -108,7 +108,7 @@ func EventMessage(ev Event) Message {
 	return build(object{
 		"v": 1, "type": "event", "room": ev.mission, "seq": ev.seq, "event_id": ev.id, "ts": ev.at,
 		"sender":  object{"id": ev.agent.ID, "kind": kind},
-		"payload": ev.raw,
+		"payload": ev,
 	})
 }
 

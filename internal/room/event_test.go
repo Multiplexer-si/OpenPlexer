@@ -38,10 +38,8 @@ func TestBodyIsFreshOnEachCall(t *testing.T) {
 
 func TestEventWritesBackUnknownFieldsAndNumbers(t *testing.T) {
 	text := claimEvent("7", "60")
-	written, err := mustEvent(t, " "+text+"\n").MarshalJSON()
-	if err != nil || string(written) != text {
-		t.Errorf("MarshalJSON = %s, %v; want %s", written, err, text)
-	}
+	event := mustEvent(t, " "+claimEvent("7.0", "6e1")+"\n")
+	assertSameJSON(t, mustMarshal(t, event), text)
 }
 
 func TestEventNumbers(t *testing.T) {
