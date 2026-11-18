@@ -55,6 +55,11 @@ interface Operation {
 const strict = (properties: Schema, required: string[] = Object.keys(properties)): Schema => ({ type: "object", properties, required, additionalProperties: false });
 const hex64: Schema = { type: "string", pattern: "^[0-9a-f]{64}$" };
 const seq: Schema = { type: "integer", minimum: 0 };
+const overlap = {
+  expected: { oneOf: [strict({ overlap: { type: "boolean" } }), strict({ throws: { const: true } })] },
+  informational: strict({ error: { type: "string" } }),
+};
+const OVERLAP_THROWS = "An `expected` of `throws` means that the reference returns no result, and an implementation must report an overlap.";
 
 const OPERATIONS: Record<string, Operation> = {
   evaluate: {
@@ -77,15 +82,15 @@ const OPERATIONS: Record<string, Operation> = {
   },
   "patterns-overlap": {
     contract: ["room"],
-    description: "Decide whether two claim patterns overlap.",
+    description: `Decide whether two claim patterns overlap. ${OVERLAP_THROWS}`,
     input: strict({ a: { type: "string" }, b: { type: "string" } }),
-    expected: strict({ overlap: { type: "boolean" } }),
+    ...overlap,
   },
   "path-sets-overlap": {
     contract: ["room"],
-    description: "Decide whether any pattern of one claim overlaps any pattern of another claim.",
+    description: `Decide whether any pattern of one claim overlaps any pattern of another claim. ${OVERLAP_THROWS}`,
     input: strict({ a: { type: "array", items: { type: "string" } }, b: { type: "array", items: { type: "string" } } }),
-    expected: strict({ overlap: { type: "boolean" } }),
+    ...overlap,
   },
   deliver: {
     contract: ["room"],

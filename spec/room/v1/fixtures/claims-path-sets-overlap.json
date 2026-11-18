@@ -57,6 +57,41 @@
       },
       "name": "two empty sets do not overlap",
       "why": "There is no pair to compare."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[z-a]$/: Range out of order in character class"
+      },
+      "input": {
+        "a": [
+          "src/a.ts",
+          "[z-a]"
+        ],
+        "b": [
+          "docs/**"
+        ]
+      },
+      "name": "a pattern that throws makes the lists throw",
+      "why": "The reference compares the pairs in order, and the second pair throws. The seventh open question of the README gives the rule."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": [
+          "src/a.ts",
+          "[z-a]"
+        ],
+        "b": [
+          "src/**"
+        ]
+      },
+      "name": "a pair that overlaps before the pattern that throws makes the lists overlap",
+      "why": "The reference stops at the first pair that overlaps, so it never reads the pattern that throws."
     }
   ],
   "contract": "room",

@@ -219,24 +219,51 @@
         ]
       },
       "then": {
-        "description": "Decide whether two claim patterns overlap.",
+        "description": "Decide whether two claim patterns overlap. An `expected` of `throws` means that the reference returns no result, and an implementation must report an overlap.",
         "properties": {
           "cases": {
             "items": {
               "properties": {
                 "expected": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "overlap": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "overlap"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "throws": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "throws"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "informational": {
                   "additionalProperties": false,
                   "properties": {
-                    "overlap": {
-                      "type": "boolean"
+                    "error": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "overlap"
+                    "error"
                   ],
                   "type": "object"
                 },
-                "informational": false,
                 "input": {
                   "additionalProperties": false,
                   "properties": {
@@ -279,24 +306,51 @@
         ]
       },
       "then": {
-        "description": "Decide whether any pattern of one claim overlaps any pattern of another claim.",
+        "description": "Decide whether any pattern of one claim overlaps any pattern of another claim. An `expected` of `throws` means that the reference returns no result, and an implementation must report an overlap.",
         "properties": {
           "cases": {
             "items": {
               "properties": {
                 "expected": {
+                  "oneOf": [
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "overlap": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "overlap"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": false,
+                      "properties": {
+                        "throws": {
+                          "const": true
+                        }
+                      },
+                      "required": [
+                        "throws"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                },
+                "informational": {
                   "additionalProperties": false,
                   "properties": {
-                    "overlap": {
-                      "type": "boolean"
+                    "error": {
+                      "type": "string"
                     }
                   },
                   "required": [
-                    "overlap"
+                    "error"
                   ],
                   "type": "object"
                 },
-                "informational": false,
                 "input": {
                   "additionalProperties": false,
                   "properties": {

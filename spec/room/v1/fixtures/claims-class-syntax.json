@@ -1,0 +1,445 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "a[]*]",
+        "b": "a]"
+      },
+      "name": "a * after a first ] repeats the empty class",
+      "why": "The reference reads `[]*]` as the class that matches nothing, any number of times, and then `]`. So `a[]*]` matches `a]`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "a[]*]",
+        "b": "a"
+      },
+      "name": "a * after a first ] still needs the ]",
+      "why": "`a[]*]` does not match `a`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "src/[]?]",
+        "b": "src/]"
+      },
+      "name": "a ? after a first ] makes the empty class optional",
+      "why": "`src/[]?]` matches `src/]`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "a[]{0}]x",
+        "b": "a]x"
+      },
+      "name": "a count of zero after a first ] removes the empty class",
+      "why": "`a[]{0}]x` matches `a]x`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "ab[]|c]",
+        "b": "zc]"
+      },
+      "name": "a | after a first ] splits the whole glob",
+      "why": "The second alternative is not held to the start of the path, so `ab[]|c]` matches every path that ends in `c]`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "ab[]|c]",
+        "b": "zd]"
+      },
+      "name": "a | after a first ] does not match another ending",
+      "why": "The path must still end in `c]`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "ab[]|c]",
+        "b": "ab"
+      },
+      "name": "the part before a first ] with a | matches no path alone",
+      "why": "The first alternative holds the class that matches nothing."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "a[]|b]/**",
+        "b": "zb]/x"
+      },
+      "name": "a glob after a first ] with a | is held to its directory",
+      "why": "`**` after the alternative matches as in any glob."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "[]|B]",
+        "b": "xb]"
+      },
+      "name": "a letter after a first ] is compared with case",
+      "why": "The claims dialect is case-sensitive in a class too."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|a.]",
+        "b": "xab]"
+      },
+      "name": "a . after a first ] matches one character",
+      "why": "The `.` is the dot of a regular expression."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|^b]",
+        "b": "b]"
+      },
+      "name": "a ^ after a first ] holds the alternative to the start",
+      "why": "`[]|^b]` matches `b]`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "[]|^b]",
+        "b": "ab]"
+      },
+      "name": "a ^ after a first ] does not match after the start",
+      "why": "`[]|^b]` does not match `ab]`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "[]|b$]",
+        "b": "b]"
+      },
+      "name": "a $ after a first ] matches no path before the ]",
+      "why": "The `]` of the class follows the `$`, so the alternative never matches."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "[]|a{2,3}]",
+        "b": "a]"
+      },
+      "name": "a count after a first ] needs its least number",
+      "why": "`a{2,3}` needs two `a`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|a{2,3}]",
+        "b": "xaa]"
+      },
+      "name": "a count after a first ] matches within its bounds",
+      "why": "`a{2,3}` matches two `a`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|a{,2}]",
+        "b": "a{,2}]"
+      },
+      "name": "a { that starts no count is a character",
+      "why": "`{,2}` has no least number, so the reference reads its characters as they are."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|(]a[]|b)]",
+        "b": "xb]"
+      },
+      "name": "a group after a first ] can span two classes",
+      "why": "The `(` of the first class is closed by the `)` of the second."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|(?<n>a)+]",
+        "b": "aaa]"
+      },
+      "name": "a group with a name after a first ] is a group",
+      "why": "`(?<n>a)+` matches one `a` or more."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|(?<=b)]",
+        "b": "xb]"
+      },
+      "name": "a lookbehind after a first ] matches after its text",
+      "why": "`(?<=b)]` matches a `]` that follows `b`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "[]|(?<=b)]",
+        "b": "xa]"
+      },
+      "name": "a lookbehind after a first ] does not match after other text",
+      "why": "`(?<=b)]` does not match a `]` that follows `a`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|(?<!b)c]",
+        "b": "ac]"
+      },
+      "name": "a negative lookbehind after a first ] matches after other text",
+      "why": "`(?<!b)c` matches a `c` that does not follow `b`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "[]|(?<!b)c]",
+        "b": "bc]"
+      },
+      "name": "a negative lookbehind after a first ] does not match after its text",
+      "why": "`(?<!b)c` does not match a `c` that follows `b`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|(?=c)c]",
+        "b": "c]"
+      },
+      "name": "a lookahead after a first ] matches before its text",
+      "why": "`(?=c)c` matches `c`."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "[]|(?!c).]",
+        "b": "c]"
+      },
+      "name": "a negative lookahead after a first ] does not match before its text",
+      "why": "`(?!c).` does not match `c`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|(?!c).]",
+        "b": "d]"
+      },
+      "name": "a negative lookahead after a first ] matches before other text",
+      "why": "`(?!c).` matches `d`."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "[]|\\d]",
+        "b": "x/d]"
+      },
+      "name": "a \\ after a first ] is a separator",
+      "why": "A `\\` is `/` before the glob is read, so `\\d` is `/d` and not a digit."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "ab[]|c]",
+        "b": "zc]*"
+      },
+      "name": "two globs overlap when one matches the literal prefix of the other",
+      "why": "The literal prefix of `zc]*` is `zc]`, which `ab[]|c]` matches. Neither literal prefix starts the other."
+    },
+    {
+      "expected": {
+        "overlap": false
+      },
+      "input": {
+        "a": "ab[]|c]",
+        "b": "zd]*"
+      },
+      "name": "two globs do not overlap when neither matches the prefix of the other",
+      "why": "The literal prefix of `zd]*` is `zd]`, which `ab[]|c]` does not match."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[z-a]$/: Range out of order in character class"
+      },
+      "input": {
+        "a": "[z-a]",
+        "b": "z"
+      },
+      "name": "a range that is out of order throws against a path",
+      "why": "The reference throws when it reads the glob. The seventh open question of the README gives the rule."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[z-a]$/: Range out of order in character class"
+      },
+      "input": {
+        "a": "[z-a]",
+        "b": "[z-a]"
+      },
+      "name": "a range that is out of order throws against the same glob",
+      "why": "The reference reads a glob before it compares two globs. The seventh open question of the README gives the rule."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[z-a][^/]*$/: Range out of order in character class"
+      },
+      "input": {
+        "a": "[z-a]*",
+        "b": "x*"
+      },
+      "name": "a range that is out of order throws against another glob",
+      "why": "The reference reads the first glob before it compares the literal prefixes. The seventh open question of the README gives the rule."
+    },
+    {
+      "expected": {
+        "overlap": true
+      },
+      "input": {
+        "a": "**",
+        "b": "[z-a]"
+      },
+      "name": "a glob that matches the empty prefix of a glob that throws overlaps it",
+      "why": "The reference reads the first glob, finds that it matches the literal prefix of the second, and never reads the second. With the two in the other order it throws."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[](]$/: Unterminated group"
+      },
+      "input": {
+        "a": "[](]",
+        "b": "a"
+      },
+      "name": "a group that is not closed throws",
+      "why": "`[](]` is the regular expression `[](]`. The seventh open question of the README gives the rule."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[]|*]$/: Nothing to repeat"
+      },
+      "input": {
+        "a": "[]|*]",
+        "b": "a"
+      },
+      "name": "a * with nothing to repeat throws",
+      "why": "In `[]|*]` no term is before the `*`. The seventh open question of the README gives the rule."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[]**]$/: Nothing to repeat"
+      },
+      "input": {
+        "a": "[]**]",
+        "b": "a"
+      },
+      "name": "a ** after a first ] throws",
+      "why": "The second `*` has nothing to repeat. The seventh open question of the README gives the rule."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[]|a{3,2}]$/: numbers out of order in {} quantifier"
+      },
+      "input": {
+        "a": "[]|a{3,2}]",
+        "b": "aa]"
+      },
+      "name": "a count with its bounds out of order throws",
+      "why": "`a{3,2}` has a least number above its greatest. The seventh open question of the README gives the rule."
+    },
+    {
+      "expected": {
+        "throws": true
+      },
+      "informational": {
+        "error": "Invalid regular expression: /^[]|(?<n>a)(?<n>b)]$/: Duplicate capture group name"
+      },
+      "input": {
+        "a": "[]|(?<n>a)(?<n>b)]",
+        "b": "ab]"
+      },
+      "name": "two groups with the same name throw",
+      "why": "A name can be used once. The seventh open question of the README gives the rule."
+    }
+  ],
+  "contract": "room",
+  "description": "Whether two patterns overlap when one holds a class whose first character is `]`, or a range that is out of order. The reference reads such a class as regular expression syntax, or throws.",
+  "operation": "patterns-overlap",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/hub/src/claims/overlap.ts"
+    ]
+  },
+  "version": 1
+}

@@ -140,8 +140,8 @@ To run a case, do the operation on `shared` and `input`, and compare the whole r
 | `evaluate` | policy | `bundle` | An evaluation query | `decision`, and `area` if an area decided. Or `throws`, see below |
 | `verify-signed-bundle` | policy | `jwks` | `signature`, a compact JWS | `ok`, and `bundle` if `ok` is true |
 | `validate` | policy, room | None | Any JSON value | `valid` |
-| `patterns-overlap` | room | None | Two patterns, `a` and `b` | `overlap` |
-| `path-sets-overlap` | room | None | Two lists of patterns, `a` and `b` | `overlap` |
+| `patterns-overlap` | room | None | Two patterns, `a` and `b` | `overlap`, or `throws` |
+| `path-sets-overlap` | room | None | Two lists of patterns, `a` and `b` | `overlap`, or `throws` |
 | `deliver` | room | None | `since`, and `steps`: stored events that the hub replays, new events, and the end of the replay | `sent`, the `seq` of each event that the hub sends, and `last_seq` |
 | `active-claims` | room | None | `events`, in the order that a receiver accepts them, and `now` | `claims`, the active claims in the order of their events |
 | `close-code` | room | None | `code`, the code of an error | `close_code`, the close code that the hub sends after the error, or null if it keeps the connection |
@@ -157,6 +157,8 @@ For `validate`, validate `input` against the schema that `schema` names, and com
 For `evaluate`, an `expected` of `{"throws": true}` means that the reference throws an error and returns no result. The contract does not define a result for such a case, but an implementation must fail closed on it. So a runner in any language passes the case if the implementation returns `deny` with no `area`, or if it fails with an error and returns no result. The runner fails the case if the implementation returns `allow`, or a result with an `area`. `informational.error` holds the message of the reference. The [second open question of the policy contract](policy/README.md#open-questions) lists the inputs, and the fixture `evaluate-class-syntax` holds the cases.
 
 The fixture-file schema refers to the contract schemas. A fixture file that validates against it therefore has a valid `shared`, a valid `input`, and a valid `expected` in every case. `validate` is the exception, because its inputs are invalid on purpose.
+
+For `patterns-overlap` and `path-sets-overlap`, an `expected` of `{"throws": true}` means that the reference throws an error and returns no result. An implementation must fail closed on such a case: a runner passes the case only if the implementation reports an overlap. `informational.error` holds the message of the reference. The [seventh open question of the room contract](room/README.md#open-questions) lists the inputs.
 
 ## Versions and compatibility
 

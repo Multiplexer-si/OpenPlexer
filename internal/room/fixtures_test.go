@@ -132,20 +132,25 @@ func runValidate(t *testing.T, validate func([]byte) error, c fixtureCase) {
 	}
 }
 
+// The reference throws on a case with Throws, and an implementation must
+// report an overlap.
 type overlapExpected struct {
 	Overlap bool `json:"overlap"`
+	Throws  bool `json:"throws"`
 }
+
+func (e overlapExpected) want() bool { return e.Overlap || e.Throws }
 
 func runPatternsOverlap(t *testing.T, c fixtureCase) {
 	var in struct{ A, B string }
 	var want overlapExpected
 	decodeStrict(t, c.Input, &in)
 	decodeStrict(t, c.Expected, &want)
-	if got := PatternsOverlap(in.A, in.B); got != want.Overlap {
-		t.Errorf("PatternsOverlap = %v, want %v", got, want.Overlap)
+	if got := PatternsOverlap(in.A, in.B); got != want.want() {
+		t.Errorf("PatternsOverlap = %v, want %v", got, want.want())
 	}
-	if got := PatternsOverlap(in.B, in.A); got != want.Overlap {
-		t.Errorf("PatternsOverlap reversed = %v, want %v", got, want.Overlap)
+	if got := PatternsOverlap(in.B, in.A); got != want.want() {
+		t.Errorf("PatternsOverlap reversed = %v, want %v", got, want.want())
 	}
 }
 
@@ -154,8 +159,8 @@ func runPathSetsOverlap(t *testing.T, c fixtureCase) {
 	var want overlapExpected
 	decodeStrict(t, c.Input, &in)
 	decodeStrict(t, c.Expected, &want)
-	if got := PathsOverlap(in.A, in.B); got != want.Overlap {
-		t.Errorf("PathsOverlap = %v, want %v", got, want.Overlap)
+	if got := PathsOverlap(in.A, in.B); got != want.want() {
+		t.Errorf("PathsOverlap = %v, want %v", got, want.want())
 	}
 }
 
