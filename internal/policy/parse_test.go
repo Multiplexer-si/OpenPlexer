@@ -24,13 +24,13 @@ func TestParsersRejectALoneSurrogate(t *testing.T) {
 		"a high surrogate with no low surrogate":   {`a\ud800/**`, false},
 		"a low surrogate with no high surrogate":   {`a\udc00/**`, false},
 		"a high surrogate before a character":      {`\ud83dx`, false},
-		"a high surrogate before another escape":   {`\ud83dA`, false},
+		"a high surrogate before another escape":   {"\\ud83d\\u0041", false},
 		"two high surrogates":                      {`\ud83d\ud83d`, false},
 		"a high surrogate at the end":              {`a\uD83D`, false},
-		"a surrogate pair":                         {`😀`, true},
-		"a surrogate pair in uppercase":            {`😀`, true},
+		"a surrogate pair":                         {"\\ud83d\\ude00", true},
+		"a surrogate pair in uppercase":            {"\\uD83D\\uDE00", true},
 		"an escaped backslash before u and digits": {`\\ud800`, true},
-		"the replacement character":                {`a�/` + "�", true},
+		"the replacement character":                {"a\\ufffd/\ufffd", true},
 	}
 	for document, parse := range documents {
 		for name, c := range texts {
