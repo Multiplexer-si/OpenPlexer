@@ -46,6 +46,7 @@ func (a agentInput) session(member string) (agentInput, error) {
 func (s *Store) roomRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/rooms/{room}/events", s.roomEndpoint(maxRoomBody, s.postEvent))
 	mux.HandleFunc("GET /api/v1/rooms/{room}/events", s.roomEndpoint(0, replay))
+	mux.HandleFunc("POST /api/v1/rooms/{room}/stream", s.streamRoom)
 	mux.HandleFunc("POST /api/v1/rooms/{room}/claims", s.claimEndpoint(createClaim))
 	mux.HandleFunc("POST /api/v1/rooms/{room}/claims/{claim}/renew", s.claimEndpoint(renewClaim))
 	mux.HandleFunc("POST /api/v1/rooms/{room}/claims/{claim}/release", s.claimEndpoint(releaseClaim))
@@ -146,8 +147,11 @@ func replay(st *state, req request) (any, error) {
 			return nil, fmt.Errorf("%w: last_seq must be a nonnegative safe integer", errInvalid)
 		}
 	}
+	return roomPage(st.Rooms[req.roomID()], after)
+}
+
+func roomPage(events []eventRecord, after uint64) ([]room.Message, error) {
 	messages := []room.Message{}
-	events := st.Rooms[req.roomID()]
 	if after >= uint64(len(events)) {
 		return messages, nil
 	}

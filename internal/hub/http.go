@@ -61,14 +61,9 @@ func (r request) project() string { return r.PathValue("project") }
 
 func (s *Store) endpoint(limit int64, run func(*state, request) (any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		auth := r.Header.Values("Authorization")
-		if len(auth) != 1 {
-			respond(w, nil, errUnauthorized)
-			return
-		}
-		scheme, token, _ := strings.Cut(auth[0], " ")
-		if !strings.EqualFold(scheme, "Bearer") || len(token) != base64.RawURLEncoding.EncodedLen(32) {
-			respond(w, nil, errUnauthorized)
+		hash, err := bearerHash(r)
+		if err != nil {
+			respond(w, nil, err)
 			return
 		}
 		var body []byte
@@ -85,20 +80,37 @@ func (s *Store) endpoint(limit int64, run func(*state, request) (any, error)) ht
 				return
 			}
 		}
-		hash := sha256.Sum256([]byte(token))
 		var result any
-		err := s.view(func(st *state) error {
-			for id, m := range st.Members {
-				if subtle.ConstantTimeCompare(hash[:], m.TokenHash[:]) == 1 {
-					var err error
-					result, err = run(st, request{Request: r, member: id, role: m.Role, body: body})
-					return err
-				}
+		err = s.view(func(st *state) error {
+			member, role, err := st.authenticate(hash)
+			if err != nil {
+				return err
 			}
-			return errUnauthorized
+			result, err = run(st, request{Request: r, member: member, role: role, body: body})
+			return err
 		})
 		respond(w, result, err)
 	}
+}
+
+func bearerHash(r *http.Request) ([sha256.Size]byte, error) {
+	auth := r.Header.Values("Authorization")
+	if len(auth) == 1 {
+		scheme, token, _ := strings.Cut(auth[0], " ")
+		if strings.EqualFold(scheme, "Bearer") && len(token) == base64.RawURLEncoding.EncodedLen(32) {
+			return sha256.Sum256([]byte(token)), nil
+		}
+	}
+	return [sha256.Size]byte{}, errUnauthorized
+}
+
+func (st *state) authenticate(hash [sha256.Size]byte) (string, Role, error) {
+	for id, member := range st.Members {
+		if subtle.ConstantTimeCompare(hash[:], member.TokenHash[:]) == 1 {
+			return id, member.Role, nil
+		}
+	}
+	return "", "", errUnauthorized
 }
 
 func respond(w http.ResponseWriter, body any, err error) {
