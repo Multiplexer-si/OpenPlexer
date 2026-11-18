@@ -17,9 +17,6 @@ import (
 // The reference turns a glob into an ECMA-262 regular expression, and it
 // copies the text of a class into that expression. So in a class whose first
 // character is `]`, the rest of the class is regular expression syntax.
-//
-// The matcher is a copy of the matcher of internal/policy in pull request 55,
-// without the comparison that ignores case.
 
 func normalize(pattern string) string {
 	pattern = strings.ReplaceAll(pattern, `\`, "/")
@@ -68,8 +65,6 @@ func PathsOverlap(a, b []string) bool {
 	})
 }
 
-// The reference throws where matchesOrFails finds an error, and a claim must
-// fail closed there.
 func matchesOrFails(glob, path string) bool {
 	compiled, err := compileGlob(glob)
 	if err != nil {
@@ -198,9 +193,6 @@ func (c anyOf) emit(b *builder, code []instr) ([]instr, error) {
 	return code, nil
 }
 
-// A large count of a body that reads a unit and can also match empty is
-// refused, and it must be: the reference fails on it when it runs out of
-// stack.
 func (r repeat) emit(b *builder, code []instr) ([]instr, error) {
 	low, high, least := r.low, r.high, r.of.minUnits()
 	if high == 0 {
@@ -698,7 +690,6 @@ func (s *syntax) quantified(of node) (node, error) {
 	return repeat{of: of, low: low, high: high}, nil
 }
 
-// A `{` that starts no count is a literal character, and quantifier leaves it.
 func (s *syntax) quantifier() (low, high int, ok bool) {
 	switch {
 	case s.take('*'):

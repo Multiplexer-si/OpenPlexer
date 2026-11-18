@@ -88,8 +88,6 @@ type pair struct {
 	value any
 }
 
-// ordered copies a decoded value, with each object as a []pair, so that a
-// text can hold one key twice.
 func ordered(value any) any {
 	switch value := value.(type) {
 	case map[string]any:
@@ -149,8 +147,6 @@ func otherCase(key string) []string {
 	return out
 }
 
-// keyVariants lists copies of value in which one object has a key in another
-// case or a key twice, next to the same key with a value of another type.
 func keyVariants(value any) []any {
 	var out []any
 	switch value := value.(type) {
@@ -237,8 +233,6 @@ func payloadOf(doc any) (any, bool) {
 	return payload, ok
 }
 
-// messageVerdict is the verdict of the envelope schema and, for a resume or an
-// error, of the schema of its payload.
 func messageVerdict(schemas map[string]*jsonschema.Schema, doc any) error {
 	if err := schemas["envelope"].Validate(doc); err != nil {
 		return err

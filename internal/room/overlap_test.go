@@ -7,8 +7,6 @@ import (
 	"time"
 )
 
-// spec/room/README.md, open question 7: the cases that version 1 does not
-// define, where a claim must fail closed.
 func TestAGlobThatIsNotReadOverlapsEveryEntry(t *testing.T) {
 	for name, glob := range map[string]string{
 		"a name outside ASCII":                          "[]|(?<é>a)]",

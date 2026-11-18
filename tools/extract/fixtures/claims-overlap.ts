@@ -2,7 +2,6 @@ import { asCommitted } from "../output.ts";
 import type { Reference } from "../reference.ts";
 import { fixtureFile, fixturePath, type Case, type FixtureFile } from "./format.ts";
 
-/** The result of the reference, or the record that it throws. */
 function outcome(run: () => boolean): Pick<Case, "expected" | "informational"> {
   try {
     return { expected: { overlap: run() } };

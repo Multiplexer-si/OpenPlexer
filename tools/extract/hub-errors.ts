@@ -9,7 +9,6 @@ export const HUB_ERROR_SOURCES = [SERVER, "apps/hub/src/ws/client-version.ts", M
 /** `fatal` sends an error and closes the connection. The other three send an error and keep the connection. */
 const SENDERS = ["fatal", "error", "postError", "claimErr"];
 
-/** The index after the string or template literal that starts at `from`. */
 function afterLiteral(source: string, from: number): number {
   const quote = source[from]!;
   for (let i = from + 1; i < source.length; i++) {
@@ -20,7 +19,6 @@ function afterLiteral(source: string, from: number): number {
   throw new Error(`${SERVER}: a literal that starts at ${from} does not end`);
 }
 
-/** The top-level arguments from `from` up to the `close` that ends them, and the index after that `close`. */
 function afterArguments(source: string, from: number, close: string): { args: string[]; end: number } {
   const args: string[] = [];
   let start = from;

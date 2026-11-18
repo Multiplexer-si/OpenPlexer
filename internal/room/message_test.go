@@ -122,8 +122,6 @@ func mustMarshal(t *testing.T, v interface{ MarshalJSON() ([]byte, error) }) []b
 	return text
 }
 
-// The frame of the verifier of pull request 61: `payload` is an event of a
-// type that version 1 does not define, and `PAYLOAD` is a valid claim.
 func TestAPayloadKeyInAnotherCaseIsNotThePayload(t *testing.T) {
 	claim := eventPayload("claim", 5, `{"item":"i","paths":["src/**"],"intent":"x","ttl_seconds":600}`)
 	frame := `{"v":1,"type":"event",` + sender + `,"room":"mis","seq":5,"payload":` + eventPayload("request", 5, `{}`) + `,"PAYLOAD":` + claim + `}`

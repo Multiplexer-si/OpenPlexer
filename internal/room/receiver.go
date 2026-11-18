@@ -44,9 +44,7 @@ func (SendResume) step() {}
 func (Skipped) step()    {}
 func (Unhandled) step()  {}
 
-// undecided names the messages that spec/room/README.md leaves out of version
-// 1 until the operator decides.
-var undecided = []string{"digest", "digest.get", "receipt"}
+var notInVersion1 = []string{"digest", "digest.get", "receipt"}
 
 func NewReceiver() *Receiver { return &Receiver{rooms: map[string]*roomState{}} }
 
@@ -100,7 +98,7 @@ func (r *Receiver) Receive(frame []byte, now time.Time) Step {
 	if env.typ == "event" {
 		return r.receiveEvent(env, now)
 	}
-	if slices.Contains(undecided, env.typ) {
+	if slices.Contains(notInVersion1, env.typ) {
 		return Skipped{Reason: "version 1 defines no " + env.typ + " message"}
 	}
 	msg, err := ParseMessage(frame)
