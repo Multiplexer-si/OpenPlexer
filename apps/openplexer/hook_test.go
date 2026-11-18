@@ -16,9 +16,8 @@ import (
 	"time"
 )
 
-// TestMain points every home that a command could read or write at a
-// temporary directory, so that no test can reach the configuration of the
-// developer who runs it.
+// TestMain moves every home that a command reads or writes into a temporary
+// directory, so that no test can reach the developer's own configuration.
 func TestMain(m *testing.M) {
 	dir, err := os.MkdirTemp("", "openplexer-test")
 	if err != nil {
@@ -43,8 +42,6 @@ var testBundle = map[string]any{
 	"members": map[string]string{"mem-dev": "dev"},
 }
 
-// signedPolicy signs bundle with a new key and writes the key set and the
-// signed bundle message. It returns their paths.
 func signedPolicy(t *testing.T, bundle any) (keys, message string) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
@@ -79,7 +76,6 @@ func signedPolicy(t *testing.T, bundle any) (keys, message string) {
 	return keys, message
 }
 
-// project makes a project directory with a .git and returns it.
 func project(t *testing.T) string {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "proj")
@@ -96,8 +92,6 @@ func callJSON(tool, cwd string, input map[string]string) string {
 	return string(text)
 }
 
-// hookCall runs one hook call and returns the exit status, the deny reason
-// if the call was denied, and the standard error.
 func (c cli) hookCall(agent, call string) (status int, reason, stderr string) {
 	c.t.Helper()
 	c.stdin = call

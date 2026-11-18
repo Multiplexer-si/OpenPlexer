@@ -1,7 +1,6 @@
 // Package jsonedit edits JSON text in place. It records where every value sits
 // in the source bytes and applies splices, so that bytes it did not touch (key
 // order, indentation, number spelling, escapes, line endings) stay as they were.
-// It imports nothing from this module.
 package jsonedit
 
 import (
@@ -143,7 +142,6 @@ func (s *scanner) str() {
 	s.i++
 }
 
-// value scans one value from text that json.Valid has accepted.
 func (s *scanner) value() Node {
 	s.skip()
 	n := Node{Start: s.i}

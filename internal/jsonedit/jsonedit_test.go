@@ -12,7 +12,6 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/jsonedit"
 )
 
-// layout is how the generator writes one document.
 type layout struct {
 	unit   string
 	eol    string
@@ -27,7 +26,6 @@ type gen struct {
 	l layout
 }
 
-// field is one member of a generated object, kept in order for comparison.
 type field struct {
 	key string
 	val any
@@ -132,8 +130,6 @@ func newDoc(seed uint64) (src string, want any) {
 	return text, want
 }
 
-// check walks the tree next to the value that the generator meant and requires
-// each node's own bytes to decode to that value.
 func check(t *testing.T, d *jsonedit.Doc, n jsonedit.Node, want any) {
 	t.Helper()
 	var got any
@@ -170,7 +166,6 @@ func decode(t *testing.T, b []byte) any {
 	return v
 }
 
-// containers lists the containers of n with the path of child indexes to each.
 func containers(n jsonedit.Node, path []int, out *[][]int) {
 	switch n.Kind {
 	case jsonedit.Object:

@@ -12,8 +12,6 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/daemon"
 )
 
-// hookFile reads the arguments of install and uninstall: the agent, and the
-// hook file of the scope or the file that --file names.
 func (c command) hookFile(name string, args []string) (hook.Agent, string, bool) {
 	flags := c.flags(name)
 	scope := flags.String("scope", string(hook.User), "")

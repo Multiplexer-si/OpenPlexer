@@ -51,7 +51,6 @@ type groupJSON struct {
 	Hooks   []handlerJSON `json:"hooks"`
 }
 
-// eventHooks is the `hooks` object that Install creates, with one event.
 type eventHooks struct {
 	event  string
 	groups []groupJSON
@@ -79,23 +78,21 @@ func isBlank(text []byte) bool {
 	return len(bytes.TrimSpace(bytes.TrimPrefix(text, utf8BOM))) == 0
 }
 
-// ours is one handler of ours and where it sits.
 type ours struct {
 	command            jsonedit.Node
 	commandText        string
-	list               jsonedit.Node // the group's hooks array
-	event              jsonedit.Node // the event's array of groups
+	list               jsonedit.Node
+	event              jsonedit.Node
 	eventIdx, groupIdx int
 	handlerIdx         int
 }
 
-// layout is what Install and Uninstall learn about a hook file.
 type layout struct {
 	doc      *jsonedit.Doc
 	root     jsonedit.Node
-	hooksIdx int // member of root, -1 when absent
+	hooksIdx int
 	hooks    jsonedit.Node
-	eventIdx int // member of hooks for the install event, -1 when absent
+	eventIdx int
 	ours     []ours
 }
 
@@ -162,8 +159,6 @@ func inspect(text []byte, agent, event string) (*layout, error) {
 	return l, nil
 }
 
-// ownedBy reports whether handler runs `openplexer hook <agent>`. It returns
-// the command value and its decoded text.
 func (l *layout) ownedBy(handler jsonedit.Node, agent string) (jsonedit.Node, string, bool) {
 	node, ok, _ := handler.Get("command")
 	var command string
@@ -195,8 +190,6 @@ func (l *layout) ownedBy(handler jsonedit.Node, agent string) (jsonedit.Node, st
 	return node, "", false
 }
 
-// isOpenplexer reports whether a word names an OpenPlexer binary: a file
-// whose name starts with openplexer, such as openplexer.exe.
 func isOpenplexer(word string) bool {
 	return strings.HasPrefix(word[strings.LastIndexAny(word, `/\`)+1:], "openplexer")
 }
@@ -249,7 +242,6 @@ func newFile(h Handler) []byte {
 	return b.Bytes()
 }
 
-// canonical reports whether command is exactly `<openplexer> hook <agent> pre-tool`.
 func canonical(command, agent string) bool {
 	segments := Segments(command)
 	if len(segments) != 1 || len(segments[0]) != 4 {
@@ -304,8 +296,6 @@ func Uninstall(text []byte, agent string) (out []byte, remove bool, change Chang
 	}
 }
 
-// removal removes the handler, and climbs while that leaves its container
-// empty: the group, then the event, then the hooks object, then the file.
 func (l *layout) removal(o ours) (edit jsonedit.Edit, whole bool, err error) {
 	levels := []struct {
 		container jsonedit.Node
@@ -368,8 +358,6 @@ func editFile(path string, edit transform) (Change, error) {
 		return Unchanged, fmt.Errorf("%s: %w", path, err)
 	}
 	if info, err := os.Lstat(path); remove && err == nil && info.Mode()&fs.ModeSymlink != 0 {
-		// Deleting the target would leave the link dangling, for example in
-		// a dotfiles repository.
 		out, remove = []byte("{}\n"), false
 	}
 	if change == Unchanged || (exists && !remove && bytes.Equal(out, text)) {
@@ -381,8 +369,6 @@ func editFile(path string, edit transform) (Change, error) {
 	return change, nil
 }
 
-// resolveLink follows symlinks, including a dangling one, so that an edit
-// lands on the file that the link names and the link stays.
 func resolveLink(path string, depth int) (string, error) {
 	if resolved, err := filepath.EvalSymlinks(path); err == nil {
 		return resolved, nil

@@ -13,12 +13,12 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
 
-// hookBudget is shorter than the timeout of the hook entry. Codex lets a
-// call run when its hook times out, so the hook blocks the call itself first.
+// Codex lets a call run when its hook times out, so the hook blocks the call
+// itself first.
 var hookBudget = 4 * time.Second
 
-// abort ends a hook that ran past its budget. Exit status 2 blocks the call
-// in both agents.
+// Exit status 2 with a reason on standard error blocks the call in both
+// agents.
 var abort = func() { os.Exit(2) }
 
 func (c command) hook(agent hook.Agent) int {
@@ -35,8 +35,8 @@ func (c command) hook(agent hook.Agent) int {
 	userHome, _ := os.UserHomeDir()
 	gate, openErr := daemon.Open(c.home, c.now)
 	env := hook.Env{
-		// With no verified policy, the role of the member is not known, so
-		// every command is judged and then blocked.
+		// With no verified policy the role of the member is not known, so every
+		// command is judged.
 		ExecGated: openErr != nil || !gate.Status().Enforced() || gate.ExecGated(),
 		Root:      func(cwd string) (string, bool) { return hook.FindRoot(cwd, userHome) },
 		Guards:    c.guards(userHome),
@@ -51,9 +51,6 @@ func (c command) emit(out hook.Output) int {
 	return out.ExitCode
 }
 
-// guards are the OpenPlexer home and the settings files of every agent. A
-// write to the home could replace the key set or roll the policy back, and a
-// write to a settings file could remove the hook.
 func (c command) guards(userHome string) []hook.Guard {
 	home, err := filepath.Abs(c.home)
 	if err != nil {
@@ -66,9 +63,6 @@ func (c command) guards(userHome string) []hook.Guard {
 	return guards
 }
 
-// judge asks the gate about the queries of one call. With no verified
-// policy, or a gate that cannot be opened, it blocks the call, and an allow
-// that the gate could not record blocks too.
 func (c command) judge(agent string, gate *daemon.Gate, openErr error) hook.Judge {
 	return func(first policy.Query, rest ...policy.Query) hook.Verdict {
 		if openErr != nil {

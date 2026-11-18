@@ -17,11 +17,10 @@ type Env struct {
 	AgentSessionID *string
 	MissionID      *string
 	Overrides      []policy.Override
-	// Root finds the project root above the working directory of a call,
-	// which follows each cd of the agent. When it finds none, every write and
-	// every command that the policy would judge is denied. With no Root, a
-	// path is read as a path under the working directory, as the reference
-	// reads it when it finds no root.
+	// Root finds the project root above the working directory of a call.
+	// When it finds none, every write and every command that the policy would
+	// judge is denied. With no Root, a path is read as a path under the
+	// working directory.
 	Root func(cwd string) (string, bool)
 	// Guards are the paths that no agent may write through a gated tool,
 	// whatever the policy says.
@@ -121,9 +120,9 @@ func FileTool(field string) Translate {
 }
 
 // ShellTool translates a call to a tool that runs the command in the input
-// field `command`. It writes the paths that the command is clear to write.
-// It runs the whole line, if the line holds a substitution that no grant can
-// cover, and otherwise each command of the line that is not a bare `tee`.
+// field `command`. The effect writes the paths that the command is clear to
+// write, and runs the whole line if the line holds a substitution, and
+// otherwise each command of the line that is not a bare `tee`.
 func ShellTool(call Call) (Effect, error) {
 	command, err := call.Text("command")
 	if err != nil {
@@ -142,8 +141,6 @@ func ShellTool(call Call) (Effect, error) {
 	return effect, nil
 }
 
-// queries are what the policy judges of an effect: each write to a path of
-// the project, and, for a member whose role lists commands, each command.
 func (e Env) queries(call Call, root string, effect Effect) []policy.Query {
 	if e.AgentSessionID == nil && call.Session != "" {
 		e.AgentSessionID = &call.Session

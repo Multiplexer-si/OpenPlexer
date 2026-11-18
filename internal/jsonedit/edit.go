@@ -155,7 +155,6 @@ func (d *Doc) eolNear(pos int) string {
 	return "\n"
 }
 
-// walk visits every container in document order and stops when f returns true.
 func walk(n Node, f func(Node) bool) bool {
 	if n.Kind != Object && n.Kind != Array {
 		return false
@@ -176,8 +175,6 @@ func walk(n Node, f func(Node) bool) bool {
 	return false
 }
 
-// indentUnit is what a multiline container adds to the indent of its opener's
-// line, taken from the first one in the file. A file without one gets two spaces.
 func (d *Doc) indentUnit() string {
 	unit := "  "
 	walk(d.root, func(n Node) bool {
@@ -198,8 +195,6 @@ func (d *Doc) indentUnit() string {
 	return unit
 }
 
-// colon is the text between a key and its value, from the first member that has
-// it on one line.
 func (d *Doc) colon() string {
 	colon := ": "
 	walk(d.root, func(n Node) bool {
@@ -214,9 +209,6 @@ func (d *Doc) colon() string {
 	return colon
 }
 
-// inlineSep is the comma and spacing between children of a one-line container:
-// c's own, else the first one-line container's with two children, else the
-// spacing that the colon suggests.
 func (d *Doc) inlineSep(c Node) string {
 	sep := ""
 	pick := func(n Node) bool {
@@ -242,7 +234,7 @@ func (d *Doc) inlineSep(c Node) string {
 
 type style struct {
 	multi  bool
-	indent string // of the line the value starts on
+	indent string
 	unit   string
 	eol    string
 	colon  string

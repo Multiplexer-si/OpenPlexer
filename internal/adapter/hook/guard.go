@@ -16,9 +16,6 @@ type Guard struct {
 	Why string
 }
 
-// guard denies the first write that a guard covers. It reads each write as
-// the shell would place it, so a relative path is taken from cwd, a leading ~
-// is the home directory, and a path that climbs out of the project counts.
 func (e Env) guard(cwd, root string, writes []string) (Verdict, bool) {
 	for _, write := range writes {
 		target := e.absolute(write, cwd)
@@ -48,9 +45,8 @@ func (e Env) absolute(path, cwd string) string {
 	return filepath.Clean(path)
 }
 
-// within reports whether path is dir or under it. The default file systems
-// of macOS and Windows ignore case, so a path that differs only in case
-// names the same file there.
+// The default file systems of macOS and Windows ignore case, so a path that
+// differs only in case names the same file there.
 func within(path, dir string) bool {
 	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		path, dir = strings.ToLower(path), strings.ToLower(dir)

@@ -22,9 +22,6 @@ func handlerFor(agent string) Handler {
 	return Handler{Agent: "claude-code", Event: "PreToolUse", Matcher: "Bash|Edit|NotebookEdit|Write", Command: exe + " hook claude-code pre-tool", Timeout: 5, OnFailure: "block"}
 }
 
-// userEdit simulates the user editing the file. It runs on the installed text,
-// and on the text from before the install, where an edit about our own entry
-// has nothing to change.
 type userEdit struct {
 	name string
 	fn   func(t *testing.T, s string) string
@@ -64,7 +61,6 @@ func replaceEdit(name, old, new string) userEdit {
 	return userEdit{name, func(t *testing.T, s string) string { return replaceOnce(t, s, old, new) }}
 }
 
-// Edits for realistic-tabs-crlf, where our group is the last element of PreToolUse.
 const (
 	nl            = "\r\n"
 	ourGroupStart = "," + nl + "\t\t\t{" + nl + "\t\t\t\t\"matcher\": \"Bash|Edit|NotebookEdit|Write\""
@@ -75,7 +71,6 @@ const (
 	userHandlerEnd = "\"timeout\": 10" + nl + "\t\t\t\t\t}"
 )
 
-// cutOurGroup removes our group from the text, if it is there.
 func cutOurGroup(s string) (rest, group string) {
 	i := strings.Index(s, ourGroupStart)
 	if i < 0 {
@@ -127,9 +122,7 @@ var claudeEdits = []userEdit{
 type goldenCase struct {
 	agent, dir string
 	edits      []userEdit
-	// deleted is set when Uninstall of the installed text deletes the file
-	// where the original had a file. It names what the round trip cannot keep.
-	deleted string
+	deleted    string
 }
 
 var goldenCases = []goldenCase{
