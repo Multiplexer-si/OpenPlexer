@@ -1,7 +1,7 @@
 # Architecture
 
 > [!NOTE]
-> This page describes the design. The directory structure and the dependency rules exist today. Of the behavior, the policy evaluator and the gate exist, and the gate has no adapter and no hub yet ([Local policy gate](local-policy.md)).
+> This page describes the design. The [local policy gate](local-policy.md), its hook adapters, and the [single-team hub](hub.md) exist. Connecting the local agent to the hub is part of [issue 20](https://github.com/Multiplexer-si/OpenPlexer/issues/20).
 
 This page explains how the parts of OpenPlexer connect, and why the code is split the way it is. [Concepts](concepts.md) defines the terms. [Repository layout](repository-layout.md) lists every directory.
 
@@ -81,4 +81,4 @@ The formats are meant to outlive this implementation. A Room event or an audit r
 
 ## What is not decided yet
 
-The diagram shows which parts exchange data. It does not show how. The contracts in [`spec/`](../spec/README.md) define the fields of a policy bundle, of a Room event, of the envelope that carries a Room event, and of an audit record. Each contract README lists the questions that are still open for that contract. The transport between the daemon and the hub, the fields of every other message between them, and the storage that the hub uses are open. The implementation phases of the [roadmap](roadmap.md) follow the contracts.
+The diagram shows which parts exchange data. It does not show how. The contracts in [`spec/`](../spec/README.md) define the fields of a policy bundle, of a Room event, of the envelope that carries a Room event, and of an audit record. Each contract README lists the questions that are still open for that contract. The single-team hub serves policy and Room replay over HTTP and stores state in files. The live transport between the daemon and the hub remains open. The implementation phases of the [roadmap](roadmap.md) follow the contracts.

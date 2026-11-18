@@ -67,22 +67,31 @@ func (r *reader) event(doc any) Event {
 	e.id, _ = field(r, "", o, "id", required, r.nonEmptyText)
 	e.seq, _ = field(r, "", o, "seq", required, r.integerFrom(0))
 	e.mission, _ = field(r, "", o, "mission", required, r.nonEmptyText)
-	e.typ, _ = field(r, "", o, "type", required, choice(r, eventTypeNames()...))
+	e.typ, _ = field(r, "", o, "type", required, r.eventType)
 	e.agent, _ = field(r, "", o, "agent", required, r.agent)
 	e.onBehalfOf, _ = field(r, "", o, "on_behalf_of", required, r.nonEmptyText)
 	e.at, _ = field(r, "", o, "at", required, r.nonEmptyText)
+	e.body = r.eventBody(o, e.typ)
+	return e
+}
+
+func (r *reader) eventType(path string, value any) string {
+	return choice(r, eventTypeNames()...)(path, value)
+}
+
+func (r *reader) eventBody(o object, kind string) object {
 	value, present := o["body"]
 	if !present {
 		r.fail("body", "is required")
-		return e
+		return nil
 	}
-	if b := newBody(e.typ); b != nil {
+	if b := newBody(kind); b != nil {
 		if body, ok := r.object("body", value); ok {
 			readBody(r, "body", b, body)
-			e.body = body
+			return body
 		}
 	}
-	return e
+	return nil
 }
 
 func (r *reader) agent(path string, value any) Agent {
