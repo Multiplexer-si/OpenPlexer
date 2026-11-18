@@ -1,0 +1,236 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "already_authenticated"
+      },
+      "name": "the hub keeps the connection after already_authenticated",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "bad_message"
+      },
+      "name": "the hub keeps the connection after bad_message",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "behind"
+      },
+      "name": "the hub keeps the connection after behind",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "bind_failed"
+      },
+      "name": "the hub keeps the connection after bind_failed",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "claim_failed"
+      },
+      "name": "the hub keeps the connection after claim_failed",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "claim_forbidden"
+      },
+      "name": "the hub keeps the connection after claim_forbidden",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "claim_not_found"
+      },
+      "name": "the hub keeps the connection after claim_not_found",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "claim_repo_required"
+      },
+      "name": "the hub keeps the connection after claim_repo_required",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "coalesced"
+      },
+      "name": "the hub keeps the connection after coalesced",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "code"
+      },
+      "name": "the hub keeps the connection after code",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "forbidden"
+      },
+      "name": "the hub keeps the connection after forbidden",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "internal"
+      },
+      "name": "the hub keeps the connection after internal",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": 4426
+      },
+      "input": {
+        "code": "mpx_outdated"
+      },
+      "name": "the hub closes with 4426 after mpx_outdated",
+      "why": "The hub sends this code with `fatal`, which closes the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "rate_limit"
+      },
+      "name": "the hub keeps the connection after rate_limit",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "right_to_post"
+      },
+      "name": "the hub keeps the connection after right_to_post",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "schema"
+      },
+      "name": "the hub keeps the connection after schema",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "secret"
+      },
+      "name": "the hub keeps the connection after secret",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "size"
+      },
+      "name": "the hub keeps the connection after size",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": 4401
+      },
+      "input": {
+        "code": "token_expired"
+      },
+      "name": "the hub closes with 4401 after token_expired",
+      "why": "The hub sends this code with `fatal`, which closes the connection."
+    },
+    {
+      "expected": {
+        "close_code": 4401
+      },
+      "input": {
+        "code": "unauthorized"
+      },
+      "name": "the hub closes with 4401 after unauthorized",
+      "why": "The hub sends this code with `fatal`, which closes the connection."
+    },
+    {
+      "expected": {
+        "close_code": null
+      },
+      "input": {
+        "code": "unsupported"
+      },
+      "name": "the hub keeps the connection after unsupported",
+      "why": "The hub sends this code with a function that keeps the connection."
+    },
+    {
+      "expected": {
+        "close_code": 4400
+      },
+      "input": {
+        "code": "unsupported_version"
+      },
+      "name": "the hub closes with 4400 after unsupported_version",
+      "why": "The hub sends this code with `fatal`, which closes the connection."
+    }
+  ],
+  "contract": "room",
+  "description": "The close code that follows each error code that the socket server of the hub names. The extractor reads the calls of `fatal`, `error`, `postError`, and `claimErr` in the source of the server, because the server does not run without a database.",
+  "operation": "close-code",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/hub/src/ws/server.ts",
+      "apps/hub/src/ws/client-version.ts",
+      "apps/hub/src/room/moderation.ts"
+    ]
+  },
+  "version": 1
+}

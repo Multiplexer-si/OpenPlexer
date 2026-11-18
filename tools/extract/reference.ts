@@ -5,6 +5,7 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { pathToFileURL } from "node:url";
+import { hubErrorCodes } from "./hub-errors.ts";
 import type { Json } from "./output.ts";
 
 /** The commit of the existing TypeScript implementation that the committed files under `spec/` come from. */
@@ -44,6 +45,19 @@ export interface PreToolRun {
   hook: Json;
 }
 
+export interface SubscriptionRow {
+  seq: number;
+  flagged: boolean;
+  envelope: { seq: number };
+}
+
+export interface SubscriptionModel {
+  lastSeq: number;
+  push(row: SubscriptionRow): void;
+  replay(row: SubscriptionRow): void;
+  goLive(): void;
+}
+
 export interface Reference {
   toJsonSchema(schema: ZodSchema): Record<string, Json>;
   protocol: {
@@ -66,6 +80,12 @@ export interface Reference {
   canonicalJson(value: unknown): string;
   patternsOverlap(a: string, b: string): boolean;
   pathSetsOverlap(a: readonly string[], b: readonly string[]): boolean;
+  /** One subscription of one connection of the hub to one Room. `send` gets each message that the hub would send. */
+  Subscription: new (room: string, kind: "daemon" | "dashboard", sinceSeq: number, send: (message: { seq: number }) => void) => SubscriptionModel;
+  /** The claims that the daemon holds as active after the events. Its clock reads `now`, in milliseconds since the epoch, when it gets each event and when it lists the claims. */
+  activeClaims(events: Json[], now: number): Json[];
+  /** Each error code that the socket server of the hub names, with the close code that follows it. null: the hub keeps the connection. */
+  hubErrorCodes: Map<string, number | null>;
   genesisHash: string;
   computeAuditHash(prevHash: string, fields: object): string;
   policyJwsTyp: string;
@@ -124,7 +144,25 @@ export async function loadReference(root: string): Promise<Reference> {
   const audit = await load(join(root, "apps/hub/src/audit/log.ts"));
   const store = await load(join(root, "apps/daemon/src/policy/store.ts"));
   const adapters = await loadAdapters(root, load, store.PolicyStore);
+  const subscriptions = await load(join(root, "apps/hub/src/ws/subscriptions.ts"));
+  const cache = await load(join(root, "apps/daemon/src/sync/cache.ts"));
+  const { MPX_OUTDATED_CLOSE } = await load(join(root, "apps/hub/src/ws/client-version.ts"));
   return {
+    hubErrorCodes: hubErrorCodes(root, { MPX_OUTDATED_CLOSE }),
+    Subscription: subscriptions.Subscription,
+    activeClaims(events, now) {
+      const work = mkdtempSync(join(tmpdir(), "extract-claims-"));
+      const clock = Date.now;
+      Date.now = () => now;
+      try {
+        const claims = new cache.OfflineCache(work);
+        for (const event of events) claims.applyEvent("room-fixture", event);
+        return claims.claims("room-fixture", now);
+      } finally {
+        Date.now = clock;
+        rmSync(work, { recursive: true, force: true });
+      }
+    },
     toJsonSchema,
     protocol,
     canonicalJson: canonical.canonicalJson,

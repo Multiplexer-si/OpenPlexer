@@ -1,0 +1,1075 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:09:59.999Z"
+      },
+      "name": "a claim is active before it expires",
+      "why": "A claim expires `ttl_seconds` after the `at` of its event."
+    },
+    {
+      "expected": {
+        "claims": []
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:10:00.000Z"
+      },
+      "name": "a claim is not active at the time that it expires",
+      "why": "A claim is active only while its expiry is later than the current time."
+    },
+    {
+      "expected": {
+        "claims": []
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:30:00.000Z"
+      },
+      "name": "a claim is not active after it expires",
+      "why": "No event ends an expired claim on the receiver. The receiver stops listing it."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "clm-1",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "the id of a claim is the claim_id of its body",
+      "why": "The hub of the reference puts the id of the claim in `claim_id`, which the body schema does not name."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "the id of a claim without claim_id is the id of its event",
+      "why": "A claim event with no `claim_id` is named by its event."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": 7,
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "a claim_id that is not a string is ignored",
+      "why": "Only a string names a claim."
+    },
+    {
+      "expected": {
+        "claims": []
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1"
+            },
+            "id": "evt-0002",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 2,
+            "type": "release"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "a release from the holder ends the claim",
+      "why": "A `release` event names the claim in `claim_id`."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "clm-1",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ben-1",
+              "vendor": "codex"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1"
+            },
+            "id": "evt-0002",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ben",
+            "seq": 2,
+            "type": "release"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "a release from another agent session does not end the claim",
+      "why": "Only the agent session that holds a claim can release it."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "clm-1",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-9"
+            },
+            "id": "evt-0002",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 2,
+            "type": "release"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "a release of an unknown claim changes nothing",
+      "why": "A release that names no held claim is ignored."
+    },
+    {
+      "expected": {
+        "claims": []
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "outcome": "expired"
+            },
+            "id": "evt-0002",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 2,
+            "type": "release"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "a release with the outcome expired ends the claim",
+      "why": "The hub of the reference posts this release, in the name of the holder, when it finds an expired claim."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "clm-1",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          },
+          {
+            "agent_session_id": "ses-ben-1",
+            "agent_vendor": "codex",
+            "claim_id": "clm-2",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Write the guide",
+            "paths": [
+              "docs/**"
+            ]
+          },
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "clm-3",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": []
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ben-1",
+              "vendor": "codex"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-2",
+              "intent": "Write the guide",
+              "item": "Cart discount",
+              "paths": [
+                "docs/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0002",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ben",
+            "seq": 2,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-3",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0003",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 3,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "claims are listed in the order of their events",
+      "why": "The list keeps the order in which the claims arrived."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ben-1",
+            "agent_vendor": "codex",
+            "claim_id": "clm-2",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          },
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "clm-1",
+            "expires_at": "2026-01-15T12:06:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/billing/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ben-1",
+              "vendor": "codex"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-2",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0002",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ben",
+            "seq": 2,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:05:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/billing/**"
+              ],
+              "ttl_seconds": 60
+            },
+            "id": "evt-0003",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 3,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:05:30.000Z"
+      },
+      "name": "a second claim with the same id replaces the first",
+      "why": "The later event wins, and the claim moves to the end of the list."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ben-1",
+            "agent_vendor": "codex",
+            "claim_id": "clm-2",
+            "expires_at": "2026-01-15T13:00:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 60
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ben-1",
+              "vendor": "codex"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-2",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 3600
+            },
+            "id": "evt-0002",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ben",
+            "seq": 2,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:01:00.000Z"
+      },
+      "name": "only the expired claims leave the list",
+      "why": "Each claim has its own expiry."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T13:00:00.000+01:00",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "an at with a UTC offset is read as that instant",
+      "why": "`at` is a timestamp of RFC 3339, and the expiry is written in UTC."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00Z",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "an at with no fraction is read",
+      "why": "The fraction of a second is optional."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "yesterday",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "a claim whose at is not a timestamp counts from the time that it arrives",
+      "why": "The receiver cannot read `at`, so it counts `ttl_seconds` from its own clock, which reads `now` when it gets the event."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
+            "expires_at": "2026-03-01T08:00:01.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "not a time",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 1
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-03-01T08:00:00.000Z"
+      },
+      "name": "a claim whose at is not a timestamp is active for ttl_seconds",
+      "why": "The claim expires `ttl_seconds` after `now`, whatever its `at` says."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
+            "expires_at": "2026-01-15T12:00:01.250Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.250Z",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 1
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "the expiry has milliseconds",
+      "why": "The expiry is `at` plus `ttl_seconds`, written with three digits of fraction."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1-sub",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1-sub",
+              "parent": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "evt-0001"
+            },
+            "id": "evt-0002",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 2,
+            "type": "release"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "the claim of a sub-agent is held by the sub-agent session",
+      "why": "The holder is `agent.id` of the claim event, not `agent.parent`."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "clm-1",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          },
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "2026-01-15T12:00:00.000Z",
+            "body": {
+              "claim_id": "clm-1",
+              "summary": "Running the cart tests"
+            },
+            "id": "evt-0002",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 2,
+            "type": "status"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "an event of another type changes nothing",
+      "why": "Only `claim` and `release` events change the claims."
+    },
+    {
+      "expected": {
+        "claims": []
+      },
+      "input": {
+        "events": [],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "no event gives no claim",
+      "why": "The list starts empty."
+    }
+  ],
+  "contract": "room",
+  "description": "The claims of one Room that a receiver holds as active after a list of events. The receiver gets every event at `now`.",
+  "operation": "active-claims",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/daemon/src/sync/cache.ts"
+    ]
+  },
+  "version": 1
+}

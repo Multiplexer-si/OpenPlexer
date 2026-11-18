@@ -1,0 +1,336 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "last_seq": 3,
+        "sent": [
+          1,
+          2,
+          3
+        ]
+      },
+      "input": {
+        "since": 0,
+        "steps": [
+          {
+            "seq": 1,
+            "step": "replay"
+          },
+          {
+            "seq": 2,
+            "step": "replay"
+          },
+          {
+            "seq": 3,
+            "step": "replay"
+          },
+          {
+            "step": "go-live"
+          }
+        ]
+      },
+      "name": "a replay is sent in order",
+      "why": "A replayed event after `since` is sent at once."
+    },
+    {
+      "expected": {
+        "last_seq": 6,
+        "sent": [
+          6
+        ]
+      },
+      "input": {
+        "since": 5,
+        "steps": [
+          {
+            "seq": 4,
+            "step": "replay"
+          },
+          {
+            "seq": 5,
+            "step": "replay"
+          },
+          {
+            "seq": 6,
+            "step": "replay"
+          },
+          {
+            "step": "go-live"
+          }
+        ]
+      },
+      "name": "a replayed event at or below since is not sent",
+      "why": "The subscription starts after `since`."
+    },
+    {
+      "expected": {
+        "last_seq": 3,
+        "sent": [
+          1,
+          2,
+          3
+        ]
+      },
+      "input": {
+        "since": 0,
+        "steps": [
+          {
+            "seq": 3,
+            "step": "live"
+          },
+          {
+            "seq": 1,
+            "step": "replay"
+          },
+          {
+            "seq": 2,
+            "step": "replay"
+          },
+          {
+            "step": "go-live"
+          }
+        ]
+      },
+      "name": "a live event waits for the end of the replay",
+      "why": "A live event that arrives during the replay is held, so that it is not sent before an older event."
+    },
+    {
+      "expected": {
+        "last_seq": 3,
+        "sent": [
+          1,
+          2,
+          3
+        ]
+      },
+      "input": {
+        "since": 0,
+        "steps": [
+          {
+            "seq": 2,
+            "step": "live"
+          },
+          {
+            "seq": 3,
+            "step": "live"
+          },
+          {
+            "seq": 1,
+            "step": "replay"
+          },
+          {
+            "seq": 2,
+            "step": "replay"
+          },
+          {
+            "step": "go-live"
+          }
+        ]
+      },
+      "name": "a live event that the replay also read is sent once",
+      "why": "The replay and the live events can overlap. An event at or below the last one sent is dropped."
+    },
+    {
+      "expected": {
+        "last_seq": 3,
+        "sent": [
+          1,
+          2,
+          3
+        ]
+      },
+      "input": {
+        "since": 0,
+        "steps": [
+          {
+            "seq": 1,
+            "step": "replay"
+          },
+          {
+            "step": "go-live"
+          },
+          {
+            "seq": 2,
+            "step": "live"
+          },
+          {
+            "seq": 3,
+            "step": "live"
+          }
+        ]
+      },
+      "name": "a live event is sent at once after the replay",
+      "why": "After the replay ends, nothing is held."
+    },
+    {
+      "expected": {
+        "last_seq": 2,
+        "sent": [
+          1,
+          2
+        ]
+      },
+      "input": {
+        "since": 0,
+        "steps": [
+          {
+            "step": "go-live"
+          },
+          {
+            "seq": 1,
+            "step": "live"
+          },
+          {
+            "seq": 1,
+            "step": "live"
+          },
+          {
+            "seq": 2,
+            "step": "live"
+          }
+        ]
+      },
+      "name": "a live event that arrives twice is sent once",
+      "why": "The hub can read one event twice, after a notification and after a poll."
+    },
+    {
+      "expected": {
+        "last_seq": 3,
+        "sent": [
+          2,
+          3
+        ]
+      },
+      "input": {
+        "since": 0,
+        "steps": [
+          {
+            "step": "go-live"
+          },
+          {
+            "seq": 2,
+            "step": "live"
+          },
+          {
+            "seq": 1,
+            "step": "live"
+          },
+          {
+            "seq": 3,
+            "step": "live"
+          }
+        ]
+      },
+      "name": "a live event that arrives late is dropped",
+      "why": "An event below the last one sent is never sent, so the order on the connection never goes back."
+    },
+    {
+      "expected": {
+        "last_seq": 4,
+        "sent": [
+          1,
+          4
+        ]
+      },
+      "input": {
+        "since": 0,
+        "steps": [
+          {
+            "step": "go-live"
+          },
+          {
+            "seq": 1,
+            "step": "live"
+          },
+          {
+            "seq": 4,
+            "step": "live"
+          }
+        ]
+      },
+      "name": "a gap is not filled",
+      "why": "The subscription does not wait for a missing `seq`."
+    },
+    {
+      "expected": {
+        "last_seq": 10,
+        "sent": [
+          10
+        ]
+      },
+      "input": {
+        "since": 9,
+        "steps": [
+          {
+            "seq": 7,
+            "step": "replay"
+          },
+          {
+            "step": "go-live"
+          },
+          {
+            "seq": 8,
+            "step": "live"
+          },
+          {
+            "seq": 9,
+            "step": "live"
+          },
+          {
+            "seq": 10,
+            "step": "live"
+          }
+        ]
+      },
+      "name": "a since above the last event drops every event up to it",
+      "why": "The hub accepts a `last_seq` above the last event of the Room, and the subscription then drops every event at or below it."
+    },
+    {
+      "expected": {
+        "last_seq": 0,
+        "sent": []
+      },
+      "input": {
+        "since": 0,
+        "steps": [
+          {
+            "seq": 1,
+            "step": "live"
+          },
+          {
+            "seq": 2,
+            "step": "live"
+          }
+        ]
+      },
+      "name": "nothing is sent before the end of the replay if only live events arrive",
+      "why": "Without the end of the replay, a live event stays held."
+    },
+    {
+      "expected": {
+        "last_seq": 12,
+        "sent": []
+      },
+      "input": {
+        "since": 12,
+        "steps": [
+          {
+            "step": "go-live"
+          }
+        ]
+      },
+      "name": "no step sends nothing",
+      "why": "A subscription with no event keeps `since` as its last `seq`."
+    }
+  ],
+  "contract": "room",
+  "description": "The events that one subscription of the hub sends, for a replay and live events in several orders.",
+  "operation": "deliver",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "apps/hub/src/ws/subscriptions.ts"
+    ]
+  },
+  "version": 1
+}

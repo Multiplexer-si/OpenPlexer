@@ -1,7 +1,7 @@
 import { buildChain, verifyChain, type AuditFields } from "./audit.ts";
 import { asCommitted, render, type Files, type Json, type SealedFiles } from "./output.ts";
 import type { Reference, ZodSchema } from "./reference.ts";
-import { ROOM_EVENT_TYPES } from "./schemas.ts";
+import { messagePayload, ROOM_EVENT_TYPES } from "./schemas.ts";
 import { decodeJws, newSigner } from "./signing.ts";
 
 const NOW = "2026-01-15T12:00:00.000Z";
@@ -117,6 +117,9 @@ function roomExamples(reference: Reference): [string, Json][] {
   return [
     ...events.map(([name, value]): [string, Json] => [examplePath("room", "room-event", name), accepted(protocol.roomEventSchema, name, value)]),
     ...envelopes.map(([name, value]): [string, Json] => [examplePath("room", "envelope", name), accepted(protocol.wsMessageSchema, name, value)]),
+    [examplePath("room", "resume", "after-41"), accepted(messagePayload(reference, "resume"), "resume", { last_seq: 41 })],
+    [examplePath("room", "error", "behind"), accepted(messagePayload(reference, "error"), "behind", { code: "behind", message: "outbound buffer too large; resume to catch up" })],
+    [examplePath("room", "error", "answer-to-a-post"), accepted(messagePayload(reference, "error"), "answer-to-a-post", { code: "rate_limit", message: "too many events", client_event_id: "cev-17" })],
   ];
 }
 
