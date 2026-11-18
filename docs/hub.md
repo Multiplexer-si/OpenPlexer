@@ -44,12 +44,13 @@ Use `Authorization: Bearer <token>` on every request except the public key set. 
 | `GET /api/v1/projects/{project}/policy.bundle` | The latest [signed policy bundle](../spec/policy/v1/signed-bundle.schema.json). |
 | `PUT /api/v1/projects/{project}/policy` | Publish a JSON bundle and return the signed bundle. Requires a lead token. |
 | `POST /api/v1/rooms/{room}/events` | Append an event and return its v1 envelope. |
+| `POST /api/v1/rooms/{room}/stream` | Exchange newline-delimited v1 Room envelopes on a full-duplex HTTP stream. |
 | `GET /api/v1/rooms/{room}/events?last_seq=0` | Return up to 100 v1 event envelopes after `last_seq`, oldest first. The cursor defaults to zero. |
 | `POST /api/v1/rooms/{room}/claims` | Create a claim and return `granted`, `conflicts`, and the claim's `event` envelope. |
 | `POST /api/v1/rooms/{room}/claims/{claim}/renew` | Recompute a claim's expiry and return the updated lease. |
 | `POST /api/v1/rooms/{room}/claims/{claim}/release` | End a claim, append a release event, and return the released lease. |
 
-The caller verifies the JWS against a trusted key set and enforces the signed payload. The unsigned display fields are for presentation. The docs on [policy verification](../spec/policy/README.md#the-signed-bundle) give the verification steps.
+Give members a trusted copy of the public JWKS through an authenticated channel. See the [agent setup](local-policy.md#connect-to-a-team-hub). The agent verifies the JWS against the configured pin and the hub's advertised JWKS. The unsigned display fields are for presentation. The docs on [policy verification](../spec/policy/README.md#the-signed-bundle) give the verification steps.
 
 For an event post, send `type`, `body`, and `agent` with `id`, `vendor`, and optional `parent`. Omit `agent` for a `human` event. The hub prefixes session and parent IDs with the authenticated member ID and a slash. The hub sets `on_behalf_of`, the event ID, the Room, the timestamp, and the next sequence number. The client can send `Idempotency-Key` with up to 128 bytes. A repeated key for the same member and Room returns the original envelope. The claim endpoints write `claim` and `release` events. The event endpoint reserves `decision.confirm` and the two override event types for future hub services.
 
@@ -57,7 +58,9 @@ Claim creation takes `agent`, `item`, `paths`, and `intent`. Optional `mode` def
 
 Any authenticated claim operation in an existing Room sweeps lapsed claims. The hub appends their releases in the original holders' names. Renew changes the stored lease, so readers of the event log still expire the claim at its original deadline. [Room rules O1, E5, and E8](../spec/room/README.md#order-expiry-reconnection-and-errors) describe these semantics.
 
-For replay, use the highest sequence number the client received as the next cursor. A cursor at or beyond the latest event returns an empty array. Each HTTP request uses its own cursor. [Issue #20](https://github.com/Multiplexer-si/OpenPlexer/issues/20) connects the local agent, caches verified policy for offline use, and owns live Room delivery and replacement of subscriptions on the same connection under rule C5.
+For paged replay, pass the highest sequence number received as the next cursor. A cursor at or beyond the latest event returns an empty array.
+
+On the live stream, use `Content-Type: application/x-ndjson` and keep the request body open. Send a v1 `resume` envelope for the Room. The hub replays events after `last_seq` and then streams new events. A second `resume` replaces the subscription on that stream. A blank response line is a heartbeat. The daemon responds to a `behind` envelope with a fresh resume. If you run a reverse proxy, it must forward the request and response concurrently, with buffering disabled for the stream route.
 
 | Error | Meaning |
 |---|---|
@@ -72,4 +75,4 @@ For replay, use the highest sequence number the client received as the next curs
 
 Use one server on one host per data directory. The hub uses a file lock to coordinate the server and CLI, and atomically replaces `state.json` on writes. Each operation reads the snapshot into memory. Room history grows with each event, so disk use, memory use, and write time grow with it.
 
-Protect `state.json` and its backups. It contains the ES256 private key, member token hashes, the latest signed policy per project, Room history, and active claims. Back it up to preserve the signing key and Room sequence numbers. The hub keeps Room history indefinitely and generates a signing key once at initialization. Key rotation requires a future change. The hub validates event schemas but leaves secret and code checks open. Keep sensitive material out of Room bodies. The [trust model](trust-model.md#decisions-settled-by-the-single-team-hub) records these choices.
+Protect `state.json` and its backups. It contains the ES256 private key, member token hashes, the latest signed policy per project, Room history, and active claims. Back it up to preserve the signing key and Room sequence numbers. The hub keeps Room history indefinitely and generates a signing key once at initialization. Key rotation requires a future change. The local daemon filters posts before sending them. The hub validates event schemas. Server-side content filtering remains open for direct API callers. Keep sensitive material out of Room bodies. The [trust model](trust-model.md#decisions-settled-by-the-single-team-hub) records these choices.

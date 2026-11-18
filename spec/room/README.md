@@ -153,7 +153,7 @@ A receiver builds the claims of a Room from the `claim` and `release` events tha
 | C5 | A second `resume` for a Room on one connection replaces the first. | Reference | `apps/hub/src/ws/server.ts` |
 | C6 | An `error` with the code `behind` and a `room` means that the hub has stopped sending the events of that Room on this connection. The receiver sends a `resume` for the Room at once, even if it already sent one. | Reference | `apps/hub/src/ws/server.ts`, `apps/daemon/src/sync/client.ts` |
 
-C5 needs a live Room connection that can receive multiple `resume` messages. The single-team hub serves replay through independent HTTP requests. Same-connection subscription replacement belongs with live Room delivery in [issue 20](https://github.com/Multiplexer-si/OpenPlexer/issues/20).
+The single-team hub exchanges the same v1 envelopes over a full-duplex HTTP stream. Each stream follows one Room. It replaces the current subscription when another `resume` arrives. [Hub HTTP API](../../docs/hub.md#http-api).
 
 How long a receiver waits before it opens a new connection is not part of the contract. The message `snapshot_required` of the reference belongs to retention, which is out of scope.
 
@@ -238,7 +238,7 @@ No fixture case depends on one of these differences. In the fixture `active-clai
 
 The [trust model](../../docs/trust-model.md#open-decisions) gives three decisions about this contract to the owner. Version 1 takes the default below for each one until the owner decides. Each default keeps the contract smallest, and each one fails closed: a version 1 writer does not send the data, and a version 1 receiver skips it.
 
-The three decisions stay open after this contract is merged, and the defaults stay marked as pending. [Issue 20](https://github.com/Multiplexer-si/OpenPlexer/issues/20), which connects the agent to the hub, settles the read receipts and the digest, because both are behavior of the daemon. [Issue 4](https://github.com/Multiplexer-si/OpenPlexer/issues/4), the phase that holds the hub and the agent, settles the event types, because both sides must agree on the list.
+The daemon applies these defaults while the three decisions wait for the operator.
 
 | Decision | Default, pending the operator | Reason |
 |---|---|---|
