@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -25,8 +26,48 @@ func TestEvaluateDeniesAGroupThatItDoesNotRead(t *testing.T) {
 	}
 }
 
+func TestEvaluateDeniesAGlobThatIsTooLarge(t *testing.T) {
+	globs := map[string]string{
+		"a glob of 2048 stars":                                "api:" + strings.Repeat("*a", 2048),
+		"a large count of a group that can match empty":       "api:[]|(?:a?){4000000000}]",
+		"a count inside a count":                              "api:[]|(?:(?:x?){2000}$|x){2000}y]",
+		"a count of 1000 of a group of five states":           "api:[]|(?:ab|c){1000}]",
+		"a large count inside a count that matches no path":   "api:[]|(?:(?<!(|a){4000000000})a){2147483647,}]",
+		"a large count inside a lookahead":                    "api:[]|(?=(?:a*){10000000})]",
+		"more lookarounds than the limit, each in the former": "api:[]|" + strings.Repeat("(?<=", 900) + "a" + strings.Repeat(")", 900) + "]",
+	}
+	for name, glob := range globs {
+		t.Run(name, func(t *testing.T) {
+			bundle := &Bundle{Areas: []Area{{Name: "private", Patterns: []string{glob}, Private: true}, {Name: "open", Patterns: []string{"**"}}}}
+			requireTooLarge(t, bundle, "src/x")
+		})
+	}
+}
+
+func TestEvaluateDeniesAPathThatIsTooLongForTheGlob(t *testing.T) {
+	count := longestPath + 400
+	bundle := &Bundle{Areas: []Area{{Name: "private", Patterns: []string{fmt.Sprintf("api:[]|a{0,%d}]", count)}, Private: true}}}
+	now, _ := ParseTimestamp("2026-01-15T12:00:00Z")
+	short := Evaluate(bundle, Query{Repo: "api", Path: strings.Repeat("a", longestPath-1) + "]", Action: Read, Member: "m", Now: now})
+	if short.Decision != Deny || short.Area == nil || *short.Area != "private" {
+		t.Fatalf("result = %+v, want deny in the area private", short)
+	}
+	requireTooLarge(t, bundle, strings.Repeat("a", count)+"]")
+}
+
+func requireTooLarge(t *testing.T, bundle *Bundle, path string) {
+	t.Helper()
+	now, _ := ParseTimestamp("2026-01-15T12:00:00Z")
+	for _, action := range []Action{Read, Write} {
+		result := Evaluate(bundle, Query{Repo: "api", Path: path, Action: action, Member: "m", Now: now})
+		if result.Decision != Deny || result.Area != nil || !strings.Contains(result.Rule, "is not a glob: the glob is too large") {
+			t.Fatalf("%s: result = %+v, want deny with no area, because the glob is too large", action, result)
+		}
+	}
+}
+
 // A Codex hook that runs past its timeout lets the call run, so a slow match
-// fails open. The budget is far below that timeout.
+// fails open.
 const matchBudget = 50 * time.Millisecond
 
 var slowGlobs = []struct{ name, glob, path string }{

@@ -209,10 +209,14 @@ func (b *Bundle) matchAreas(repo, path string) ([]match, error) {
 			directory, isTree := strings.CutSuffix(glob, "/**")
 			if !isTree || lowercase(directory) != pathLower {
 				compiled, err := compileGlob(glob)
+				matches := false
+				if err == nil {
+					matches, err = globMatches(compiled, units)
+				}
 				if err != nil {
 					return nil, fmt.Errorf("pattern %q of area %q is not a glob: %w", pattern, area.Name, err)
 				}
-				if !globMatches(compiled, units) {
+				if !matches {
 					continue
 				}
 			}
