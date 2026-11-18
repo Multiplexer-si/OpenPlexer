@@ -58,7 +58,7 @@ const hex64: Schema = { type: "string", pattern: "^[0-9a-f]{64}$" };
 const OPERATIONS: Record<string, Operation> = {
   evaluate: {
     contract: ["policy"],
-    description: "Evaluate the query in `input` against the bundle in `shared`. An `expected` of `throws` means that the reference returns no result, and the contract does not define one.",
+    description: "Evaluate the query in `input` against the bundle in `shared`. An `expected` of `throws` means that the reference returns no result. The contract does not define one, and an implementation must deny with no `area` or fail.",
     shared: strict({ bundle: { $ref: schemaId("policy", "bundle") } }),
     input: { $ref: schemaId("policy", "eval-query") },
     expected: {

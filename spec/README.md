@@ -151,7 +151,7 @@ To run a case, do the operation on `shared` and `input`, and compare the whole r
 
 For `validate`, validate `input` against the schema that `schema` names, and compare the verdict with `expected.valid`.
 
-For `evaluate`, an `expected` of `{"throws": true}` means that the reference throws an error and returns no result. The contract does not define a result for such a case, so there is no value to compare. `informational.error` holds the message of the reference. The [second open question of the policy contract](policy/README.md#open-questions) lists the inputs, and the fixture `evaluate-class-syntax` holds the cases.
+For `evaluate`, an `expected` of `{"throws": true}` means that the reference throws an error and returns no result. The contract does not define a result for such a case, but an implementation must fail closed on it. So a runner in any language passes the case if the implementation returns `deny` with no `area`, or if it fails with an error and returns no result. The runner fails the case if the implementation returns `allow`, or a result with an `area`. `informational.error` holds the message of the reference. The [second open question of the policy contract](policy/README.md#open-questions) lists the inputs, and the fixture `evaluate-class-syntax` holds the cases.
 
 The fixture-file schema refers to the contract schemas. A fixture file that validates against it therefore has a valid `shared`, a valid `input`, and a valid `expected` in every case. `validate` is the exception, because its inputs are invalid on purpose.
 
