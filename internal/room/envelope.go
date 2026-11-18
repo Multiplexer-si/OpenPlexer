@@ -26,6 +26,7 @@ type envelope struct {
 	seq        int64
 	hasSeq     bool
 	sender     Sender
+	mission    string
 	payload    json.RawMessage
 	hasPayload bool
 }
@@ -48,7 +49,13 @@ func readEnvelope(text []byte) (envelope, []Issue) {
 	e.seq, e.hasSeq = field(r, "", o, "seq", optional, r.integerFrom(0))
 	field(r, "", o, "event_id", optional, r.nonEmptyText)
 	field(r, "", o, "ts", optional, r.nonEmptyText)
-	if _, e.hasPayload = o["payload"]; e.hasPayload {
+	payload, hasPayload := o["payload"]
+	e.hasPayload = hasPayload
+	if hasPayload {
+		if e.typ == "event" {
+			event, _ := payload.(object)
+			e.mission, _ = event["mission"].(string)
+		}
 		// A map, because a struct field also takes a key in another case.
 		var members map[string]json.RawMessage
 		_ = json.Unmarshal(text, &members)

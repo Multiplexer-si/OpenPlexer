@@ -129,7 +129,7 @@ func pollHub(ctx context.Context, home string, now func() time.Time, report func
 
 type deliveryError struct{ error }
 
-func (h hubClient) followRoom(ctx context.Context, now func() time.Time, receiver *room.Receiver, save func(room.Step, int64) error) error {
+func (h hubClient) followRoom(ctx context.Context, now func() time.Time, receiver *room.Receiver, save func(room.Step, int64) error) (err error) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	const idleTimeout = 10 * time.Second
@@ -155,6 +155,12 @@ func (h hubClient) followRoom(ctx context.Context, now func() time.Time, receive
 		return errors.New("hub response is not a Room stream")
 	}
 
+	var discarded uint64
+	defer func() {
+		if discarded > 0 && err != nil {
+			err = fmt.Errorf("discarded %d Room frames outside the subscription: %w", discarded, err)
+		}
+	}()
 	scanner := bufio.NewScanner(response.Body)
 	scanner.Buffer(make([]byte, 4096), 1<<20)
 	for scanner.Scan() {
@@ -164,7 +170,11 @@ func (h hubClient) followRoom(ctx context.Context, now func() time.Time, receive
 			continue
 		}
 		before := receiver.LastSeq(h.project)
-		step := receiver.Receive(frame, now())
+		step := receiver.ReceiveInRoom(frame, now(), h.project)
+		if _, outside := step.(room.OutsideSubscription); outside {
+			discarded++
+			continue
+		}
 		after := receiver.LastSeq(h.project)
 		if after > before {
 			if err := save(step, after); err != nil {
@@ -173,10 +183,8 @@ func (h hubClient) followRoom(ctx context.Context, now func() time.Time, receive
 		}
 		switch step := step.(type) {
 		case room.SendResume:
-			if step.Room == h.project {
-				if err := json.NewEncoder(resumes).Encode(room.ResumeMessage(from, step.Room, step.LastSeq)); err != nil {
-					return err
-				}
+			if err := json.NewEncoder(resumes).Encode(room.ResumeMessage(from, step.Room, step.LastSeq)); err != nil {
+				return err
 			}
 		case room.Unhandled:
 			if payload, ok := step.Message.Payload().(room.Error); ok && payload.Code.CloseCode() != 0 {
