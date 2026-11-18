@@ -2,15 +2,16 @@
 
 This page is for a developer who connects Codex to OpenPlexer, and for a reviewer who needs to know what the connection does not see. The Codex adapter in `internal/adapter/codex` reads the `PreToolUse` hook input and answers it. [The adapter contract](../spec/adapter/README.md) gives the rules, and the [trust model](trust-model.md) explains why the limits matter.
 
-> `openplexer install codex` writes the hook entry, and the entry runs `openplexer hook codex pre-tool`. Tests run both commands against a temporary home. A run of a real Codex session against the hook, including the trust step, belongs to [issue 17](https://github.com/Multiplexer-si/OpenPlexer/issues/17).
+> `openplexer install codex` writes the hook entry, and the entry runs `openplexer hook codex pre-tool`. Tests run both commands against a temporary home. [The real-agent harness](../test/realagent/README.md) runs real Codex sessions against the entry that `install` writes, and checks the trust step without a session.
 
 ## Supported version
 
 | Agent | Version | How it was checked |
 |---|---|---|
-| Codex | 0.167.1 | The hooks page of the Codex documentation. No run of the hook yet. |
+| Codex | 0.167.1 | The hooks page of the Codex documentation. |
+| Codex | 0.169.0 | Six real sessions through the installed hook on 2026-11-18, which [the results of the harness](../test/realagent/results.md) record. |
 
-The patch grammar that the adapter reads is the grammar of Codex 0.164.0, which the existing implementation checked against that version. Nothing here checks it against 0.167.1, so a patch that Codex 0.167.1 accepts and the adapter rejects is blocked, and a patch that the adapter accepts and Codex reads differently is not caught. Issue 17 checks this.
+The patch grammar that the adapter reads is the grammar of Codex 0.164.0, which the existing implementation checked against that version. The sessions of 0.169.0 sent only patches that add one file, and the adapter read each one. Nothing checks the other patch forms against 0.169.0, so a patch that Codex accepts and the adapter rejects is blocked, and a patch that the adapter accepts and Codex reads differently is not caught.
 
 ## What the hook sees
 
