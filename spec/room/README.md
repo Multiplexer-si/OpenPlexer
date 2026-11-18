@@ -236,11 +236,9 @@ No fixture case depends on one of these differences. In the fixture `active-clai
 
 ## Defaults that wait for the operator
 
-The [trust model](../../docs/trust-model.md#open-decisions) gives three decisions about this contract to the owner. Version 1 takes the default below for each one until the owner decides. Each default keeps the contract smallest, and each one fails closed: a version 1 writer does not send the data, and a version 1 receiver skips it.
+The [trust model](../../docs/trust-model.md) gave three decisions about this contract to the owner. On 2026-11-18 the operator decided each one as below. Each choice keeps the contract smallest, and each one fails closed: a version 1 writer does not send the data, and a version 1 receiver skips it.
 
-The daemon applies these defaults while the three decisions wait for the operator.
-
-| Decision | Default, pending the operator | Reason |
+| Decision | Decided on 2026-11-18 | Reason |
 |---|---|---|
 | Whether read receipts are part of the Room contract | They are not. Version 1 has no message and no field for a receipt, and a version 1 agent sends none. | A receipt tells the hub which events reached an agent, which is more data that leaves the machine. The reference sends receipts outside the event stream, in the digest and in an HTTP call, so none of the rules above needs one. A later version can add them without a change to an event. |
 | The event types `request`, `handoff.*`, `artifact`, `ledger.adopted`, and `check.timeout-pass` | They are not in version 1. A validator rejects them, and a receiver skips and counts them by rule O7. | Each type adds data that leaves the machine. A receiver that skips an unknown type keeps working when a type is added later. A type that version 1 had would be hard to remove. |
