@@ -41,8 +41,12 @@ func literalPrefix(pattern string) string {
 // PatternsOverlap reports whether two claim entries overlap, as
 // spec/room/README.md says. Two globs report more overlaps than exist, because
 // a claim is advice and not a lock. A glob that the reference cannot read, or
-// that is too large to match, overlaps every entry.
+// that is too large to match, overlaps every entry, and so does an entry of
+// more than longestPath UTF-16 units.
 func PatternsOverlap(a, b string) bool {
+	if tooLong(a) || tooLong(b) {
+		return true
+	}
 	a, b = normalize(a), normalize(b)
 	switch globA, globB := isGlob(a), isGlob(b); {
 	case !globA && !globB:
@@ -63,6 +67,10 @@ func PathsOverlap(a, b []string) bool {
 	return slices.ContainsFunc(a, func(x string) bool {
 		return slices.ContainsFunc(b, func(y string) bool { return PatternsOverlap(x, y) })
 	})
+}
+
+func tooLong(entry string) bool {
+	return len(entry) > longestPath && len(utf16.Encode([]rune(entry))) > longestPath
 }
 
 func matchesOrFails(glob, path string) bool {
