@@ -108,6 +108,6 @@ There is no check after the command. A write that the hook did not name stays un
 
 **No policy.** With no verified policy, the hook denies every call that it judges, and it judges every `Bash` command as a command. The reason says how to load a policy.
 
-**No project root.** The hook reads the paths of a call from the project root, which is the nearest directory at or above `cwd` that holds `.git`, or else `.codex`, `.claude`, or `.mcp.json`. Your home directory is never the root. If the hook finds no root, it denies every write and every judged command. A `.git` that an agent creates in a subdirectory moves the root there.
+**No project root.** The hook reads the paths of a call from the project root, which is the nearest directory at or above `cwd` that holds `.git`, or else `.codex`, `.claude`, or `.mcp.json`. Your home directory is never the root. If the hook finds no root, it denies every write and every judged command. A `.git` in a subdirectory, such as a submodule or one that an agent creates, moves the root there while `cwd` is inside it, and a write that climbs out of that directory is not judged.
 
 **The repository.** The hook does not know which repository of the bundle the project is. The gate then allows a write only when every repository of the bundle allows it, as [Local policy gate](local-policy.md) describes.
