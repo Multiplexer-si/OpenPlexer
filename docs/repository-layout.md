@@ -29,14 +29,14 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 
 ## Packages
 
-`internal/policy`, `internal/audit`, and `internal/daemon` hold the policy evaluator and the verification of a signed bundle, the audit record, and the local gate. The four adapter packages hold the hook adapters and their list, and `internal/jsonedit` edits a JSON file in place. `internal/room` and `internal/hub` each hold a `doc.go` file with a package comment and no other code. The last three packages hold only tests.
+`internal/policy`, `internal/audit`, and `internal/daemon` hold the policy evaluator and the verification of a signed bundle, the audit record, and the local gate. The four adapter packages hold the hook adapters and their list, and `internal/jsonedit` edits a JSON file in place. `internal/room` holds the Room protocol. `internal/hub` holds a `doc.go` file with a package comment and no other code. The last three packages hold only tests.
 
 | Package | Owns |
 |---|---|
 | `internal/policy` | The policy model, the policy evaluator, and the verification of a signed bundle against a key set. Pure, no I/O. Its tests run every fixture of `spec/policy`. |
 | `internal/audit` | Canonical JSON, the hash of an audit record, and the verification of a chain. Pure, no I/O. Its tests run every fixture of `spec/canonical-json` and `spec/audit`. |
 | `internal/daemon` | The local gate: the policy source, the store of the last verified bundle, the state of the policy, local identity, and the audit log of each decision. It reads and writes one home directory. |
-| `internal/room` | The Room protocol: events, claims, decisions, and their validation. Pure, no I/O. |
+| `internal/room` | The Room protocol: events, claims, decisions, the envelope, and their validation, the overlap of two claims, and the models of order, expiry, reconnection, and errors. Pure, no I/O. Its tests run every fixture of `spec/room`. |
 | `internal/adapter` | The list of the adapters, and the test that runs every case of `spec/adapter` against them. |
 | `internal/adapter/hook` | What both hook adapters share: the hook call, the reading of a shell command and of a path, the project root, the guarded paths, the queries of one tool call, the verdict, and the install and removal of a hook entry. It imports `internal/policy` and `internal/jsonedit`. |
 | `internal/adapter/claudecode` | The `Agent` value of Claude Code: its table of gated tools, its settings files, and its hook entry. |

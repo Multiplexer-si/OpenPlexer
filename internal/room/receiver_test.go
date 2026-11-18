@@ -3,6 +3,7 @@ package room
 import (
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -115,6 +116,19 @@ func TestRestoreThenDuplicate(t *testing.T) {
 	r.Restore("mis", 2)
 	if r.LastSeq("mis") != 6 {
 		t.Errorf("Restore lowered the seq to %d", r.LastSeq("mis"))
+	}
+}
+
+func TestClaimWithUnreadableAtIsNotRecorded(t *testing.T) {
+	body := `{"item":"i","paths":["a/**"],"intent":"x","ttl_seconds":9007199254740991}`
+	held := reduceClaim(nil, mustEvent(t, strings.Replace(eventPayload("claim", 1, body), statusAt, `"at":"yesterday"`, 1)))
+	if len(held) != 0 {
+		t.Errorf("claims = %+v, want none for an at that is not RFC 3339", held)
+	}
+	held = reduceClaim(nil, mustEvent(t, eventPayload("claim", 1, body)))
+	far := time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
+	if got := active(held, far); len(got) != 1 {
+		t.Errorf("a claim with the largest ttl_seconds is not active in the year 9999: %+v", held)
 	}
 }
 

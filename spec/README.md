@@ -8,7 +8,7 @@
 |---|---|---|
 | [`canonical-json/`](canonical-json/README.md) | Canonical JSON, the byte form that the bundle signature and the audit hash are computed over | 1 |
 | [`policy/`](policy/README.md) | The policy bundle, overrides, policy evaluation, and the signed bundle | 1 |
-| [`room/`](room/README.md) | Room events, which include claims and decisions, the transport envelope, and the overlap rules for claims | 1 |
+| [`room/`](room/README.md) | Room events, which include claims and decisions, the transport envelope, the overlap rules for claims, and the rules for order, expiry, reconnection, and errors | 1 |
 | [`audit/`](audit/README.md) | The audit record, its hash, chain verification, and the JSON export | 1 |
 | [`adapter/`](adapter/README.md) | How an adapter reads the hook input of a coding agent into policy queries, and answers the hook | 1 |
 
@@ -142,6 +142,8 @@ To run a case, do the operation on `shared` and `input`, and compare the whole r
 | `validate` | policy, room | None | Any JSON value | `valid` |
 | `patterns-overlap` | room | None | Two patterns, `a` and `b` | `overlap` |
 | `path-sets-overlap` | room | None | Two lists of patterns, `a` and `b` | `overlap` |
+| `deliver` | room | None | `since`, and `steps`: stored events that the hub replays, new events, and the end of the replay | `sent`, the `seq` of each event that the hub sends, and `last_seq` |
+| `active-claims` | room | None | `events`, in the order that a receiver accepts them, and `now` | `claims`, the active claims in the order of their events |
 | `canonicalize` | canonical-json | None | `json`, a JSON text | `canonical`, and `sha256` of its UTF-8 bytes |
 | `verify-chain` | audit | None | `records`, in chain order | A chain verification result |
 | `bash-targets` | adapter | None | `command`, a shell command line | `targets`, the paths that the line writes |
@@ -222,4 +224,4 @@ The Go tests in `internal/spectest` run in `make check`. They need neither the r
 
 The tests read numbers as doubles, and a number outside their range as infinity, as [Numbers](#numbers) says. The validator in the tests compiles each pattern with the Go engine. Inside [the portable subset](#patterns), the Go engine and an ECMA-262 engine give the same verdict on a value made only of characters of the Basic Multilingual Plane, with no lone surrogate.
 
-The Go implementation runs the fixtures against its own code. The tests in `internal/policy` run every `validate` and every `evaluate` case of the policy contract. No Go code runs the `verify-signed-bundle` cases yet.
+The Go implementation runs the fixtures against its own code. The tests in `internal/policy` run every `validate` and every `evaluate` case of the policy contract. The tests in `internal/room` run every case of the Room contract. No Go code runs the `verify-signed-bundle` cases yet.

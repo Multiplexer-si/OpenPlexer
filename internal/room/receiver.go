@@ -97,7 +97,7 @@ func (r *Receiver) Receive(frame []byte) Step {
 	if err != nil {
 		return Skipped{Reason: "not a valid message: " + err.Error()}
 	}
-	if payload, ok := msg.Payload().(Error); ok && payload.Code == Behind && msg.Room() != "" {
+	if payload, ok := msg.Payload().(Error); ok && errorCodes[payload.Code].resumes && msg.Room() != "" {
 		return SendResume{Room: msg.Room(), LastSeq: r.LastSeq(msg.Room())}
 	}
 	return Unhandled{Message: msg}
