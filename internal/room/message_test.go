@@ -131,7 +131,7 @@ func TestAPayloadKeyInAnotherCaseIsNotThePayload(t *testing.T) {
 		t.Error("ParseMessage accepted a frame whose payload is not a valid event")
 	}
 	r := NewReceiver()
-	if step, ok := r.Receive([]byte(frame)).(Skipped); !ok || r.LastSeq("mis") != 5 {
+	if step, ok := r.Receive([]byte(frame), arrival).(Skipped); !ok || r.LastSeq("mis") != 5 {
 		t.Errorf("Receive = %#v with the last seq %d, want Skipped and 5", step, r.LastSeq("mis"))
 	}
 	status := eventPayload("status", 6, `{"summary":"s"}`)

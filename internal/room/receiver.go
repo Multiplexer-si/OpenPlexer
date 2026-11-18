@@ -77,11 +77,12 @@ func (r *Receiver) Claims(room string, now time.Time) []ActiveClaim {
 	return []ActiveClaim{}
 }
 
-// Receive reads one frame from the hub. A frame that is not a valid message of
-// version 1 is skipped and sends no error. An event that this version cannot
-// read is counted as received when its envelope names a Room and a seq, so a
-// resume does not ask for it again.
-func (r *Receiver) Receive(frame []byte) Step {
+// Receive reads one frame from the hub, which arrived at now. A frame that is
+// not a valid message of version 1 is skipped and sends no error. An event
+// that this version cannot read is counted as received when its envelope names
+// a Room and a seq, so a resume does not ask for it again. A claim whose at is
+// not a timestamp of RFC 3339 expires ttl_seconds after now.
+func (r *Receiver) Receive(frame []byte, now time.Time) Step {
 	env, issues := readEnvelope(frame)
 	if len(issues) > 0 {
 		return Skipped{Reason: "not a valid envelope: " + issues[0].String()}
@@ -90,7 +91,7 @@ func (r *Receiver) Receive(frame []byte) Step {
 		return Skipped{Reason: "unsupported version"}
 	}
 	if env.typ == "event" {
-		return r.receiveEvent(env)
+		return r.receiveEvent(env, now)
 	}
 	msg, err := ParseMessage(frame)
 	if err != nil {
@@ -102,7 +103,7 @@ func (r *Receiver) Receive(frame []byte) Step {
 	return Unhandled{Message: msg}
 }
 
-func (r *Receiver) receiveEvent(env envelope) Step {
+func (r *Receiver) receiveEvent(env envelope, now time.Time) Step {
 	ev, issues := env.event()
 	if len(issues) > 0 {
 		if env.room != "" && env.hasSeq {
@@ -119,6 +120,6 @@ func (r *Receiver) receiveEvent(env envelope) Step {
 		return Skipped{Reason: "duplicate"}
 	}
 	state.last = ev.seq
-	state.claims = reduceClaim(state.claims, ev)
+	state.claims = reduceClaim(state.claims, ev, now)
 	return Deliver{Room: room, Event: ev}
 }

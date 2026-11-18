@@ -310,7 +310,7 @@ func TestParsersAgreeWithTheSchemas(t *testing.T) {
 						t.Errorf("ParseMessage read the event %s from %s", mustMarshal(t, ev), text)
 					}
 				}
-				if step, ok := NewReceiver().Receive(text).(Deliver); ok {
+				if step, ok := NewReceiver().Receive(text, arrival).(Deliver); ok {
 					delivered++
 					if !valid || !reflect.DeepEqual(decodeDoubles(t, mustMarshal(t, step.Event)), payload) {
 						t.Errorf("Receive delivered the event %s from %s, and the schema verdict is %v", mustMarshal(t, step.Event), text, valid)

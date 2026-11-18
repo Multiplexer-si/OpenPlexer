@@ -15,14 +15,14 @@ type ActiveClaim struct {
 	Holder Agent
 }
 
-// An expired claim stays until it is replaced: no event ends it, and active
-// filters it out.
-func reduceClaim(claims []ActiveClaim, ev Event) []ActiveClaim {
+// reduceClaim applies ev, which the receiver got at now. An expired claim
+// stays until it is replaced: no event ends it, and active filters it out.
+func reduceClaim(claims []ActiveClaim, ev Event, now time.Time) []ActiveClaim {
 	switch body := ev.Body().(type) {
 	case *Claim:
 		at, err := time.Parse(time.RFC3339, ev.at)
 		if err != nil {
-			return claims
+			at = now
 		}
 		id := body.ClaimID
 		if id == "" {

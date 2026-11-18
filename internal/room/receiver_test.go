@@ -14,6 +14,8 @@ const (
 	statusAgent = `"agent":{"id":"ses","vendor":"v"},"on_behalf_of":"m"`
 )
 
+var arrival = time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
+
 func eventPayload(typ string, seq int, body string) string {
 	return `{"id":"e` + strconv.Itoa(seq) + `","seq":` + strconv.Itoa(seq) + `,"mission":"mis","type":"` + typ + `",` + statusAgent + `,` + statusAt + `,"body":` + body + `}`
 }
@@ -69,7 +71,7 @@ func TestReceive(t *testing.T) {
 			r := NewReceiver()
 			var got Step
 			for _, frame := range c.frames {
-				got = r.Receive([]byte(frame))
+				got = r.Receive([]byte(frame), arrival)
 			}
 			switch want := c.want.(type) {
 			case nil:
@@ -95,8 +97,8 @@ func TestReceive(t *testing.T) {
 
 func TestReceiveKeepsRoomsApart(t *testing.T) {
 	r := NewReceiver()
-	r.Receive([]byte(statusFrame("a", 4)))
-	if _, ok := r.Receive([]byte(statusFrame("b", 2))).(Deliver); !ok {
+	r.Receive([]byte(statusFrame("a", 4)), arrival)
+	if _, ok := r.Receive([]byte(statusFrame("b", 2)), arrival).(Deliver); !ok {
 		t.Error("an event of room b was dropped by the seq of room a")
 	}
 	if r.LastSeq("a") != 4 || r.LastSeq("b") != 2 {
@@ -107,10 +109,10 @@ func TestReceiveKeepsRoomsApart(t *testing.T) {
 func TestRestoreThenDuplicate(t *testing.T) {
 	r := NewReceiver()
 	r.Restore("mis", 5)
-	if _, ok := r.Receive([]byte(statusFrame("mis", 5))).(Skipped); !ok {
+	if _, ok := r.Receive([]byte(statusFrame("mis", 5)), arrival).(Skipped); !ok {
 		t.Error("an event at the restored seq was delivered")
 	}
-	if _, ok := r.Receive([]byte(statusFrame("mis", 6))).(Deliver); !ok {
+	if _, ok := r.Receive([]byte(statusFrame("mis", 6)), arrival).(Deliver); !ok {
 		t.Error("an event after the restored seq was dropped")
 	}
 	r.Restore("mis", 2)
@@ -119,13 +121,21 @@ func TestRestoreThenDuplicate(t *testing.T) {
 	}
 }
 
-func TestClaimWithUnreadableAtIsNotRecorded(t *testing.T) {
-	body := `{"item":"i","paths":["a/**"],"intent":"x","ttl_seconds":9007199254740991}`
-	held := reduceClaim(nil, mustEvent(t, strings.Replace(eventPayload("claim", 1, body), statusAt, `"at":"yesterday"`, 1)))
-	if len(held) != 0 {
-		t.Errorf("claims = %+v, want none for an at that is not RFC 3339", held)
+func TestAClaimWithAnAtThatIsNotReadCountsFromItsArrival(t *testing.T) {
+	body := `{"item":"i","paths":["a/**"],"intent":"x","ttl_seconds":60}`
+	r := NewReceiver()
+	r.Receive([]byte(eventFrame("mis", 1, strings.Replace(eventPayload("claim", 1, body), statusAt, `"at":"2026-01-15"`, 1))), arrival)
+	if got := r.Claims("mis", arrival.Add(59*time.Second)); len(got) != 1 || !got[0].ExpiresAt.Equal(arrival.Add(time.Minute)) {
+		t.Errorf("claims = %+v, want one that expires a minute after the frame arrived", got)
 	}
-	held = reduceClaim(nil, mustEvent(t, eventPayload("claim", 1, body)))
+	if got := r.Claims("mis", arrival.Add(time.Minute)); len(got) != 0 {
+		t.Errorf("claims at the expiry = %+v, want none", got)
+	}
+}
+
+func TestAClaimWithTheLargestTTLIsActive(t *testing.T) {
+	body := `{"item":"i","paths":["a/**"],"intent":"x","ttl_seconds":9007199254740991}`
+	held := reduceClaim(nil, mustEvent(t, eventPayload("claim", 1, body)), arrival)
 	far := time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
 	if got := active(held, far); len(got) != 1 {
 		t.Errorf("a claim with the largest ttl_seconds is not active in the year 9999: %+v", held)
@@ -137,9 +147,9 @@ func TestReceiveReducesClaims(t *testing.T) {
 		return eventFrame("mis", seq, eventPayload("claim", seq, `{"claim_id":"`+id+`","item":"i","paths":["a/**"],"intent":"x","ttl_seconds":`+ttl+`}`))
 	}
 	r := NewReceiver()
-	r.Receive([]byte(claim(1, "c1", "60")))
-	r.Receive([]byte(claim(1, "c-duplicate", "60")))
-	r.Receive([]byte(claim(2, "c2", "10")))
+	r.Receive([]byte(claim(1, "c1", "60")), arrival)
+	r.Receive([]byte(claim(1, "c-duplicate", "60")), arrival)
+	r.Receive([]byte(claim(2, "c2", "10")), arrival)
 	at := time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 	if got := r.Claims("mis", at.Add(5*time.Second)); len(got) != 2 || got[0].ID != "c1" || got[1].ID != "c2" {
 		t.Errorf("claims = %+v, want c1 and c2", got)

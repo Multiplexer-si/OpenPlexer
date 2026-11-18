@@ -247,7 +247,7 @@ func runActiveClaims(t *testing.T, c fixtureCase) {
 	}
 	var held []ActiveClaim
 	for _, text := range in.Events {
-		held = reduceClaim(held, mustEvent(t, string(text)))
+		held = reduceClaim(held, mustEvent(t, string(text)), now)
 	}
 	got := []claimRow{}
 	for _, claim := range active(held, now) {
