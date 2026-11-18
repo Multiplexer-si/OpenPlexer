@@ -140,6 +140,7 @@ var goldenCases = []goldenCase{
 		replaceEdit("change an unrelated key", `"Bash(ls)"`, `"Bash(pwd)"`),
 	}},
 	{agent: "claude-code", dir: "bom-two-space"},
+	{agent: "claude-code", dir: "user-hook-named-like-ours"},
 	{agent: "claude-code", dir: "missing", deleted: "a file that did not exist is deleted, not left as an empty file"},
 	{agent: "claude-code", dir: "empty-object", deleted: "{} is deleted: the root emptied, so the file goes"},
 	{agent: "claude-code", dir: "empty-object-newline", deleted: "{} and its final newline are deleted: the root emptied, so the file goes"},

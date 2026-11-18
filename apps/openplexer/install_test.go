@@ -110,3 +110,37 @@ func TestInstallUsage(t *testing.T) {
 		}
 	}
 }
+
+func TestUninstallKeepsAHookOfTheUserThatLooksLikeOurs(t *testing.T) {
+	c := newCLI(t)
+	path := filepath.Join(t.TempDir(), "settings.json")
+	const theirs = `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/opt/openplexer-lint hook claude-code --strict"}]}]}}`
+	writeFile(t, path, theirs)
+	if out := c.must(exitOK, "uninstall", "claude-code", "--file", path); !strings.Contains(out, "nothing changed") {
+		t.Errorf("uninstall printed %q, want nothing changed", out)
+	}
+	if got := readFile(t, path); got != theirs {
+		t.Errorf("the file after uninstall:\n%s\nwant the user's hook, byte for byte", got)
+	}
+}
+
+func TestUninstallKeepsAFileThatInstallDidNotCreate(t *testing.T) {
+	for name, before := range map[string]string{
+		"only whitespace":          "  \n",
+		"only a byte order mark":   "\xEF\xBB\xBF",
+		"no bytes":                 "",
+		"an empty object":          "{}",
+		"an empty PreToolUse list": `{"hooks":{"PreToolUse":[]}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			c := newCLI(t)
+			path := filepath.Join(t.TempDir(), "settings.json")
+			writeFile(t, path, before)
+			c.must(exitOK, "install", "claude-code", "--file", path)
+			c.must(exitOK, "uninstall", "claude-code", "--file", path)
+			if got := readFile(t, path); got != before {
+				t.Errorf("the file after install and uninstall is %q, want %q", got, before)
+			}
+		})
+	}
+}
