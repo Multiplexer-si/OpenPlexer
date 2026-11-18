@@ -181,3 +181,22 @@ func TestReceiveReducesClaims(t *testing.T) {
 		t.Error("a change to a returned claim reached the Receiver")
 	}
 }
+
+func TestReceiveSkipsAndCountsTheNineUndecidedEvents(t *testing.T) {
+	r := NewReceiver()
+	for i, kind := range []string{
+		"request", "artifact", "ledger.adopted", "check.timeout-pass",
+		"handoff.offered", "handoff.accepted", "handoff.declined", "handoff.completed", "handoff.cancelled",
+	} {
+		seq := i + 1
+		if _, ok := r.Receive([]byte(eventFrame("mis", seq, eventPayload(kind, seq, "{}"))), arrival).(Skipped); !ok {
+			t.Errorf("%s was delivered", kind)
+		}
+		if got := r.LastSeq("mis"); got != int64(seq) {
+			t.Errorf("%s left cursor at %d, want %d", kind, got, seq)
+		}
+	}
+	if _, ok := r.Receive([]byte(statusFrame("mis", 10)), arrival).(Deliver); !ok {
+		t.Error("next supported event was not delivered")
+	}
+}

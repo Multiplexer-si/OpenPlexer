@@ -24,6 +24,7 @@ import (
 const usage = `usage:
   openplexer configure [--keys <jwks.json>] [--member <member-id>] [--stale-after-days <days>]
   openplexer configure --hub <url> --project <id> --member <id> --keys <jwks.json> --token-file <file>
+  openplexer daemon
   openplexer policy sync
   openplexer policy load <signed-bundle.json>
   openplexer policy status
@@ -74,6 +75,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() ti
 		return c.fail(err)
 	}
 	switch {
+	case len(args) == 1 && args[0] == "daemon":
+		return c.daemon()
 	case len(args) >= 1 && args[0] == "configure":
 		return c.configure(args[1:])
 	case len(args) == 3 && args[0] == "policy" && args[1] == "load":

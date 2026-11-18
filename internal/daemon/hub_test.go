@@ -105,3 +105,19 @@ func useHubTransport(t *testing.T, transport http.RoundTripper) {
 	hubHTTP = &http.Client{Transport: transport, CheckRedirect: previous.CheckRedirect}
 	t.Cleanup(func() { hubHTTP = previous })
 }
+
+func TestSignedBundleMessageUsesExactFinalMembers(t *testing.T) {
+	for _, text := range []string{
+		`{"version":1,"bundle":{},"Signature":"wrong"}`,
+		`{"version":1,"bundle":{},"signature":"old","signature":null}`,
+		`{"version":9007199254740992,"bundle":{},"signature":"x"}`,
+	} {
+		if _, err := signedToken([]byte(text)); err == nil {
+			t.Errorf("accepted %s", text)
+		}
+	}
+	token, err := signedToken([]byte(`{"version":1,"bundle":null,"signature":"old","signature":"final","Signature":"ignored"}`))
+	if token != "final" || err != nil {
+		t.Fatalf("signed token = %q, %v", token, err)
+	}
+}
