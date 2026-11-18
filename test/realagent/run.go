@@ -3,8 +3,10 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,10 +16,11 @@ import (
 )
 
 type preToolCall struct {
-	Tool     string   `json:"tool"`
-	Fields   []string `json:"toolInputFields"`
-	Decision string   `json:"decision"`
-	Exit     int      `json:"exit"`
+	Tool        string   `json:"tool"`
+	Fields      []string `json:"toolInputFields"`
+	NamesTarget bool     `json:"namesTarget"`
+	Decision    string   `json:"decision"`
+	Exit        int      `json:"exit"`
 }
 
 type result struct {
@@ -34,6 +37,7 @@ type result struct {
 	WantOnDisk         bool           `json:"wantOnDisk"`
 	ReasonToolResult   bool           `json:"reasonReachedAgentTools"`
 	ReasonInAgentReply bool           `json:"reasonInAgentReply"`
+	Removed            []string       `json:"removedOutsideRunDir,omitempty"`
 	Pass               bool           `json:"pass"`
 	Problems           []string       `json:"problems,omitempty"`
 }
@@ -43,10 +47,24 @@ func runMain(args []string) int {
 	agentFlag := fs.String("agent", "all", "claude, codex or all")
 	scenarioFlag := fs.String("scenario", "all", "scenario name or all")
 	style := fs.String("style", styleJSON, "deny protocol: json or exit2")
-	out := fs.String("out", filepath.Join("test", "realagent", "out", time.Now().UTC().Format("20060102T150405Z")), "directory for raw output")
+	out := fs.String("out", "", "directory for raw output (default: a new temporary directory)")
 	samples := fs.String("samples", "", "directory that receives redacted hook input samples")
 	if err := fs.Parse(args); err != nil {
 		return 2
+	}
+	for _, v := range []string{"CLAUDECODE", "CODEX_THREAD_ID"} {
+		if os.Getenv(v) != "" {
+			fmt.Fprintf(os.Stderr, "run: %s is set, so this shell belongs to an agent session, and the agents would inherit its variables. Run from a plain terminal, or with env -i as README.md shows.\n", v)
+			return 2
+		}
+	}
+	if *out == "" {
+		dir, err := os.MkdirTemp("", "realagent-out-")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return 1
+		}
+		*out = dir
 	}
 	exe, err := os.Executable()
 	if err != nil {
@@ -87,20 +105,35 @@ func runMain(args []string) int {
 }
 
 func runOne(a agent, s scenario, exe, style, outDir, samplesDir string, written map[string]bool) (*result, error) {
-	version, err := a.version()
+	version, err := versionOf(a.name)
 	if err != nil {
-		return nil, fmt.Errorf("%s is not usable: %w", a.binary, err)
+		return nil, fmt.Errorf("%s is not usable: %w", a.name, err)
 	}
 	if err := os.MkdirAll(outDir, 0o755); err != nil {
 		return nil, err
 	}
-	project, err := os.MkdirTemp("", "realagent-project-")
+	root, err := os.MkdirTemp("", "realagent-")
 	if err != nil {
 		return nil, err
 	}
-	defer os.RemoveAll(project)
-	if project, err = filepath.EvalSymlinks(project); err != nil {
+	defer os.RemoveAll(root)
+	if root, err = filepath.EvalSymlinks(root); err != nil {
 		return nil, err
+	}
+	d := runSetup{project: filepath.Join(root, "project"), state: filepath.Join(root, "state"), sessionID: newSessionID()}
+	for _, dir := range []string{d.project, d.state, filepath.Join(root, "outside")} {
+		if err := os.Mkdir(dir, 0o700); err != nil {
+			return nil, err
+		}
+	}
+	left, err := a.leftovers(d)
+	if err != nil {
+		return nil, err
+	}
+	for _, p := range left {
+		if _, err := os.Lstat(p); !os.IsNotExist(err) {
+			return nil, fmt.Errorf("%s exists before the run, so the harness cannot tell what the run adds", p)
+		}
 	}
 	logPath := filepath.Join(outDir, "hooks.jsonl")
 	if err := os.Remove(logPath); err != nil && !os.IsNotExist(err) {
@@ -109,7 +142,7 @@ func runOne(a agent, s scenario, exe, style, outDir, samplesDir string, written 
 	hookCmd := strings.Join([]string{shellQuote(exe), "stub", "-log", shellQuote(logPath),
 		"-deny", shellQuote(strings.Join(s.denyTokens, ",")),
 		"-reason", shellQuote(s.reason), "-style", style}, " ")
-	cmd, err := a.prepare(project, hookCmd, s.prompt)
+	cmd, err := a.prepare(d, s, hookCmd)
 	if err != nil {
 		return nil, err
 	}
@@ -119,9 +152,18 @@ func runOne(a agent, s scenario, exe, style, outDir, samplesDir string, written 
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
 	start := time.Now()
 	runErr := cmd.Run()
-	res := &result{Agent: a.name, Version: version, Scenario: s.name, Style: style,
+	res := &result{Agent: a.name, Version: version, Model: a.model, Scenario: s.name, Style: style,
 		Seconds: time.Since(start).Seconds(), HookEvents: map[string]int{}, WantOnDisk: s.wantOnDisk}
-	res.Model = map[string]string{"claude": claudeModel, "codex": codexModel}[a.name]
+	var removeErrs []error
+	for _, p := range left {
+		if _, err := os.Lstat(p); err == nil {
+			res.Removed = append(res.Removed, p)
+		}
+		removeErrs = append(removeErrs, os.RemoveAll(p))
+	}
+	if err := errors.Join(removeErrs...); err != nil {
+		return nil, err
+	}
 	if ee, ok := runErr.(*exec.ExitError); ok {
 		res.AgentExit = ee.ExitCode()
 	} else if runErr != nil {
@@ -140,20 +182,20 @@ func runOne(a agent, s scenario, exe, style, outDir, samplesDir string, written 
 	for _, r := range recs {
 		res.HookEvents[r.Event]++
 		if r.Event == "PreToolUse" {
-			res.PreToolUse = append(res.PreToolUse, summarize(r))
+			res.PreToolUse = append(res.PreToolUse, summarize(r, filepath.Base(s.target)))
 		}
 	}
-	if res.TargetOnDisk, err = s.exists(project); err != nil {
+	if res.TargetOnDisk, err = s.exists(root); err != nil {
 		return nil, err
 	}
-	said, tools := a.feedback(stdout.Bytes(), stderr.Bytes())
+	said, tools := a.feedback(stdout.Bytes())
 	if tok := s.reasonToken(); tok != "" {
 		res.ReasonToolResult = strings.Contains(tools, tok)
 		res.ReasonInAgentReply = strings.Contains(said, tok)
 	}
 	judge(res, s)
 	if samplesDir != "" {
-		if err := writeSamples(samplesDir, a.name, recs, project, written); err != nil {
+		if err := writeSamples(samplesDir, a.name, recs, root, written); err != nil {
 			return nil, err
 		}
 	}
@@ -161,18 +203,16 @@ func runOne(a agent, s scenario, exe, style, outDir, samplesDir string, written 
 	return res, os.WriteFile(filepath.Join(outDir, "result.json"), data, 0o644)
 }
 
-func summarize(r record) preToolCall {
+func summarize(r record, targetName string) preToolCall {
 	var in struct {
-		Tool  string         `json:"tool_name"`
-		Input map[string]any `json:"tool_input"`
+		Tool  string          `json:"tool_name"`
+		Input json.RawMessage `json:"tool_input"`
 	}
 	json.Unmarshal(r.Input, &in)
-	var fields []string
-	for k := range in.Input {
-		fields = append(fields, k)
-	}
-	slices.Sort(fields)
-	return preToolCall{Tool: in.Tool, Fields: fields, Decision: r.Decision, Exit: r.Exit}
+	var fields map[string]any
+	json.Unmarshal(in.Input, &fields)
+	return preToolCall{Tool: in.Tool, Fields: slices.Sorted(maps.Keys(fields)),
+		NamesTarget: strings.Contains(string(in.Input), targetName), Decision: r.Decision, Exit: r.Exit}
 }
 
 func judge(res *result, s scenario) {
@@ -187,11 +227,20 @@ func judge(res *result, s scenario) {
 	if len(res.PreToolUse) == 0 {
 		res.Problems = append(res.Problems, "no PreToolUse hook fired")
 	}
-	if s.wantOnDisk && denies > 0 {
-		res.Problems = append(res.Problems, "stub denied an allowed scenario")
+	if len(s.denyTokens) == 0 && denies > 0 {
+		res.Problems = append(res.Problems, "stub denied a scenario that it should allow")
 	}
-	if !s.wantOnDisk && denies == 0 {
+	if len(s.denyTokens) > 0 && denies == 0 {
 		res.Problems = append(res.Problems, "stub never denied")
+	}
+	tried := map[string]bool{}
+	for _, c := range res.PreToolUse {
+		if c.NamesTarget {
+			tried[c.Tool] = true
+		}
+	}
+	if len(tried) < s.targetTools {
+		res.Problems = append(res.Problems, fmt.Sprintf("the agent tried the target with %d tools, want %d", len(tried), s.targetTools))
 	}
 	if res.TargetOnDisk != s.wantOnDisk {
 		res.Problems = append(res.Problems, fmt.Sprintf("target on disk is %v, want %v", res.TargetOnDisk, s.wantOnDisk))

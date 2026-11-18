@@ -186,3 +186,30 @@ func TestHookBlocksACallWhenItCannotReadTheJournal(t *testing.T) {
 		t.Errorf("exit %d, reason %q, want a denial that names the record", status, reason)
 	}
 }
+
+func TestInstallAgainReplacesADamagedRecordOfTheSameHookFile(t *testing.T) {
+	c := loadedCLI(t)
+	root := project(t)
+	c.must(exitOK, "install", "claude-code", "--project", root)
+	installs := filepath.Join(os.Getenv("OPENPLEXER_HOME"), "installs")
+	entries, err := os.ReadDir(installs)
+	if err != nil || len(entries) != 1 {
+		t.Fatalf("the journal holds %d entries (%v), want the one record", len(entries), err)
+	}
+	damaged := filepath.Join(installs, entries[0].Name())
+	writeFile(t, damaged, `{"agent": "claude-co`)
+	call := callJSON("Write", root, map[string]string{"file_path": "src/a.go", "content": "x"})
+	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, damaged) || !strings.Contains(reason, "delete it yourself") {
+		t.Errorf("with a damaged record: exit %d, reason %q, want a denial that names the file and says to delete it", status, reason)
+	}
+	c.must(exitOK, "install", "claude-code", "--project", root)
+	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || reason != "" {
+		t.Errorf("after the second install: exit %d, reason %q, want the write judged and allowed", status, reason)
+	}
+	web := filepath.Join(root, "web")
+	nestedRepositories["a nested .git directory"](t, web)
+	climbs := callJSON("Bash", web, map[string]string{"command": "rm ../api/server.ts"})
+	if _, reason, _ := c.hookCall("claude-code", climbs); !strings.Contains(reason, "denied a write to api/server.ts") {
+		t.Errorf("after the second install: reason %q, want the recorded root back", reason)
+	}
+}

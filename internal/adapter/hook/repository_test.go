@@ -231,3 +231,24 @@ func TestCallsInANestedCheckoutAreJudgedFromTheRootOfItsRepository(t *testing.T)
 		})
 	}
 }
+
+func TestAMoveFromALinkedWorktreeIsJudgedInTheMainCheckout(t *testing.T) {
+	c := realCheckouts(t)
+	worktree := filepath.Join(c.super, "wt", "y")
+	git(t, c.super, "worktree", "add", "-q", worktree, "-b", "move")
+	env := Env{Root: Roots{Home: c.home}.Find, Guards: []Guard{{Path: ".claude/settings.json", Why: "it holds the hook of OpenPlexer"}}}
+	call := func(command string) (Verdict, []string) {
+		input := `{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + worktree + `","tool_input":{"command":"` + command + `"}}`
+		var asked []string
+		v := Decide([]byte(input), env, recordQueries(&asked), Tools{"Bash": ShellTool})
+		return v, asked
+	}
+
+	settings := filepath.Join(c.super, ".claude", "settings.json")
+	if v, asked := call("mv " + settings + " /tmp/x"); v.Outcome != Deny || len(asked) != 0 || !strings.Contains(v.Reason, "hook of OpenPlexer") {
+		t.Errorf("mv of the settings file of the main checkout: verdict %+v after queries %q, want the guard to deny it", v, asked)
+	}
+	if v, asked := call("mv ../../src/a.go /tmp/x"); v.Outcome != Deny || len(asked) != 1 || asked[0] != "write src/a.go" {
+		t.Errorf("mv ../../src/a.go: verdict %+v after queries %q, want a denial after %q", v, asked, "write src/a.go")
+	}
+}

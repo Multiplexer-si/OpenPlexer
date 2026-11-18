@@ -8,6 +8,7 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -68,7 +69,7 @@ func samplesMain(args []string) int {
 		Cwd string `json:"cwd"`
 	}
 	json.Unmarshal(recs[0].Input, &first)
-	if err := writeSamples(*dir, *agentName, recs, first.Cwd, map[string]bool{}); err != nil {
+	if err := writeSamples(*dir, *agentName, recs, filepath.Dir(first.Cwd), map[string]bool{}); err != nil {
 		fmt.Fprintln(os.Stderr, "samples:", err)
 		return 1
 	}

@@ -6,7 +6,6 @@
   "hook_event_name": "PreToolUse",
   "permission_mode": "acceptEdits",
   "prompt_id": "<PROMPT_ID>",
-  "scratchpad_dir": "/private/tmp/claude-<UID>/<PROJECT_SLUG>/<UUID>/scratchpad",
   "session_id": "<SESSION_ID>",
   "tool_input": {
     "content": "ok\n",
