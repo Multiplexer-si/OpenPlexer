@@ -8,6 +8,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/multiplexer-si/openplexer/test/internal/agentcli"
 )
 
 func scenarioNamed(t *testing.T, name string) scenario {
@@ -112,43 +114,20 @@ func TestReadAuditKeepsDecisionsAndSkipsPolicyLoads(t *testing.T) {
 	}
 }
 
-func TestTOMLRendersAHookFileValue(t *testing.T) {
-	var file struct {
-		Hooks map[string]any `json:"hooks"`
-	}
-	text := `{"hooks":{"PreToolUse":[{"matcher":"Bash|apply_patch","hooks":[{"type":"command","command":"/a b/openplexer hook codex pre-tool --say \"hi\"","timeout":5,"async":false}]}]}}`
-	dec := json.NewDecoder(strings.NewReader(text))
-	dec.UseNumber()
-	if err := dec.Decode(&file); err != nil {
-		t.Fatal(err)
-	}
-	got, err := toml(file.Hooks["PreToolUse"])
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := `[{hooks=[{async=false,command="/a b/openplexer hook codex pre-tool --say \"hi\"",timeout=5,type="command"}],matcher="Bash|apply_patch"}]`
-	if got != want {
-		t.Fatalf("got  %s\nwant %s", got, want)
-	}
-	if _, err := toml(nil); err == nil {
-		t.Fatal("null has no TOML form")
-	}
-}
-
 func TestHooksOverridesWrapsEachCommand(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "hooks.json")
 	text := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/bin/op hook codex pre-tool","timeout":5}]}]}}`
 	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	plain, err := hooksOverrides(path, nil)
+	plain, err := agentcli.HooksOverrides(path, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if want := []string{"-c", `hooks.PreToolUse=[{hooks=[{command="/bin/op hook codex pre-tool",timeout=5,type="command"}],matcher="Bash"}]`}; !slices.Equal(plain, want) {
 		t.Fatalf("got %q", plain)
 	}
-	wrapped, err := hooksOverrides(path, offlineCommand)
+	wrapped, err := agentcli.HooksOverrides(path, offlineCommand)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -309,12 +288,5 @@ func TestFeedbackKeepsTheQuotesOfAReason(t *testing.T) {
 	codexOut := `{"type":"item.completed","item":{"type":"command_execution","aggregated_output":"denied the command \"touch x\" <&>"}}`
 	if _, tools := codexFeedback([]byte(codexOut), nil); !strings.Contains(tools, reason) {
 		t.Fatalf("codex: tools %q do not hold %q", tools, reason)
-	}
-}
-
-func TestClaudeSlugMatchesTheProjectsDirectoryName(t *testing.T) {
-	got := claudeSlug("/private/var/folders/xy/T/realagent-123/project")
-	if want := "-private-var-folders-xy-T-realagent-123-project"; got != want {
-		t.Fatalf("got %q, want %q", got, want)
 	}
 }

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/multiplexer-si/openplexer/test/internal/agentcli"
 )
 
 type auditEntry struct {
@@ -83,7 +85,7 @@ func runMain(args []string) int {
 		if *agentFlag != "all" && *agentFlag != a.name {
 			continue
 		}
-		if err := a.signedIn(); err != nil {
+		if err := agentcli.CheckSignIn(ctx, a.name, a.name, "", nil); err != nil {
 			fmt.Fprintf(os.Stderr, "%s: %v, so no scenario of %s starts\n", a.name, err, a.name)
 			failed = true
 			continue
@@ -171,7 +173,7 @@ func runOne(ctx context.Context, a agent, s scenario, bin, version, outDir strin
 		return nil, err
 	}
 	d := runSetup{project: filepath.Join(root, "project"), state: filepath.Join(root, "state"),
-		home: filepath.Join(root, "home"), sessionID: newSessionID()}
+		home: filepath.Join(root, "home"), sessionID: agentcli.NewSessionID()}
 	policyDir := filepath.Join(root, "policy")
 	for _, dir := range []string{d.project, d.state, policyDir} {
 		if err := os.Mkdir(dir, 0o700); err != nil {
@@ -182,10 +184,8 @@ func runOne(ctx context.Context, a agent, s scenario, bin, version, outDir strin
 	if err != nil {
 		return nil, err
 	}
-	for _, p := range left {
-		if _, err := os.Lstat(p); !os.IsNotExist(err) {
-			return nil, fmt.Errorf("%s exists before the run, so the harness cannot tell what the run adds", p)
-		}
+	if err := agentcli.RequireAbsent(left); err != nil {
+		return nil, err
 	}
 	guard, err := agentConfig()
 	if err != nil {
