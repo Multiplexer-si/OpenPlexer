@@ -54,6 +54,7 @@ interface Operation {
 
 const strict = (properties: Schema, required: string[] = Object.keys(properties)): Schema => ({ type: "object", properties, required, additionalProperties: false });
 const hex64: Schema = { type: "string", pattern: "^[0-9a-f]{64}$" };
+const seq: Schema = { type: "integer", minimum: 0 };
 
 const OPERATIONS: Record<string, Operation> = {
   evaluate: {
@@ -85,6 +86,36 @@ const OPERATIONS: Record<string, Operation> = {
     description: "Decide whether any pattern of one claim overlaps any pattern of another claim.",
     input: strict({ a: { type: "array", items: { type: "string" } }, b: { type: "array", items: { type: "string" } } }),
     expected: strict({ overlap: { type: "boolean" } }),
+  },
+  deliver: {
+    contract: ["room"],
+    description: "Run one subscription of the hub to one Room, from `input.since`, through `input.steps`, and list the `seq` of each event that it sends.",
+    input: strict({
+      since: seq,
+      steps: {
+        type: "array",
+        items: { oneOf: [strict({ step: { enum: ["replay", "live"] }, seq }), strict({ step: { const: "go-live" } })] },
+      },
+    }),
+    expected: strict({ sent: { type: "array", items: seq }, last_seq: seq }),
+  },
+  "active-claims": {
+    contract: ["room"],
+    description: "Apply the events in `input.events`, in the order given, to the claims of one Room, and list the claims that are active at `input.now`.",
+    input: strict({ events: { type: "array", items: { $ref: schemaId("room", "room-event") } }, now: { type: "string" } }),
+    expected: strict({
+      claims: {
+        type: "array",
+        items: strict({
+          claim_id: { type: "string" },
+          paths: { type: "array", items: { type: "string" } },
+          intent: { type: "string" },
+          expires_at: { type: "string" },
+          agent_session_id: { type: "string" },
+          agent_vendor: { type: "string" },
+        }),
+      },
+    }),
   },
   canonicalize: {
     contract: ["canonical-json"],

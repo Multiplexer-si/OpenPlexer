@@ -1,0 +1,5 @@
+{
+  "client_event_id": "cev-17",
+  "code": "rate_limit",
+  "message": "too many events"
+}

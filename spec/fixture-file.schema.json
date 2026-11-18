@@ -337,6 +337,210 @@
       "if": {
         "properties": {
           "operation": {
+            "const": "deliver"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Run one subscription of the hub to one Room, from `input.since`, through `input.steps`, and list the `seq` of each event that it sends.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "last_seq": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "sent": {
+                      "items": {
+                        "minimum": 0,
+                        "type": "integer"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "sent",
+                    "last_seq"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "since": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "steps": {
+                      "items": {
+                        "oneOf": [
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "seq": {
+                                "minimum": 0,
+                                "type": "integer"
+                              },
+                              "step": {
+                                "enum": [
+                                  "replay",
+                                  "live"
+                                ]
+                              }
+                            },
+                            "required": [
+                              "step",
+                              "seq"
+                            ],
+                            "type": "object"
+                          },
+                          {
+                            "additionalProperties": false,
+                            "properties": {
+                              "step": {
+                                "const": "go-live"
+                              }
+                            },
+                            "required": [
+                              "step"
+                            ],
+                            "type": "object"
+                          }
+                        ]
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "since",
+                    "steps"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "room"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "active-claims"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Apply the events in `input.events`, in the order given, to the claims of one Room, and list the claims that are active at `input.now`.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "claims": {
+                      "items": {
+                        "additionalProperties": false,
+                        "properties": {
+                          "agent_session_id": {
+                            "type": "string"
+                          },
+                          "agent_vendor": {
+                            "type": "string"
+                          },
+                          "claim_id": {
+                            "type": "string"
+                          },
+                          "expires_at": {
+                            "type": "string"
+                          },
+                          "intent": {
+                            "type": "string"
+                          },
+                          "paths": {
+                            "items": {
+                              "type": "string"
+                            },
+                            "type": "array"
+                          }
+                        },
+                        "required": [
+                          "claim_id",
+                          "paths",
+                          "intent",
+                          "expires_at",
+                          "agent_session_id",
+                          "agent_vendor"
+                        ],
+                        "type": "object"
+                      },
+                      "type": "array"
+                    }
+                  },
+                  "required": [
+                    "claims"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "events": {
+                      "items": {
+                        "$ref": "urn:openplexer:spec:room:v1:room-event"
+                      },
+                      "type": "array"
+                    },
+                    "now": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "events",
+                    "now"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "room"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
             "const": "canonicalize"
           }
         },
@@ -878,6 +1082,8 @@
         "validate",
         "patterns-overlap",
         "path-sets-overlap",
+        "deliver",
+        "active-claims",
         "canonicalize",
         "verify-chain",
         "bash-targets",

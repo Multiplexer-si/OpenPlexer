@@ -1,7 +1,7 @@
 import { exampleEvent } from "../examples.ts";
 import { asCommitted, type Json } from "../output.ts";
 import type { Reference, ZodSchema } from "../reference.ts";
-import { schemaId } from "../schemas.ts";
+import { messagePayload, schemaId } from "../schemas.ts";
 import { fixtureFile, fixturePath, type Case, type FixtureFile } from "./format.ts";
 
 type Authored = [name: string, why: string, input: Json];
@@ -144,6 +144,36 @@ function envelopeCases(reference: Reference): Authored[] {
   ];
 }
 
+function resumeCases(): Authored[] {
+  return [
+    ["a last_seq of zero is valid", "A receiver that has no event of the Room resumes after 0.", { last_seq: 0 }],
+    ["a positive last_seq is valid", "`last_seq` is the highest `seq` that the receiver has.", { last_seq: 41 }],
+    ["a missing last_seq is invalid", "`last_seq` is required.", {}],
+    ["a negative last_seq is invalid", "`last_seq` is not negative.", { last_seq: -1 }],
+    ["a last_seq with a fraction is invalid", "`last_seq` is an integer.", { last_seq: 1.5 }],
+    ["a last_seq that is a string is invalid", "`last_seq` is a number.", { last_seq: "41" }],
+    ["a last_seq above the largest safe integer is invalid", "`last_seq` is at most 9007199254740991.", { last_seq: 9007199254740992 }],
+    ["an unknown field is valid", "The payload keeps fields that the schema does not name.", { last_seq: 41, reason: "reconnected" }],
+    ["a payload that is not an object is invalid", "The payload is an object.", 41],
+  ];
+}
+
+function errorCases(): Authored[] {
+  const behind = { code: "behind", message: "outbound buffer too large; resume to catch up" };
+  return [
+    ["a code and a message is valid", "`code` and `message` are the required fields.", behind],
+    ["a client_event_id is valid", "An error that answers a post names the post.", { code: "rate_limit", message: "too many events", client_event_id: "cev-17" }],
+    ["a code that version 1 does not list is valid", "`code` is an open string, so that a newer hub can send a new code. The README says how a receiver treats it.", { code: "made_up", message: "x" }],
+    ["an empty code is valid", "The schema sets no minimum length for `code`.", { code: "", message: "" }],
+    ["a missing code is invalid", "`code` is required.", { message: "x" }],
+    ["a missing message is invalid", "`message` is required.", { code: "behind" }],
+    ["a code that is a number is invalid", "`code` is a string.", { code: 4401, message: "x" }],
+    ["a client_event_id that is a number is invalid", "`client_event_id` is a string.", { ...behind, client_event_id: 17 }],
+    ["an unknown field is valid", "The payload keeps fields that the schema does not name.", { ...behind, retry_after: 5 }],
+    ["a null payload is invalid", "The payload is an object.", null],
+  ];
+}
+
 function bundleCases(): Authored[] {
   const minimal = { version: 1, project_id: "prj-shop", repos: [], areas: [], roles: {}, members: {} };
   const mission = { member_id: "mem-ana", area: "billing", actions: ["write"], scope: "mission", mission_id: "mis-1" };
@@ -210,6 +240,22 @@ export function validationFixtures(reference: Reference): [string, FixtureFile][
       zod: (input) => ((input as Fields | null)?.type === "event" ? protocol.wsMessageSchema : protocol.envelopeSchema),
       sources: ["packages/protocol/src/envelope.ts", "packages/protocol/src/ws-messages.ts"],
       cases: envelopeCases(reference),
+    },
+    {
+      contract: "room",
+      schema: "resume",
+      description: "Valid and invalid payloads of a `resume` message.",
+      zod: () => messagePayload(reference, "resume"),
+      sources: ["packages/protocol/src/ws-messages.ts"],
+      cases: resumeCases(),
+    },
+    {
+      contract: "room",
+      schema: "error",
+      description: "Valid and invalid payloads of an `error` message.",
+      zod: () => messagePayload(reference, "error"),
+      sources: ["packages/protocol/src/ws-messages.ts"],
+      cases: errorCases(),
     },
     {
       contract: "policy",

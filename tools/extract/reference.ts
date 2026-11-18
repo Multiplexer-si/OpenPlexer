@@ -44,6 +44,19 @@ export interface PreToolRun {
   hook: Json;
 }
 
+export interface SubscriptionRow {
+  seq: number;
+  flagged: boolean;
+  envelope: { seq: number };
+}
+
+export interface SubscriptionModel {
+  lastSeq: number;
+  push(row: SubscriptionRow): void;
+  replay(row: SubscriptionRow): void;
+  goLive(): void;
+}
+
 export interface Reference {
   toJsonSchema(schema: ZodSchema): Record<string, Json>;
   protocol: {
@@ -66,6 +79,10 @@ export interface Reference {
   canonicalJson(value: unknown): string;
   patternsOverlap(a: string, b: string): boolean;
   pathSetsOverlap(a: readonly string[], b: readonly string[]): boolean;
+  /** One subscription of one connection of the hub to one Room. `send` gets each message that the hub would send. */
+  Subscription: new (room: string, kind: "daemon" | "dashboard", sinceSeq: number, send: (message: { seq: number }) => void) => SubscriptionModel;
+  /** The claims that the daemon holds as active after the events, read at `now`, in milliseconds since the epoch. */
+  activeClaims(events: Json[], now: number): Json[];
   genesisHash: string;
   computeAuditHash(prevHash: string, fields: object): string;
   policyJwsTyp: string;
@@ -124,7 +141,20 @@ export async function loadReference(root: string): Promise<Reference> {
   const audit = await load(join(root, "apps/hub/src/audit/log.ts"));
   const store = await load(join(root, "apps/daemon/src/policy/store.ts"));
   const adapters = await loadAdapters(root, load, store.PolicyStore);
+  const subscriptions = await load(join(root, "apps/hub/src/ws/subscriptions.ts"));
+  const cache = await load(join(root, "apps/daemon/src/sync/cache.ts"));
   return {
+    Subscription: subscriptions.Subscription,
+    activeClaims(events, now) {
+      const work = mkdtempSync(join(tmpdir(), "extract-claims-"));
+      try {
+        const claims = new cache.OfflineCache(work);
+        for (const event of events) claims.applyEvent("room-fixture", event);
+        return claims.claims("room-fixture", now);
+      } finally {
+        rmSync(work, { recursive: true, force: true });
+      }
+    },
     toJsonSchema,
     protocol,
     canonicalJson: canonical.canonicalJson,

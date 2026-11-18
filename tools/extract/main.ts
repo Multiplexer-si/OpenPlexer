@@ -7,6 +7,7 @@ import { canonicalJsonFixtures } from "./fixtures/canonical-json.ts";
 import { claimsOverlapFixtures } from "./fixtures/claims-overlap.ts";
 import { FIXTURE_FILE_PATH, fixtureFileSchema } from "./fixtures/format.ts";
 import { policyEvaluateFixtures } from "./fixtures/policy-evaluate.ts";
+import { roomSequencingFixtures } from "./fixtures/room-sequencing.ts";
 import { signedBundleFixtures } from "./fixtures/signed-bundle.ts";
 import { validationFixtures } from "./fixtures/validation.ts";
 import { explain, ownedFiles, read, remove, render, write, type Files, type Json, type SealedFiles } from "./output.ts";
@@ -33,7 +34,7 @@ interface Plan {
 
 async function plan(reference: Reference): Promise<Plan> {
   const fixtures = [
-    ...[policyEvaluateFixtures, validationFixtures, claimsOverlapFixtures, canonicalJsonFixtures, auditChainFixtures].flatMap((build) => build(reference)),
+    ...[policyEvaluateFixtures, validationFixtures, claimsOverlapFixtures, roomSequencingFixtures, canonicalJsonFixtures, auditChainFixtures].flatMap((build) => build(reference)),
     ...(await adapterHookFixtures(reference)),
   ];
   const values = new Map<string, Json>([

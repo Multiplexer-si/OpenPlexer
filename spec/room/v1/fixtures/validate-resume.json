@@ -1,0 +1,120 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "last_seq": 0
+      },
+      "name": "a last_seq of zero is valid",
+      "why": "A receiver that has no event of the Room resumes after 0."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "last_seq": 41
+      },
+      "name": "a positive last_seq is valid",
+      "why": "`last_seq` is the highest `seq` that the receiver has."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "last_seq: Invalid input: expected number, received undefined"
+      },
+      "input": {},
+      "name": "a missing last_seq is invalid",
+      "why": "`last_seq` is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "last_seq: Too small: expected number to be >=0"
+      },
+      "input": {
+        "last_seq": -1
+      },
+      "name": "a negative last_seq is invalid",
+      "why": "`last_seq` is not negative."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "last_seq: Invalid input: expected int, received number"
+      },
+      "input": {
+        "last_seq": 1.5
+      },
+      "name": "a last_seq with a fraction is invalid",
+      "why": "`last_seq` is an integer."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "last_seq: Invalid input: expected number, received string"
+      },
+      "input": {
+        "last_seq": "41"
+      },
+      "name": "a last_seq that is a string is invalid",
+      "why": "`last_seq` is a number."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "last_seq: Too big: expected int to be <=9007199254740991"
+      },
+      "input": {
+        "last_seq": 9007199254740992
+      },
+      "name": "a last_seq above the largest safe integer is invalid",
+      "why": "`last_seq` is at most 9007199254740991."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "last_seq": 41,
+        "reason": "reconnected"
+      },
+      "name": "an unknown field is valid",
+      "why": "The payload keeps fields that the schema does not name."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "(root): Invalid input: expected object, received number"
+      },
+      "input": 41,
+      "name": "a payload that is not an object is invalid",
+      "why": "The payload is an object."
+    }
+  ],
+  "contract": "room",
+  "description": "Valid and invalid payloads of a `resume` message.",
+  "operation": "validate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/ws-messages.ts"
+    ]
+  },
+  "schema": "urn:openplexer:spec:room:v1:resume",
+  "version": 1
+}

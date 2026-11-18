@@ -1,0 +1,19 @@
+{
+  "$id": "urn:openplexer:spec:room:v1:resume",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "description": "What a receiver sends to get the events of one Room after a `seq`. The Room is the `room` of the envelope. Generated from the reference.",
+  "properties": {
+    "last_seq": {
+      "description": "The highest `seq` that the sender has received for the Room. 0 if it has received none.",
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "last_seq"
+  ],
+  "title": "Payload of a resume message",
+  "type": "object"
+}

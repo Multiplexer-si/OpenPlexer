@@ -356,6 +356,13 @@ function policySchemas(reference: Reference): Document[] {
   ];
 }
 
+/** The payload schema of one message type of the reference. */
+export function messagePayload(reference: Reference, type: string): ZodSchema {
+  const message = reference.protocol.wsMessageSchema.options.find((option) => option.shape.type!.value === type);
+  if (!message) throw new Error(`the reference has no ${type} message`);
+  return message.shape.payload!;
+}
+
 function roomSchemas(reference: Reference): Document[] {
   const { protocol } = reference;
   const missing = ROOM_EVENT_TYPES.filter((type) => !protocol.EVENT_TYPES.includes(type));
@@ -443,7 +450,17 @@ function roomSchemas(reference: Reference): Document[] {
   });
   envelope.if = { properties: { type: { const: "event" } }, required: ["type"] };
   envelope.then = { properties: { payload: { $ref: schemaId("room", "room-event") } } };
+  const resume = describe(generated(reference, messagePayload(reference, "resume")), {
+    last_seq: "The highest `seq` that the sender has received for the Room. 0 if it has received none.",
+  });
+  const error = describe(generated(reference, messagePayload(reference, "error")), {
+    code: "A stable token that names the error. The README lists the codes of version 1.",
+    message: "A sentence for a person. The wording is not part of the contract.",
+    client_event_id: "The id that the client gave to the post that this error answers.",
+  });
   return [
+    { contract: "room", name: "resume", title: "Payload of a resume message", description: "What a receiver sends to get the events of one Room after a `seq`. The Room is the `room` of the envelope. Generated from the reference.", body: resume },
+    { contract: "room", name: "error", title: "Payload of an error message", description: "What the hub sends when it refuses a message or stops sending. Generated from the reference.", body: error },
     {
       contract: "room",
       name: "room-event",
