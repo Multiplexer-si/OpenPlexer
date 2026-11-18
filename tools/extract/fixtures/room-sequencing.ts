@@ -58,6 +58,8 @@ const CLAIMS: [name: string, why: string, events: Json[], now: string][] = [
   ["only the expired claims leave the list", "Each claim has its own expiry.", [claim(1, { claim_id: "clm-1", ttl_seconds: 60 }), claim(2, { claim_id: "clm-2", ttl_seconds: 3600 }, other)], "2026-01-15T12:01:00.000Z"],
   ["an at with a UTC offset is read as that instant", "`at` is a timestamp of RFC 3339, and the expiry is written in UTC.", [claim(1, {}, { at: "2026-01-15T13:00:00.000+01:00" })], AT],
   ["an at with no fraction is read", "The fraction of a second is optional.", [claim(1, {}, { at: "2026-01-15T12:00:00Z" })], AT],
+  ["a claim whose at is not a timestamp counts from the time that it arrives", "The receiver cannot read `at`, so it counts `ttl_seconds` from its own clock, which reads `now` when it gets the event.", [claim(1, {}, { at: "yesterday" })], AT],
+  ["a claim whose at is not a timestamp is active for ttl_seconds", "The claim expires `ttl_seconds` after `now`, whatever its `at` says.", [claim(1, { ttl_seconds: 1 }, { at: "not a time" })], "2026-03-01T08:00:00.000Z"],
   ["the expiry has milliseconds", "The expiry is `at` plus `ttl_seconds`, written with three digits of fraction.", [claim(1, { ttl_seconds: 1 }, { at: "2026-01-15T12:00:00.250Z" })], AT],
   ["the claim of a sub-agent is held by the sub-agent session", "The holder is `agent.id` of the claim event, not `agent.parent`.", [claim(1, {}, { agent: { id: "ses-ana-1-sub", vendor: "claude-code", parent: "ses-ana-1" } }), release(2, "evt-0001")], AT],
   ["an event of another type changes nothing", "Only `claim` and `release` events change the claims.", [claim(1, { claim_id: "clm-1" }), exampleEvent("status", { summary: "Running the cart tests", claim_id: "clm-1" }, 2)], AT],
@@ -90,7 +92,7 @@ export function roomSequencingFixtures(reference: Reference): [string, FixtureFi
     ],
     [
       fixturePath("room", "active-claims"),
-      fixtureFile({ contract: "room", operation: "active-claims", description: "The claims of one Room that a receiver holds as active after a list of events.", sources: ["apps/daemon/src/sync/cache.ts"], cases: claims }),
+      fixtureFile({ contract: "room", operation: "active-claims", description: "The claims of one Room that a receiver holds as active after a list of events. The receiver gets every event at `now`.", sources: ["apps/daemon/src/sync/cache.ts"], cases: claims }),
     ],
   ];
 }

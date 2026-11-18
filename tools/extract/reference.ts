@@ -82,7 +82,7 @@ export interface Reference {
   pathSetsOverlap(a: readonly string[], b: readonly string[]): boolean;
   /** One subscription of one connection of the hub to one Room. `send` gets each message that the hub would send. */
   Subscription: new (room: string, kind: "daemon" | "dashboard", sinceSeq: number, send: (message: { seq: number }) => void) => SubscriptionModel;
-  /** The claims that the daemon holds as active after the events, read at `now`, in milliseconds since the epoch. */
+  /** The claims that the daemon holds as active after the events. Its clock reads `now`, in milliseconds since the epoch, when it gets each event and when it lists the claims. */
   activeClaims(events: Json[], now: number): Json[];
   /** Each error code that the socket server of the hub names, with the close code that follows it. null: the hub keeps the connection. */
   hubErrorCodes: Map<string, number | null>;
@@ -152,11 +152,14 @@ export async function loadReference(root: string): Promise<Reference> {
     Subscription: subscriptions.Subscription,
     activeClaims(events, now) {
       const work = mkdtempSync(join(tmpdir(), "extract-claims-"));
+      const clock = Date.now;
+      Date.now = () => now;
       try {
         const claims = new cache.OfflineCache(work);
         for (const event of events) claims.applyEvent("room-fixture", event);
         return claims.claims("room-fixture", now);
       } finally {
+        Date.now = clock;
         rmSync(work, { recursive: true, force: true });
       }
     },

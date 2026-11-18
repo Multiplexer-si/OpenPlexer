@@ -106,7 +106,7 @@ const OPERATIONS: Record<string, Operation> = {
   },
   "active-claims": {
     contract: ["room"],
-    description: "Apply the events in `input.events`, in the order given, to the claims of one Room, and list the claims that are active at `input.now`.",
+    description: "Apply the events in `input.events`, in the order given, to the claims of one Room, and list the claims that are active at `input.now`. The receiver gets every event at `input.now`.",
     input: strict({ events: { type: "array", items: { $ref: schemaId("room", "room-event") } }, now: { type: "string" } }),
     expected: strict({
       claims: {

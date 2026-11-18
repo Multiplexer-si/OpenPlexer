@@ -809,6 +809,92 @@
             "agent_session_id": "ses-ana-1",
             "agent_vendor": "claude-code",
             "claim_id": "evt-0001",
+            "expires_at": "2026-01-15T12:10:00.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "yesterday",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 600
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-01-15T12:00:00.000Z"
+      },
+      "name": "a claim whose at is not a timestamp counts from the time that it arrives",
+      "why": "The receiver cannot read `at`, so it counts `ttl_seconds` from its own clock, which reads `now` when it gets the event."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
+            "expires_at": "2026-03-01T08:00:01.000Z",
+            "intent": "Add discounts",
+            "paths": [
+              "src/orders/**"
+            ]
+          }
+        ]
+      },
+      "input": {
+        "events": [
+          {
+            "agent": {
+              "id": "ses-ana-1",
+              "vendor": "claude-code"
+            },
+            "at": "not a time",
+            "body": {
+              "intent": "Add discounts",
+              "item": "Cart discount",
+              "paths": [
+                "src/orders/**"
+              ],
+              "ttl_seconds": 1
+            },
+            "id": "evt-0001",
+            "mission": "mis-checkout",
+            "on_behalf_of": "mem-ana",
+            "seq": 1,
+            "type": "claim"
+          }
+        ],
+        "now": "2026-03-01T08:00:00.000Z"
+      },
+      "name": "a claim whose at is not a timestamp is active for ttl_seconds",
+      "why": "The claim expires `ttl_seconds` after `now`, whatever its `at` says."
+    },
+    {
+      "expected": {
+        "claims": [
+          {
+            "agent_session_id": "ses-ana-1",
+            "agent_vendor": "claude-code",
+            "claim_id": "evt-0001",
             "expires_at": "2026-01-15T12:00:01.250Z",
             "intent": "Add discounts",
             "paths": [
@@ -977,7 +1063,7 @@
     }
   ],
   "contract": "room",
-  "description": "The claims of one Room that a receiver holds as active after a list of events.",
+  "description": "The claims of one Room that a receiver holds as active after a list of events. The receiver gets every event at `now`.",
   "operation": "active-claims",
   "reference": {
     "commit": "7d80045a",
