@@ -64,26 +64,24 @@ func (s *Store) roomEndpoint(limit int64, run func(*state, request) (any, error)
 }
 
 func (s *Store) postEvent(st *state, req request) (any, error) {
-	var post struct {
-		Agent agentInput                 `json:"agent"`
-		Type  string                     `json:"type"`
-		Body  map[string]json.RawMessage `json:"body"`
-	}
-	if err := json.Unmarshal(req.body, &post); err != nil || post.Body == nil {
-		return nil, fmt.Errorf("%w: expected an event type and body object", errInvalid)
+	post, err := room.ParseEventPost(req.body)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errInvalid, err)
 	}
 	var agent agentInput
 	switch post.Type {
 	case "claim", "release", "decision.confirm", "policy.override", "policy.override.revoked":
 		return nil, errForbidden
 	case "human":
-		if post.Agent != (agentInput{}) {
+		if post.Agent != nil {
 			return nil, errForbidden
 		}
 		agent = agentInput{ID: req.member, Vendor: humanVendor}
 	default:
-		var err error
-		agent, err = post.Agent.session(req.member)
+		if post.Agent == nil {
+			return nil, fmt.Errorf("%w: agent is required", errInvalid)
+		}
+		agent, err = agentInput(*post.Agent).session(req.member)
 		if err != nil {
 			return nil, err
 		}
