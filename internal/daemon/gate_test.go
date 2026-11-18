@@ -586,6 +586,24 @@ func TestAReadOrWriteWithNoRepoMustBeAllowedInEveryRepo(t *testing.T) {
 	}
 }
 
+func TestTheEvaluationsOfOneCallShareOneBudget(t *testing.T) {
+	keys := newSigner(t)
+	home := t.TempDir()
+	configure(t, home, Settings{KeySet: keys.keySet(t), MemberID: "mem-ana"})
+	bundle := []byte(`{"version": 1, "project_id": "p", "repos": ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"], "areas": [{"name": "slow", "patterns": ["*:[]|(?<=(?:.*){2972})]"]}], "roles": {"dev": {"read": [], "write": ["slow"], "exec": []}}, "members": {"mem-ana": "dev"}}`)
+	gate := open(t, home, loadedAt)
+	load(t, gate, keys.sign(t, bundle))
+	path := strings.Repeat("a", 4095) + "]"
+	verdict, err := gate.Decide("codex", policy.Query{Action: policy.Write, Repo: "r0", Path: path})
+	if result, _ := verdict.Result(); err != nil || result.Decision != policy.Allow {
+		t.Fatalf("a write in one repo: %+v, %v, want allow", result, err)
+	}
+	verdict, err = gate.Decide("codex", policy.Query{Action: policy.Write, Path: path})
+	if result, _ := verdict.Result(); err != nil || result.Decision != policy.Deny || !strings.Contains(result.Rule, "budget") {
+		t.Fatalf("a write with no repo in ten repos: %+v, %v, want deny, because the call is over its budget", result, err)
+	}
+}
+
 func TestTheGateOwnsTheMemberAndTheOverridesOfAQuery(t *testing.T) {
 	keys := newSigner(t)
 	bundle := []byte(`{"version": 1, "project_id": "p", "repos": ["api"], "areas": [{"name": "backend", "patterns": ["api:src/**"]}, {"name": "docs", "patterns": ["api:docs/**"]}], "roles": {"backend": {"read": [], "write": ["backend"], "exec": []}, "writer": {"read": [], "write": ["docs"], "exec": []}}, "members": {"mem-ana": "backend", "mem-wu": "writer"}}`)

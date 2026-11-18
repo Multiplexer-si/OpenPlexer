@@ -178,8 +178,8 @@ func (v Verdict) Result() (policy.Result, bool) {
 // The gate owns three fields of each query and replaces them: the member is
 // the configured identity, the time is the clock of the gate, and the
 // overrides are empty, because Phase 1 has no source of overrides. A read
-// or a write with no repo is evaluated in every repo of the bundle. The
-// first deny decides the call.
+// or a write with no repo is evaluated in every repo of the bundle. All the
+// evaluations of the call share one budget. The first deny decides the call.
 //
 // The verdict is valid even when the error is not nil. The error wraps
 // ErrNotRecorded.
@@ -202,11 +202,12 @@ func (g *Gate) evaluate(queries []policy.Query) (policy.Query, policy.Result) {
 	now := policy.TimestampOf(g.now())
 	var firstQuery policy.Query
 	var firstResult policy.Result
+	budget := policy.NewBudget()
 	for i, query := range queries {
 		query.Member, query.Now, query.Overrides = g.config.MemberID, now, nil
 		for _, repo := range g.candidateRepos(query) {
 			query.Repo = repo
-			result := policy.Evaluate(g.bundle, query)
+			result := budget.Evaluate(g.bundle, query)
 			if result.Decision == policy.Deny {
 				return query, result
 			}

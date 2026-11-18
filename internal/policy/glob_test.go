@@ -1,7 +1,7 @@
 package policy
 
 import (
-	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -44,15 +44,43 @@ func TestEvaluateDeniesAGlobThatIsTooLarge(t *testing.T) {
 	}
 }
 
-func TestEvaluateDeniesAPathThatIsTooLongForTheGlob(t *testing.T) {
-	count := longestPath + 400
-	bundle := &Bundle{Areas: []Area{{Name: "private", Patterns: []string{fmt.Sprintf("api:[]|a{0,%d}]", count)}, Private: true}}}
+// The slowest glob found within the size limit.
+const slowestGlob = "[]|(?<=(?:.*){2972})]"
+
+func TestEvaluateDeniesAPathLongerThanTheLimit(t *testing.T) {
 	now, _ := ParseTimestamp("2026-01-15T12:00:00Z")
-	short := Evaluate(bundle, Query{Repo: "api", Path: strings.Repeat("a", longestPath-1) + "]", Action: Read, Member: "m", Now: now})
-	if short.Decision != Deny || short.Area == nil || *short.Area != "private" {
-		t.Fatalf("result = %+v, want deny in the area private", short)
+	bundles := map[string]*Bundle{
+		"no area":          {},
+		"the slowest glob": {Areas: []Area{{Name: "private", Patterns: []string{"api:" + slowestGlob}, Private: true}}},
 	}
-	requireTooLarge(t, bundle, strings.Repeat("a", count)+"]")
+	for name, bundle := range bundles {
+		for _, length := range []int{longestPath + 1, 1 << 20} {
+			for _, action := range []Action{Read, Write} {
+				result := Evaluate(bundle, Query{Repo: "api", Path: strings.Repeat("a", length-1) + "]", Action: action, Member: "m", Now: now})
+				if result.Decision != Deny || result.Area != nil || !strings.Contains(result.Rule, "path is longer than") {
+					t.Fatalf("%s, %s of %d characters: result = %+v, want deny with no area, because the path is too long", name, action, length, result)
+				}
+			}
+		}
+	}
+	at := Evaluate(bundles["the slowest glob"], Query{Repo: "api", Path: strings.Repeat("a", longestPath-1) + "]", Action: Read, Member: "m", Now: now})
+	if at.Decision != Deny || at.Area == nil || *at.Area != "private" {
+		t.Fatalf("a path at the limit: result = %+v, want deny in the area private", at)
+	}
+}
+
+func TestEvaluateDeniesAQueryOverItsBudget(t *testing.T) {
+	now, _ := ParseTimestamp("2026-01-15T12:00:00Z")
+	bundle := &Bundle{Areas: []Area{{Name: "private", Patterns: slices.Repeat([]string{"api:" + slowestGlob}, 100), Private: true}}}
+	start := time.Now()
+	result := Evaluate(bundle, Query{Repo: "api", Path: strings.Repeat("a", longestPath-1) + "]", Action: Write, Member: "m", Now: now})
+	took := time.Since(start)
+	if result.Decision != Deny || result.Area != nil || !strings.Contains(result.Rule, "budget") {
+		t.Fatalf("result = %+v, want deny with no area, because the query is over its budget", result)
+	}
+	if took > 300*time.Millisecond {
+		t.Fatalf("the result took %v, want at most 300ms", took)
+	}
 }
 
 func requireTooLarge(t *testing.T, bundle *Bundle, path string) {
@@ -112,7 +140,7 @@ func TestEvaluateAnswersWithinTheBudget(t *testing.T) {
 
 func BenchmarkEvaluate(b *testing.B) {
 	globs := append(slowGlobs, []struct{ name, glob, path string }{
-		{"the slowest glob found within the limit", "[]|(?<=(?:.*){2900})]", strings.Repeat("a", 4095) + "]"},
+		{"the slowest glob found within the limit", slowestGlob, strings.Repeat("a", 4095) + "]"},
 		{"a glob of a source tree", "src/**/*.ts", "src/" + strings.Repeat("dir/", 20) + "file.tsx"},
 	}...)
 	for _, c := range globs {

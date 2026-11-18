@@ -476,11 +476,17 @@ func compileGlob(glob string) (node, error) {
 	return root, nil
 }
 
-func globMatches(glob node, path []uint16) (bool, error) {
-	b := builder{path: letters(path), n: len(path), limit: math.MaxInt}
-	if len(path) > longestPath {
-		b.limit = maxCost
+// globMatches charges the work of the match to budget before it does it.
+// The states are those of the automaton and of each lookaround in it.
+func globMatches(glob node, path []uint16, budget *Budget) (bool, error) {
+	count := builder{n: len(path), limit: maxCost}
+	if _, err := glob.emit(&count, nil); err != nil {
+		return false, err
 	}
+	if err := budget.spend((len(path) + 1) * (maxCost - count.limit)); err != nil {
+		return false, err
+	}
+	b := builder{path: letters(path), n: len(path), limit: math.MaxInt}
 	code, err := glob.emit(&b, nil)
 	if err != nil {
 		return false, err
