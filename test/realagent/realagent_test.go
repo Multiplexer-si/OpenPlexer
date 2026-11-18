@@ -10,110 +10,273 @@ import (
 	"testing"
 )
 
-const preToolInput = `{"hook_event_name":"PreToolUse","tool_name":"Write","tool_input":{"file_path":"/p/sentinel/x.txt","content":"ok"}}`
-
-func TestDecideDeniesATokenInTheToolInput(t *testing.T) {
-	cfg := stubConfig{DenyTokens: []string{"sentinel/"}, Reason: "no", Style: styleJSON}
-	rec := decide(cfg, []byte(preToolInput))
-	if rec.Decision != "deny" || rec.Exit != 0 {
-		t.Fatalf("got decision %q exit %d", rec.Decision, rec.Exit)
-	}
-	if !strings.Contains(rec.Stdout, `"permissionDecision":"deny"`) || !strings.Contains(rec.Stdout, `"permissionDecisionReason":"no"`) {
-		t.Fatalf("deny output is %s", rec.Stdout)
-	}
-}
-
-func TestDecideExit2WritesTheReasonToStderr(t *testing.T) {
-	cfg := stubConfig{DenyTokens: []string{"sentinel/"}, Reason: "no", Style: styleExit2}
-	rec := decide(cfg, []byte(preToolInput))
-	if rec.Exit != 2 || rec.Stderr != "no" || rec.Stdout != "" {
-		t.Fatalf("got exit %d stderr %q stdout %q", rec.Exit, rec.Stderr, rec.Stdout)
-	}
-}
-
-func TestDecideAllowsOtherInputsAndOtherEvents(t *testing.T) {
-	cfg := stubConfig{DenyTokens: []string{"sentinel/"}, Reason: "no", Style: styleJSON}
-	if rec := decide(cfg, []byte(strings.Replace(preToolInput, "sentinel/", "safe/", 1))); rec.Decision != "allow" || rec.Stdout != "" {
-		t.Fatalf("a clean input got %+v", rec)
-	}
-	if rec := decide(cfg, []byte(`{"hook_event_name":"Stop","tool_input":"sentinel/"}`)); rec.Decision != "none" {
-		t.Fatalf("a Stop event got %+v", rec)
-	}
-}
-
-func TestRunStubLogsEveryCallAndKeepsGarbage(t *testing.T) {
-	cfg := stubConfig{LogPath: filepath.Join(t.TempDir(), "log.jsonl"), Style: styleJSON}
-	var out, errOut bytes.Buffer
-	runStub(cfg, strings.NewReader(preToolInput), &out, &errOut)
-	runStub(cfg, strings.NewReader("not json"), &out, &errOut)
-	recs, err := readLog(cfg.LogPath)
-	if err != nil || len(recs) != 2 {
-		t.Fatalf("got %d records, err %v", len(recs), err)
-	}
-	if recs[0].Event != "PreToolUse" || recs[1].Event != "unparseable" {
-		t.Fatalf("got events %q and %q", recs[0].Event, recs[1].Event)
-	}
-}
-
-func TestRedactorRemovesWhatTheRepositoryMustNotHold(t *testing.T) {
-	home, _ := os.UserHomeDir()
-	host, _ := os.Hostname()
-	root := filepath.Join(os.TempDir(), "realagent-123")
-	project := filepath.Join(root, "project")
-	r, err := newRedactor(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	in := map[string]any{
-		"cwd":             project,
-		"session_id":      "01a1e91a-aa9d-7df0-ba3e-598d6a6c5ddc",
-		"transcript_path": home + "/.claude/projects/x/7b0780fa-d2e7-4493-96df-ca8bff63ce3b.jsonl",
-		"started":         "2026-11-17T10:43:27.664255Z",
-		"listing":         "drwx------@ 2 u staff 64 Nov 17 18:38 outside",
-		"tool_use_id":     "toolu_013aG3idPgsT9Y6UkKeV3Kbv",
-		"note":            "see " + claudeSlug(project) + " on " + host,
-		"target":          filepath.Join(root, "outside", "escaped.txt"),
-	}
-	raw, _ := json.Marshal(in)
-	out, err := r.json(raw)
-	if err != nil {
-		t.Fatal(err)
-	}
-	got := string(out)
-	for _, leak := range []string{home, host, "01a1e91a", "7b0780fa", "2026-11-17", "Nov 17 18:38", "toolu_013", "realagent-123"} {
-		if strings.Contains(got, leak) {
-			t.Errorf("redacted sample still holds %q:\n%s", leak, got)
+func scenarioNamed(t *testing.T, name string) scenario {
+	t.Helper()
+	for _, s := range scenarios {
+		if s.name == name {
+			return s
 		}
 	}
-	for _, want := range []string{"<PROJECT>", "<RUN>/outside/escaped.txt", "<HOME>", "<HOST>", "<SESSION_ID>", "<UUID>", "<TIMESTAMP>", "<TOOL_USE_ID>", "<PROJECT_SLUG>"} {
-		if !strings.Contains(got, want) {
-			t.Errorf("redacted sample lacks %q:\n%s", want, got)
+	t.Fatalf("no scenario %q", name)
+	return scenario{}
+}
+
+func passing(s scenario) *result {
+	res := &result{
+		Audit:        []auditEntry{{Action: s.want.action, Query: s.want.query, State: s.want.state, Target: s.want.target}},
+		TargetOnDisk: s.wantOnDisk,
+	}
+	if s.reason != "" {
+		res.ReasonReachedAgent = true
+	}
+	if s.offline {
+		blocked := true
+		res.NetworkBlocked = &blocked
+	}
+	return res
+}
+
+func TestJudgePassesEachScenarioThatMeetsItsWant(t *testing.T) {
+	for _, s := range scenarios {
+		res := passing(s)
+		judge(res, s)
+		if len(res.Problems) != 0 {
+			t.Errorf("%s: %v", s.name, res.Problems)
 		}
 	}
 }
 
-func TestCommittedSamplesHoldNothingToRedact(t *testing.T) {
-	r, err := newRedactor(filepath.Join(t.TempDir(), "run"))
+func TestJudgeFailsWhatTheScenarioDoesNotMeet(t *testing.T) {
+	deny := scenarioNamed(t, "deny_write")
+	for name, c := range map[string]struct {
+		s      scenario
+		mutate func(*result)
+	}{
+		"no audit record":        {deny, func(r *result) { r.Audit = nil }},
+		"wrong policy state":     {deny, func(r *result) { r.Audit[0].State = "stale" }},
+		"wrong action":           {deny, func(r *result) { r.Audit[0].Action = "policy.allowed" }},
+		"file on disk":           {deny, func(r *result) { r.TargetOnDisk = true }},
+		"reason not delivered":   {deny, func(r *result) { r.ReasonReachedAgent = false }},
+		"another command denied": {scenarioNamed(t, "deny_shell"), func(r *result) { r.Audit[0].Target = commandTarget("touch other") }},
+		"opposite decision": {scenarioNamed(t, "allow_write"), func(r *result) {
+			r.Audit = append(r.Audit, auditEntry{Action: "policy.denied", Query: "write", State: "verified", Target: "allowed.txt"})
+		}},
+		"offline without network control": {scenarioNamed(t, "offline"), func(r *result) { r.NetworkBlocked = nil }},
+		"offline with open network": {scenarioNamed(t, "offline"), func(r *result) {
+			open := false
+			r.NetworkBlocked = &open
+		}},
+	} {
+		res := passing(c.s)
+		c.mutate(res)
+		judge(res, c.s)
+		if len(res.Problems) == 0 {
+			t.Errorf("%s: judge passed", name)
+		}
+	}
+}
+
+func TestJudgeIgnoresOtherTargetsWhenItChecksForAContradiction(t *testing.T) {
+	s := scenarioNamed(t, "allow_write")
+	res := passing(s)
+	res.Audit = append(res.Audit, auditEntry{Action: "policy.denied", Query: "exec", State: "verified", Target: "sha256:other"})
+	judge(res, s)
+	if len(res.Problems) != 0 {
+		t.Fatalf("a denied command is not a contradiction of an allowed write: %v", res.Problems)
+	}
+}
+
+func TestReadAuditKeepsDecisionsAndSkipsPolicyLoads(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "audit.jsonl")
+	lines := []string{
+		`{"id":"1","action":"policy.loaded","target":"prj-x","reason":null,"meta":{"version":1}}`,
+		`{"id":"2","action":"policy.denied","target":"sentinel/x.txt","reason":"rule one","meta":{"agent":"codex","action":"write","policy_state":"stale"}}`,
+		`{"id":"3","action":"policy.unenforced","target":"sha256:00","reason":null,"meta":{"agent":"claude-code","action":"exec","policy_state":"absent"}}`,
+	}
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := readAudit(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	files, err := filepath.Glob("testdata/*/*.json")
-	if err != nil || len(files) == 0 {
-		t.Fatalf("no samples found: %v", err)
+	want := []auditEntry{
+		{Action: "policy.denied", Target: "sentinel/x.txt", Reason: "rule one", Agent: "codex", Query: "write", State: "stale"},
+		{Action: "policy.unenforced", Target: "sha256:00", Agent: "claude-code", Query: "exec", State: "absent"},
 	}
-	for _, f := range files {
-		data, err := os.ReadFile(f)
-		if err != nil {
+	if !slices.Equal(got, want) {
+		t.Fatalf("got %+v, want %+v", got, want)
+	}
+	if got, err := readAudit(filepath.Join(t.TempDir(), "missing")); err != nil || got != nil {
+		t.Fatalf("a missing log is empty, got %v, %v", got, err)
+	}
+}
+
+func TestTOMLRendersAHookFileValue(t *testing.T) {
+	var file struct {
+		Hooks map[string]any `json:"hooks"`
+	}
+	text := `{"hooks":{"PreToolUse":[{"matcher":"Bash|apply_patch","hooks":[{"type":"command","command":"/a b/openplexer hook codex pre-tool --say \"hi\"","timeout":5,"async":false}]}]}}`
+	dec := json.NewDecoder(strings.NewReader(text))
+	dec.UseNumber()
+	if err := dec.Decode(&file); err != nil {
+		t.Fatal(err)
+	}
+	got, err := toml(file.Hooks["PreToolUse"])
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `[{hooks=[{async=false,command="/a b/openplexer hook codex pre-tool --say \"hi\"",timeout=5,type="command"}],matcher="Bash|apply_patch"}]`
+	if got != want {
+		t.Fatalf("got  %s\nwant %s", got, want)
+	}
+	if _, err := toml(nil); err == nil {
+		t.Fatal("null has no TOML form")
+	}
+}
+
+func TestHooksOverridesWrapsEachCommand(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "hooks.json")
+	text := `{"hooks":{"PreToolUse":[{"matcher":"Bash","hooks":[{"type":"command","command":"/bin/op hook codex pre-tool","timeout":5}]}]}}`
+	if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	plain, err := hooksOverrides(path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"-c", `hooks.PreToolUse=[{hooks=[{command="/bin/op hook codex pre-tool",timeout=5,type="command"}],matcher="Bash"}]`}; !slices.Equal(plain, want) {
+		t.Fatalf("got %q", plain)
+	}
+	wrapped, err := hooksOverrides(path, offlineCommand)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(wrapped[1], `command="/usr/bin/sandbox-exec -p '`+offlineProfile+`' /bin/op hook codex pre-tool"`) {
+		t.Fatalf("the command is not wrapped: %q", wrapped)
+	}
+}
+
+func TestOfflineCommandQuotesTheProfile(t *testing.T) {
+	got := offlineCommand("/bin/op hook claude-code pre-tool")
+	want := "/usr/bin/sandbox-exec -p '(version 1)(allow default)(deny network*)' /bin/op hook claude-code pre-tool"
+	if got != want {
+		t.Fatalf("got %q", got)
+	}
+}
+
+func TestOfflineClaudeSettingsReplacesOnlyTheInstalledCommand(t *testing.T) {
+	settings := []byte(`{
+  "sandbox": {"enabled": true},
+  "hooks": {
+    "PreToolUse": [
+      {"matcher": "Bash|Write", "hooks": [{"type": "command", "command": "/tmp/bin/openplexer hook claude-code pre-tool", "timeout": 5}]}
+    ]
+  }
+}`)
+	got, err := offlineClaudeSettings(settings)
+	if err != nil {
+		t.Fatal(err)
+	}
+	command := "/tmp/bin/openplexer hook claude-code pre-tool"
+	want := bytes.Replace(settings, []byte(command), []byte(offlineCommand(command)), 1)
+	if !bytes.Equal(got, want) {
+		t.Fatalf("got\n%s\nwant\n%s", got, want)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(got, &parsed); err != nil {
+		t.Fatalf("the rewritten file is not JSON: %v", err)
+	}
+}
+
+func TestOfflineClaudeSettingsFailsWithoutExactlyOneCommand(t *testing.T) {
+	if _, err := offlineClaudeSettings([]byte(`{"sandbox":{"enabled":true}}`)); err == nil {
+		t.Fatal("settings with no installed hook must fail")
+	}
+	twice := `{"hooks":{"PreToolUse":[{"hooks":[{"command":"/b/op hook claude-code pre-tool"}]},{"hooks":[{"command":"/b/op hook claude-code pre-tool"}]}]}}`
+	if _, err := offlineClaudeSettings([]byte(twice)); err == nil {
+		t.Fatal("a command that appears twice must fail")
+	}
+}
+
+func TestFingerprintSeesEditsAdditionsRemovalsAndRetargetedLinks(t *testing.T) {
+	dir := t.TempDir()
+	file, other, link := filepath.Join(dir, "a.json"), filepath.Join(dir, "b.json"), filepath.Join(dir, "link")
+	gone := filepath.Join(dir, "gone.json")
+	for path, text := range map[string]string{file: "1", other: "2", gone: "3"} {
+		if err := os.WriteFile(path, []byte(text), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		again, err := r.json(data)
-		if err != nil {
-			t.Errorf("%s: %v", f, err)
-			continue
+	}
+	if err := os.Symlink(file, link); err != nil {
+		t.Fatal(err)
+	}
+	paths := []string{dir, filepath.Join(t.TempDir(), "absent")}
+	before, err := fingerprint(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := changed(before, before); len(got) != 0 {
+		t.Fatalf("an untouched tree changed: %v", got)
+	}
+	added := filepath.Join(dir, "new.json")
+	for _, f := range []func() error{
+		func() error { return os.WriteFile(file, []byte("edited"), 0o600) },
+		func() error { return os.WriteFile(added, []byte("x"), 0o600) },
+		func() error { return os.Remove(gone) },
+		func() error { os.Remove(link); return os.Symlink(other, link) },
+	} {
+		if err := f(); err != nil {
+			t.Fatal(err)
 		}
-		if !bytes.Equal(again, data) {
-			t.Errorf("%s changes when redacted again, so it holds an id, a timestamp, or a private path:\n%s", f, again)
-		}
+	}
+	after, err := fingerprint(paths)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{added, file, gone, link}
+	slices.Sort(want)
+	if got := changed(before, after); !slices.Equal(got, want) {
+		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestFingerprintDoesNotFollowASymlinkedDirectory(t *testing.T) {
+	outside, dir := t.TempDir(), t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "f"), []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(dir, "link")); err != nil {
+		t.Fatal(err)
+	}
+	got, err := fingerprint([]string{dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got[filepath.Join(dir, "link", "f")]; ok {
+		t.Fatalf("walked through a symlink: %v", got)
+	}
+}
+
+func TestSignPolicyMakesAKeySetAndAMessage(t *testing.T) {
+	keys, message, err := signPolicy(testBundle)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var set struct {
+		Keys []map[string]string `json:"keys"`
+	}
+	var msg struct {
+		Signature string `json:"signature"`
+		Bundle    struct {
+			ProjectID string `json:"project_id"`
+		} `json:"bundle"`
+	}
+	if json.Unmarshal(keys, &set) != nil || len(set.Keys) != 1 || set.Keys[0]["crv"] != "P-256" {
+		t.Fatalf("key set %s", keys)
+	}
+	if json.Unmarshal(message, &msg) != nil || strings.Count(msg.Signature, ".") != 2 || msg.Bundle.ProjectID != projectID {
+		t.Fatalf("message %s", message)
 	}
 }
 
@@ -121,88 +284,37 @@ func TestFeedbackKeepsHookEchoesOutOfWhatTheAgentSaw(t *testing.T) {
 	claudeOut := `{"type":"system","subtype":"hook_response","output":"TOKEN"}
 {"type":"user","message":{"content":[{"type":"tool_result","content":"hook error: TOKEN"}]}}
 {"type":"assistant","message":{"content":[{"type":"text","text":"said TOKEN"}]}}`
-	said, tools := claudeFeedback([]byte(claudeOut))
-	if !strings.Contains(said, "said TOKEN") || strings.Contains(said, "hook_response") || !strings.Contains(tools, "hook error: TOKEN") {
+	said, tools := claudeFeedback([]byte(claudeOut), []byte("stderr TOKEN"))
+	if !strings.Contains(said, "said TOKEN") || strings.Contains(said, "hook_response") || !strings.Contains(tools, "hook error: TOKEN") || strings.Contains(tools, "stderr") {
 		t.Fatalf("claude: said %q tools %q", said, tools)
 	}
 	codexOut := `{"type":"item.completed","item":{"type":"agent_message","text":"said TOKEN"}}
 {"type":"item.completed","item":{"type":"error","message":"bypass notice TOKEN"}}
 {"type":"item.completed","item":{"type":"command_execution","aggregated_output":"blocked: TOKEN"}}`
-	said, tools = codexFeedback([]byte(codexOut))
+	said, tools = codexFeedback([]byte(codexOut), []byte("Command blocked by PreToolUse hook: REASON. Command: x\n"))
 	if !strings.Contains(said, "said TOKEN") || strings.Contains(said, "bypass") || !strings.Contains(tools, "blocked: TOKEN") || strings.Contains(tools, "bypass") {
 		t.Fatalf("codex: said %q tools %q", said, tools)
 	}
-}
-
-func TestJudge(t *testing.T) {
-	deny := scenario{denyTokens: []string{"x"}}
-	ok := &result{PreToolUse: []preToolCall{{Decision: "deny"}}}
-	judge(ok, deny)
-	if !ok.Pass {
-		t.Fatalf("a denied, absent target must pass: %v", ok.Problems)
-	}
-	written := &result{PreToolUse: []preToolCall{{Decision: "deny"}}, TargetOnDisk: true}
-	judge(written, deny)
-	if written.Pass {
-		t.Fatal("a denied action whose file exists must fail")
-	}
-	silent := &result{}
-	judge(silent, scenario{wantOnDisk: true, target: "x"})
-	if silent.Pass {
-		t.Fatal("a run in which no hook fired must fail")
-	}
-	escape := scenario{target: "outside/x", targetTools: 2}
-	bothTools := []preToolCall{{Tool: "Write", NamesTarget: true, Decision: "allow"}, {Tool: "Bash", NamesTarget: true, Decision: "allow"}}
-	confined := &result{PreToolUse: bothTools}
-	judge(confined, escape)
-	if !confined.Pass {
-		t.Fatalf("two tools that tried the target and an absent file must pass: %v", confined.Problems)
-	}
-	escaped := &result{PreToolUse: bothTools, TargetOnDisk: true}
-	judge(escaped, escape)
-	if escaped.Pass {
-		t.Fatal("a file outside the project must fail the escape scenario")
-	}
-	oneTool := &result{PreToolUse: []preToolCall{{Tool: "Bash", Decision: "allow"}, {Tool: "Write", NamesTarget: true, Decision: "allow"}}}
-	judge(oneTool, escape)
-	if oneTool.Pass {
-		t.Fatal("an escape run in which only one tool tried the target proves nothing about the other")
-	}
-	stubDenied := &result{PreToolUse: []preToolCall{{Tool: "Write", NamesTarget: true, Decision: "deny"}, {Tool: "Bash", NamesTarget: true, Decision: "allow"}}}
-	judge(stubDenied, escape)
-	if stubDenied.Pass {
-		t.Fatal("an escape run that the stub denied proves nothing about the sandbox")
+	if !strings.Contains(tools, "Command blocked by PreToolUse hook: REASON") || strings.Contains(said, "REASON") {
+		t.Fatalf("codex stderr must reach the tool results only: said %q tools %q", said, tools)
 	}
 }
 
-func TestSummarizeSeesTheTargetInTheToolInput(t *testing.T) {
-	r := record{Event: "PreToolUse", Decision: "allow", Input: json.RawMessage(`{"tool_name":"Bash","tool_input":{"command":"python3 -c 'open(\"../outside/escaped.txt\")'","description":"d"}}`)}
-	got := summarize(r, "escaped.txt")
-	if got.Tool != "Bash" || !got.NamesTarget || !slices.Equal(got.Fields, []string{"command", "description"}) {
-		t.Fatalf("got %+v", got)
+func TestFeedbackKeepsTheQuotesOfAReason(t *testing.T) {
+	reason := `denied the command "touch x" <&>`
+	claudeOut := `{"type":"user","message":{"content":[{"type":"tool_result","content":[{"type":"text","text":"hook error: denied the command \"touch x\" \u003c\u0026\u003e"}]}]}}`
+	if _, tools := claudeFeedback([]byte(claudeOut), nil); !strings.Contains(tools, reason) {
+		t.Fatalf("claude: tools %q do not hold %q", tools, reason)
 	}
-	if summarize(r, "other.txt").NamesTarget {
-		t.Fatal("a tool input without the target must not name it")
-	}
-}
-
-func TestRedactorPrefersTheProjectOverTheHomeDirectory(t *testing.T) {
-	home, _ := os.UserHomeDir()
-	r, err := newRedactor(filepath.Join(home, "scratch"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := r.text(filepath.Join(home, "scratch", "project", "a.txt")); got != "<PROJECT>/a.txt" {
-		t.Fatalf("got %q", got)
-	}
-	if got := r.text(filepath.Join(home, "scratch", "outside", "a.txt")); got != "<RUN>/outside/a.txt" {
-		t.Fatalf("got %q", got)
+	codexOut := `{"type":"item.completed","item":{"type":"command_execution","aggregated_output":"denied the command \"touch x\" <&>"}}`
+	if _, tools := codexFeedback([]byte(codexOut), nil); !strings.Contains(tools, reason) {
+		t.Fatalf("codex: tools %q do not hold %q", tools, reason)
 	}
 }
 
 func TestClaudeSlugMatchesTheProjectsDirectoryName(t *testing.T) {
-	got := claudeSlug("/private/var/folders/ws/T/realagent-2054369725/project")
-	if want := "-private-var-folders-ws-T-realagent-2054369725-project"; got != want {
+	got := claudeSlug("/private/var/folders/xy/T/realagent-123/project")
+	if want := "-private-var-folders-xy-T-realagent-123-project"; got != want {
 		t.Fatalf("got %q, want %q", got, want)
 	}
 }

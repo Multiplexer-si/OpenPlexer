@@ -18,7 +18,7 @@ func eachLine(raw []byte, fn func(map[string]any)) {
 	}
 }
 
-func claudeFeedback(stdout []byte) (said, toolResults string) {
+func claudeFeedback(stdout, _ []byte) (said, toolResults string) {
 	var s, t strings.Builder
 	eachLine(stdout, func(ev map[string]any) {
 		msg, _ := ev["message"].(map[string]any)
@@ -27,34 +27,52 @@ func claudeFeedback(stdout []byte) (said, toolResults string) {
 			block, _ := b.(map[string]any)
 			switch block["type"] {
 			case "text":
-				s.WriteString(str(block["text"]) + "\n")
+				s.WriteString(texts(block["text"]))
 			case "tool_result":
-				t.WriteString(str(block["content"]) + "\n")
+				t.WriteString(texts(block["content"]))
 			}
 		}
 	})
 	return s.String(), t.String()
 }
 
-func codexFeedback(stdout []byte) (said, toolResults string) {
+// Codex 0.169.0 logs the reason of a blocked call at error level on standard
+// error and leaves it out of its JSON output. That text is the tool error that
+// the model gets.
+func codexFeedback(stdout, stderr []byte) (said, toolResults string) {
 	var s, t strings.Builder
 	eachLine(stdout, func(ev map[string]any) {
 		item, _ := ev["item"].(map[string]any)
 		switch item["type"] {
 		case "agent_message":
-			s.WriteString(str(item["text"]) + "\n")
+			s.WriteString(texts(item["text"]))
 		case "command_execution", "file_change", "mcp_tool_call":
-			b, _ := json.Marshal(item)
-			t.Write(b)
+			t.WriteString(texts(item))
 		}
 	})
+	t.Write(stderr)
 	return s.String(), t.String()
 }
 
-func str(v any) string {
-	if s, ok := v.(string); ok {
-		return s
+// texts returns every string in a decoded JSON value, one on each line, so a
+// reason is matched as the agent printed it and not as JSON escapes it.
+func texts(v any) string {
+	var b strings.Builder
+	var walk func(any)
+	walk = func(v any) {
+		switch v := v.(type) {
+		case string:
+			b.WriteString(v + "\n")
+		case []any:
+			for _, item := range v {
+				walk(item)
+			}
+		case map[string]any:
+			for _, k := range sortedKeys(v) {
+				walk(v[k])
+			}
+		}
 	}
-	b, _ := json.Marshal(v)
-	return string(b)
+	walk(v)
+	return b.String()
 }
