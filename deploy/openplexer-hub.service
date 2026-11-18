@@ -1,0 +1,12 @@
+[Unit]
+Description=OpenPlexer hub
+
+[Service]
+Type=exec
+User=openplexer
+Group=openplexer
+ExecStart=/usr/local/bin/openplexer-hub serve -data-dir /var/lib/openplexer -listen 127.0.0.1:8787
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
