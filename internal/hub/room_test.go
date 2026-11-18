@@ -17,6 +17,32 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/room"
 )
 
+func TestReadResumesTrailingWhitespace(t *testing.T) {
+	const roomID = "mission"
+	want := room.Resume{LastSeq: 7}
+	message := encode(t, room.ResumeMessage(room.Sender{ID: "daemon", Kind: room.Daemon}, roomID, want.LastSeq))
+	for _, tc := range []struct {
+		name   string
+		suffix string
+		accept bool
+	}{
+		{"form feed", "\f", false},
+		{"no-break space", "\u00a0", false},
+		{"space and tab", " \t", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(string(message)+tc.suffix+"\n"))
+			request.SetPathValue("room", roomID)
+			resumes := make(chan room.Resume, 1)
+			readResumes(request.Context(), request, resumes)
+			got, ok := <-resumes
+			if ok != tc.accept || (ok && got != want) {
+				t.Fatalf("resume = %+v, received = %t, want received = %t with %+v", got, ok, tc.accept, want)
+			}
+		})
+	}
+}
+
 func TestRoomSequenceAndResume(t *testing.T) {
 	var delivery struct {
 		Cases []struct {

@@ -2,6 +2,29 @@ package policy
 
 import "testing"
 
+func TestAuditPolicyEndOfInput(t *testing.T) {
+	for _, tc := range []struct {
+		fixture string
+		parse   func([]byte) error
+	}{
+		{"bundle/minimal.json", func(text []byte) error { _, err := ParseBundle(text); return err }},
+		{"override/until.json", func(text []byte) error { _, err := ParseOverride(text); return err }},
+		{"eval-query/write-allowed.json", func(text []byte) error { _, err := ParseQuery(text); return err }},
+	} {
+		t.Run(tc.fixture, func(t *testing.T) {
+			text := string(readFile(t, "../../spec/policy/v1/examples/"+tc.fixture))
+			if err := tc.parse([]byte(text + " \t\n\r")); err != nil {
+				t.Fatalf("valid document with trailing whitespace: %v", err)
+			}
+			for _, extra := range []string{"}", "]", "{}"} {
+				if err := tc.parse([]byte(text + extra)); err == nil {
+					t.Errorf("accepted an extra %q after the document", extra)
+				}
+			}
+		})
+	}
+}
+
 func TestParsersRejectALoneSurrogate(t *testing.T) {
 	documents := map[string]func(text string) error{
 		"bundle": func(text string) error {

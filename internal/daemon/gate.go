@@ -145,7 +145,7 @@ func (g *Gate) admit(token string, inForce *policy.Verified) (*policy.Verified, 
 	have, got := inForce.Bundle, candidate.Bundle
 	switch {
 	case got.ProjectID != have.ProjectID:
-		return nil, "", fmt.Errorf("the bundle is for project %s, and the policy in force is for project %s", got.ProjectID, have.ProjectID)
+		return nil, "", errors.New("the bundle project_id must match the policy in force")
 	case got.Version < have.Version:
 		return nil, "", fmt.Errorf("the bundle has version %d, which is older than version %d in force", got.Version, have.Version)
 	case got.Version > have.Version:

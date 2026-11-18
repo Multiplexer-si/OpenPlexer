@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -97,6 +98,47 @@ func (h *pipeHub) dial(ctx context.Context, _, _ string) (net.Conn, error) {
 }
 
 const testHubOrigin = "http://127.0.0.1"
+
+func TestAuditRoomBoundary(t *testing.T) {
+	const subscribed = "mis-checkout"
+	const other = "fixture-project-b"
+	useHubTransport(t, handlerTransport(func(w http.ResponseWriter, req *http.Request) {
+		w.Header().Set("Content-Type", roomStreamType)
+		event := func(room, mission string, seq int, body string) {
+			fmt.Fprintf(w, `{"v":1,"type":"event","sender":{"id":"hub","kind":"server"},"room":%q,"seq":%d,"payload":{"id":"e%d","seq":%d,"mission":%q,"type":"status","agent":{"id":"ses","vendor":"codex"},"on_behalf_of":"mem-ana","at":"t","body":%s}}`+"\n", room, seq, seq, seq, mission, body)
+		}
+		event(subscribed, other, 20, `{"summary":"other mission"}`)
+		event(other, other, 21, `{"summary":"other Room"}`)
+		event(subscribed, other, 22, `{}`)
+		fmt.Fprintln(w, `{"v":1,"type":"error","sender":{"id":"hub","kind":"server"},"room":"fixture-project-b","payload":{"code":"unauthorized","message":"other Room"}}`)
+		event(subscribed, subscribed, 2, `{"summary":"subscribed Room"}`)
+		event(subscribed, subscribed, 3, `{}`)
+	}))
+	receiver := room.NewReceiver()
+	receiver.Restore(subscribed, 1)
+	client := hubClient{origin: testHubOrigin, project: subscribed, member: "mem-ana"}
+	var delivered []string
+	var saved []int64
+	err := client.followRoom(context.Background(), time.Now, receiver, func(step room.Step, seq int64) error {
+		if event, ok := step.(room.Deliver); ok {
+			delivered = append(delivered, event.Event.Mission())
+		}
+		saved = append(saved, seq)
+		return nil
+	})
+	if !errors.Is(err, io.EOF) || !strings.Contains(err.Error(), "discarded 4 Room frames outside the subscription") {
+		t.Errorf("stream result = %v, want EOF and four discarded frames", err)
+	}
+	if !slices.Equal(delivered, []string{subscribed}) || !slices.Equal(saved, []int64{2, 3}) {
+		t.Errorf("delivered %v and saved %v, want just the subscribed event and its unreadable successor counted", delivered, saved)
+	}
+	if got := receiver.LastSeq(subscribed); got != 3 {
+		t.Errorf("subscribed cursor = %d, want 3", got)
+	}
+	if got := receiver.LastSeq(other); got != 0 {
+		t.Errorf("foreign cursor = %d, want 0", got)
+	}
+}
 
 func startTestHub(t *testing.T) (*pipeHub, *hub.Store, hubClient, hubClient) {
 	t.Helper()

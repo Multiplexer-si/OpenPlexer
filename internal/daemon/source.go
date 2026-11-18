@@ -40,7 +40,7 @@ func signedToken(text []byte) (string, error) {
 	// Exact names and last-member semantics, as in the policy contract.
 	var message map[string]json.RawMessage
 	if err := json.Unmarshal(text, &message); err != nil {
-		return "", err
+		return "", errors.New("the signed bundle message must be a JSON object")
 	}
 	var version *float64
 	var signature *string

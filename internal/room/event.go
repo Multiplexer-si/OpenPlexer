@@ -1,16 +1,18 @@
 package room
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"strconv"
+)
 
 // Agent names who posted an event. Parent is "" unless the event is from a
 // sub-agent.
 type Agent struct{ ID, Vendor, Parent string }
 
 // Event is a stored event that passed room-event.schema.json. It is immutable.
-// It keeps the text it was read from, so unknown fields, key order, and the
-// spelling of numbers survive MarshalJSON.
+// It retains decoded extension fields alongside the validated fields.
 type Event struct {
-	raw        json.RawMessage
+	wire       object
 	body       object
 	id         string
 	seq        int64
@@ -24,12 +26,7 @@ type Event struct {
 // ParseEvent reads a stored event and validates it against
 // spec/room/v1/room-event.schema.json. The error is a *ValidationError.
 func ParseEvent(text []byte) (Event, error) {
-	ev, err := parse(text, (*reader).event)
-	if err != nil {
-		return Event{}, err
-	}
-	ev.raw = compact(text)
-	return ev, nil
+	return parse(text, (*reader).event)
 }
 
 func (e Event) ID() string         { return e.id }
@@ -52,10 +49,10 @@ func (e Event) Body() Body {
 }
 
 func (e Event) MarshalJSON() ([]byte, error) {
-	if e.raw == nil {
+	if e.wire == nil {
 		return nil, &ValidationError{Issues: []Issue{{Reason: "is the zero Event"}}}
 	}
-	return e.raw, nil
+	return json.Marshal(e.wire)
 }
 
 func (r *reader) event(doc any) Event {
@@ -72,6 +69,8 @@ func (r *reader) event(doc any) Event {
 	e.onBehalfOf, _ = field(r, "", o, "on_behalf_of", required, r.nonEmptyText)
 	e.at, _ = field(r, "", o, "at", required, r.nonEmptyText)
 	e.body = r.eventBody(o, e.typ)
+	o["seq"] = e.seq
+	e.wire = o
 	return e
 }
 
@@ -88,6 +87,9 @@ func (r *reader) eventBody(o object, kind string) object {
 	if b := newBody(kind); b != nil {
 		if body, ok := r.object("body", value); ok {
 			readBody(r, "body", b, body)
+			if claim, ok := b.(*Claim); ok {
+				body["ttl_seconds"] = json.Number(strconv.FormatInt(claim.TTLSeconds, 10))
+			}
 			return body
 		}
 	}

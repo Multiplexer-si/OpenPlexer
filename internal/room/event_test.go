@@ -1,6 +1,8 @@
 package room
 
 import (
+	"bytes"
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -36,10 +38,8 @@ func TestBodyIsFreshOnEachCall(t *testing.T) {
 
 func TestEventWritesBackUnknownFieldsAndNumbers(t *testing.T) {
 	text := claimEvent("7", "60")
-	written, err := mustEvent(t, " "+text+"\n").MarshalJSON()
-	if err != nil || string(written) != text {
-		t.Errorf("MarshalJSON = %s, %v; want %s", written, err, text)
-	}
+	event := mustEvent(t, " "+claimEvent("7.0", "6e1")+"\n")
+	assertSameJSON(t, mustMarshal(t, event), text)
 }
 
 func TestEventNumbers(t *testing.T) {
@@ -72,6 +72,43 @@ func TestEventLastDuplicateKeyWins(t *testing.T) {
 	if ev.Seq() != 8 {
 		t.Errorf("Seq = %d, want 8", ev.Seq())
 	}
+}
+
+func TestAuditRoomSerialization(t *testing.T) {
+	for _, tc := range []struct {
+		kind, field, body string
+	}{
+		{"claim", "intent", `"item":"i","paths":["src/**"],"ttl_seconds":60`},
+		{"decision", "title", `"detail":"d"`},
+		{"status", "summary", `"plan_step":"p"`},
+	} {
+		t.Run(tc.kind, func(t *testing.T) {
+			body := `{"` + tc.field + `":"unchecked","` + tc.field + `":"approved",` + tc.body + `,"future":[2.50]}`
+			event := mustEvent(t, eventPayload(tc.kind, 1, body))
+			var stdout bytes.Buffer
+			if err := json.NewEncoder(&stdout).Encode(event); err != nil {
+				t.Fatal(err)
+			}
+			got := stdout.String()
+			if strings.Contains(got, "unchecked") || strings.Count(got, `"`+tc.field+`":`) != 1 ||
+				!strings.Contains(got, `"`+tc.field+`":"approved"`) {
+				t.Errorf("encoded %s = %s, want only the validated value", tc.field, got)
+			}
+			if !strings.Contains(got, `"future":[2.50]`) {
+				t.Errorf("encoded %s lost its extension: %s", tc.kind, got)
+			}
+		})
+	}
+	t.Run("invalid UTF-8", func(t *testing.T) {
+		text := eventPayload("decision", 1, "{\"title\":\"\xff\",\"detail\":\"d\"}")
+		if _, err := ParseEvent([]byte(text)); err == nil {
+			t.Error("ParseEvent accepted invalid UTF-8")
+		}
+		frame := `{"v":1,"type":"event",` + sender + `,"payload":` + text + `}`
+		if _, err := ParseMessage([]byte(frame)); err == nil {
+			t.Error("ParseMessage accepted invalid UTF-8")
+		}
+	})
 }
 
 func TestEventReportsEveryIssue(t *testing.T) {

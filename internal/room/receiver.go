@@ -17,8 +17,7 @@ type roomState struct {
 	claims []ActiveClaim
 }
 
-// Step is what to do with one frame: Deliver, SendResume, Skipped, or
-// Unhandled.
+// Step is what to do with one frame.
 type Step interface{ step() }
 
 // Deliver is a new event. It is already counted and reduced into the claims.
@@ -36,13 +35,17 @@ type SendResume struct {
 // Skipped needs nothing. Reason is for a log.
 type Skipped struct{ Reason string }
 
+// OutsideSubscription is a frame addressed to another Room or mission.
+type OutsideSubscription struct{}
+
 // Unhandled is a valid message that no rule here covers. The caller decides.
 type Unhandled struct{ Message Message }
 
-func (Deliver) step()    {}
-func (SendResume) step() {}
-func (Skipped) step()    {}
-func (Unhandled) step()  {}
+func (Deliver) step()             {}
+func (SendResume) step()          {}
+func (Skipped) step()             {}
+func (OutsideSubscription) step() {}
+func (Unhandled) step()           {}
 
 var notInVersion1 = []string{"digest", "digest.get", "receipt"}
 
@@ -88,7 +91,20 @@ func (r *Receiver) Claims(room string, now time.Time) []ActiveClaim {
 // a Room and a seq, so a resume does not ask for it again. A claim whose at is
 // not a timestamp of RFC 3339 expires ttl_seconds after now.
 func (r *Receiver) Receive(frame []byte, now time.Time) Step {
+	return r.receive(frame, now, "")
+}
+
+// ReceiveInRoom applies the subscription boundary before reducing a frame.
+func (r *Receiver) ReceiveInRoom(frame []byte, now time.Time, room string) Step {
+	return r.receive(frame, now, room)
+}
+
+func (r *Receiver) receive(frame []byte, now time.Time, subscribed string) Step {
 	env, issues := readEnvelope(frame)
+	if subscribed != "" && (env.room != "" && env.room != subscribed ||
+		env.mission != "" && env.mission != subscribed) {
+		return OutsideSubscription{}
+	}
 	if len(issues) > 0 {
 		return Skipped{Reason: "not a valid envelope: " + issues[0].String()}
 	}

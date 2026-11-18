@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -88,6 +89,82 @@ func TestHubAdvertisedKeyCannotReplacePin(t *testing.T) {
 	}
 	if status, err := g.Sync(context.Background()); err != nil || status.State != Verified {
 		t.Fatalf("sync after re-pinning = %v, %v", status, err)
+	}
+}
+
+func TestAuditCredentialSurfaces(t *testing.T) {
+	const project = "prj-shop"
+	token := base64.RawURLEncoding.EncodeToString([]byte("disposable-test-credential-00000"))
+	signer := newSigner(t)
+	keys := signer.keySet(t)
+	invalidHeader := func(alg, typ string) string {
+		header := fmt.Appendf(nil, `{"alg":%q,"typ":%q}`, alg, typ)
+		return base64.RawURLEncoding.EncodeToString(header) + ".e30.AA"
+	}
+	invalidBundle := []byte(strings.Replace(string(bundleText(project, 2)), `"members": {`, fmt.Sprintf(`"members": {%q: 1,`, token), 1))
+	for _, tc := range []struct {
+		name, signature, reason string
+	}{
+		{"algorithm", invalidHeader(token, "mp-policy+jws"), "header alg"},
+		{"type", invalidHeader("ES256", token), "header typ"},
+		{"policy dictionary", string(signer.sign(t, invalidBundle)), "members"},
+		{"HTTP response", "", "hub request"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			configure(t, home, Settings{HubURL: testHubOrigin, ProjectID: project, MemberID: "mem-ana", Token: token, KeySet: keys})
+			g := open(t, home, loadedAt)
+			load(t, g, signer.sign(t, bundleText(project, 1)))
+			useHubTransport(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if r.URL.Path == "/.well-known/jwks.json" {
+					rec := httptest.NewRecorder()
+					rec.Write(keys)
+					return rec.Result(), nil
+				}
+				if r.Header.Get("Authorization") != "Bearer "+token {
+					t.Error("policy request missing the test credential")
+				}
+				if tc.signature == "" {
+					return nil, fmt.Errorf("malformed HTTP response %q", token)
+				}
+				rec := httptest.NewRecorder()
+				fmt.Fprintf(rec, `{"version":2,"bundle":{},"signature":%q}`, tc.signature)
+				return rec.Result(), nil
+			}))
+
+			check := func(surface string, err error) {
+				t.Helper()
+				if err == nil || !strings.Contains(err.Error(), tc.reason) {
+					t.Errorf("%s did not identify the rejection", surface)
+				}
+				if err != nil && strings.Contains(err.Error(), token) {
+					t.Errorf("%s disclosed the member bearer", surface)
+				}
+			}
+			client, err := g.config.client()
+			if err != nil {
+				t.Fatal(err)
+			}
+			_, err = (hubSource{client}).Fetch(context.Background())
+			check("fetch error", err)
+			status, err := g.Sync(context.Background())
+			check("sync error", err)
+			if status.State != Verified || status.Version != 1 {
+				t.Error("failed sync changed the policy in force")
+			}
+
+			ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+			defer cancel()
+			var reported error
+			pollHub(ctx, home, at(loadedAt), func(err error) {
+				reported = err
+				cancel()
+			})
+			check("daemon log", reported)
+			if strings.Contains(string(readFile(t, filepath.Join(home, auditFile))), token) {
+				t.Error("audit log disclosed the member bearer")
+			}
+		})
 	}
 }
 

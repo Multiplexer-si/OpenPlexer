@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf8"
 )
 
 type object = map[string]any
@@ -32,11 +33,14 @@ func parse[T any](text []byte, read func(*reader, any) T) (T, error) {
 // decodeJSON decodes into plain values, so the last of a repeated key wins and
 // a number keeps its spelling until a reader asks for it.
 func decodeJSON(text []byte) (any, error) {
+	if !utf8.Valid(text) {
+		return nil, &ValidationError{Issues: []Issue{{Reason: "is not valid UTF-8"}}}
+	}
 	decoder := json.NewDecoder(bytes.NewReader(text))
 	decoder.UseNumber()
 	var doc any
 	if err := decoder.Decode(&doc); err != nil {
-		return nil, &ValidationError{Issues: []Issue{{Reason: "is not JSON: " + err.Error()}}}
+		return nil, &ValidationError{Issues: []Issue{{Reason: "is not valid JSON"}}}
 	}
 	if _, err := decoder.Token(); err != io.EOF {
 		return nil, &ValidationError{Issues: []Issue{{Reason: "has text after the JSON value"}}}

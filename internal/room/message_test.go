@@ -18,9 +18,10 @@ func TestEventMessage(t *testing.T) {
 		t.Errorf("message = %s", mustMarshal(t, parsed))
 	}
 	ev, ok := parsed.Payload().(Event)
-	if !ok || string(mustMarshal(t, ev)) != text {
-		t.Errorf("payload = %+v, want the event text %s", parsed.Payload(), text)
+	if !ok {
+		t.Fatalf("payload = %+v, want an event", parsed.Payload())
 	}
+	assertSameJSON(t, mustMarshal(t, ev), text)
 	for _, field := range []string{`"event_id":"e7"`, `"ts":"2026-01-15T12:00:00.000Z"`} {
 		if !strings.Contains(string(mustMarshal(t, m)), field) {
 			t.Errorf("message lacks %s", field)
@@ -122,6 +123,21 @@ func mustMarshal(t *testing.T, v interface{ MarshalJSON() ([]byte, error) }) []b
 	return text
 }
 
+func assertSameJSON(t *testing.T, encoded []byte, wantText string) {
+	t.Helper()
+	got, err := decodeJSON(encoded)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want, err := decodeJSON([]byte(wantText))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("encoded JSON = %s, want the values in %s", encoded, wantText)
+	}
+}
+
 func TestAPayloadKeyInAnotherCaseIsNotThePayload(t *testing.T) {
 	claim := eventPayload("claim", 5, `{"item":"i","paths":["src/**"],"intent":"x","ttl_seconds":600}`)
 	frame := `{"v":1,"type":"event",` + sender + `,"room":"mis","seq":5,"payload":` + eventPayload("request", 5, `{}`) + `,"PAYLOAD":` + claim + `}`
@@ -138,7 +154,5 @@ func TestAPayloadKeyInAnotherCaseIsNotThePayload(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := string(mustMarshal(t, m.Payload().(Event))); got != status {
-		t.Errorf("ParseMessage read the event %s, want %s", got, status)
-	}
+	assertSameJSON(t, mustMarshal(t, m.Payload().(Event)), status)
 }

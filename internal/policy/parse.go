@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"math"
 	"slices"
@@ -72,9 +73,9 @@ func parse[T any](text []byte, read func(*reader, any) T) (T, error) {
 	// matches a field name only when the two are equal.
 	var doc any
 	if err := decoder.Decode(&doc); err != nil {
-		return none, &ValidationError{Issues: []Issue{{Reason: "is not JSON: " + err.Error()}}}
+		return none, &ValidationError{Issues: []Issue{{Reason: "is not valid JSON"}}}
 	}
-	if decoder.More() {
+	if _, err := decoder.Token(); err != io.EOF {
 		return none, &ValidationError{Issues: []Issue{{Reason: "has text after the JSON value"}}}
 	}
 	if hasLoneSurrogate(text[:decoder.InputOffset()]) {
@@ -170,9 +171,10 @@ func (r *reader) object(path string, value any) (map[string]any, bool) {
 }
 
 func (r *reader) rejectUnknownFields(path string, object map[string]any, allowed ...string) {
-	for _, key := range slices.Sorted(maps.Keys(object)) {
+	for key := range object {
 		if !slices.Contains(allowed, key) {
-			r.fail(member(path, key), "is not a field of this object")
+			r.fail(path, "has an unknown field")
+			return
 		}
 	}
 }
@@ -260,7 +262,7 @@ func dictionary[T any](r *reader, read func(path string, value any) T) func(path
 		object, _ := r.object(path, value)
 		out := make(map[string]T, len(object))
 		for _, key := range slices.Sorted(maps.Keys(object)) {
-			out[key] = read(fmt.Sprintf("%s[%q]", path, key), object[key])
+			out[key] = read(path+"[*]", object[key])
 		}
 		return out
 	}

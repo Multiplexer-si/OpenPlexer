@@ -33,7 +33,7 @@ func ParseKeySet(text []byte) (KeySet, error) {
 	// name differs in case, such as Keys.
 	var doc any
 	if err := json.Unmarshal(text, &doc); err != nil {
-		return KeySet{}, fmt.Errorf("the key set is not valid: %w", err)
+		return KeySet{}, errors.New("the key set is not a readable JSON object")
 	}
 	object, _ := doc.(map[string]any)
 	list, isList := object["keys"].([]any)
@@ -119,10 +119,10 @@ func readHeader(segment string) (map[string]any, error) {
 // as RFC 7797 defines, and not its base64url form.
 func checkHeader(header map[string]any) (unencoded bool, err error) {
 	if header["alg"] != signatureAlgorithm {
-		return false, fmt.Errorf("the header alg is %v, and it must be %s", header["alg"], signatureAlgorithm)
+		return false, fmt.Errorf("the header alg must be %s", signatureAlgorithm)
 	}
 	if header["typ"] != signatureType {
-		return false, fmt.Errorf("the header typ is %v, and it must be %s", header["typ"], signatureType)
+		return false, fmt.Errorf("the header typ must be %s", signatureType)
 	}
 	crit, present := header["crit"]
 	if !present {

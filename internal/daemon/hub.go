@@ -76,11 +76,23 @@ type hubStatus int
 
 func (s hubStatus) Error() string { return fmt.Sprintf("hub returned HTTP %d", s) }
 
+// net/http errors can contain data from the peer, including malformed status
+// lines and headers. Preserve error matching without exposing those bytes.
+type hubIOError struct {
+	message string
+	cause   error
+}
+
+func (e hubIOError) Error() string        { return e.message }
+func (e hubIOError) Is(target error) bool { return errors.Is(e.cause, target) }
+
 func (h hubClient) request(ctx context.Context, method, path string, body io.Reader, contentType, key string) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, h.origin+path, body)
 	if err != nil {
-		return nil, err
+		return nil, hubIOError{"could not create the hub request", err}
 	}
+	// net/http can log unsolicited bytes received on an idle HTTP connection.
+	req.Close = true
 	if path != "/.well-known/jwks.json" {
 		req.Header.Set("Authorization", "Bearer "+h.token)
 	}
@@ -92,7 +104,7 @@ func (h hubClient) request(ctx context.Context, method, path string, body io.Rea
 	}
 	response, err := hubHTTP.Do(req)
 	if err != nil {
-		return nil, err
+		return nil, hubIOError{"hub request failed", err}
 	}
 	if response.StatusCode != http.StatusOK {
 		response.Body.Close()
@@ -104,10 +116,13 @@ func (h hubClient) request(ctx context.Context, method, path string, body io.Rea
 func readResponse(response *http.Response, limit int64) ([]byte, error) {
 	defer response.Body.Close()
 	body, err := io.ReadAll(io.LimitReader(response.Body, limit+1))
-	if err == nil && int64(len(body)) > limit {
+	if err != nil {
+		return nil, hubIOError{"could not read the hub response body", err}
+	}
+	if int64(len(body)) > limit {
 		return nil, errors.New("hub response exceeds its size limit")
 	}
-	return body, err
+	return body, nil
 }
 
 // hubSource checks that the bundle verifies with the hub's advertised keys.
