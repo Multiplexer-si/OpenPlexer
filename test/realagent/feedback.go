@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -68,7 +70,7 @@ func texts(v any) string {
 				walk(item)
 			}
 		case map[string]any:
-			for _, k := range sortedKeys(v) {
+			for _, k := range slices.Sorted(maps.Keys(v)) {
 				walk(v[k])
 			}
 		}

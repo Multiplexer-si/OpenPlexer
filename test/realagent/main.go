@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/multiplexer-si/openplexer/test/internal/agentcli"
 )
 
 func main() {
@@ -68,7 +70,7 @@ func trustMain(args []string) int {
 		fmt.Fprintln(os.Stderr, err)
 		return 1
 	}
-	flags, err := hooksOverrides(filepath.Join(project, ".codex", "hooks.json"), nil)
+	flags, err := agentcli.HooksOverrides(filepath.Join(project, ".codex", "hooks.json"), nil)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 1

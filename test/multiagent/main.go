@@ -15,6 +15,8 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/multiplexer-si/openplexer/test/internal/agentcli"
 )
 
 const (
@@ -108,6 +110,9 @@ func (r *run) steps() []step {
 }
 
 func (r *run) prepare(ctx context.Context, record *report) error {
+	if !filepath.IsAbs(os.Getenv("HOME")) {
+		return errors.New("HOME must be set to an absolute path to use the existing agent sign-ins")
+	}
 	binaries := make([]string, 2)
 	for i, agent := range []string{"claude", "codex"} {
 		path, err := executable(agent)
@@ -140,6 +145,14 @@ func (r *run) prepare(ctx context.Context, record *report) error {
 		if err := p.prepare(); err != nil {
 			return err
 		}
+		probe, cancel := context.WithTimeout(ctx, 15*time.Second)
+		err := agentcli.CheckSignIn(probe, p.name, p.bin, p.project, p.env)
+		cancel()
+		if err != nil {
+			return err
+		}
+	}
+	for _, p := range []*participant{&r.a, &r.b} {
 		probe, cancel := context.WithTimeout(ctx, 10*time.Second)
 		version, err := runCommand(probe, p.project, p.env, p.bin, nil, "--version")
 		cancel()
@@ -148,15 +161,7 @@ func (r *run) prepare(ctx context.Context, record *report) error {
 		}
 		record.versions = append(record.versions, [2]string{p.vendor, strings.TrimSpace(string(version)) + " (model " + p.model + ")"})
 	}
-	for _, p := range []*participant{&r.a, &r.b} {
-		probe, cancel := context.WithTimeout(ctx, 15*time.Second)
-		err := p.authenticate(probe)
-		cancel()
-		if err != nil {
-			return err
-		}
-	}
-	r.session = newSessionID()
+	r.session = agentcli.NewSessionID()
 	r.deniedPath = "sentinel/blocked-" + strings.ToLower(rand.Text()[:8]) + ".txt"
 	bin := filepath.Join(r.dir, "bin")
 	if err := os.Mkdir(bin, 0o700); err != nil {
@@ -232,7 +237,7 @@ func (r *run) configure(ctx context.Context) error {
 }
 
 func (r *run) install(ctx context.Context) error {
-	if err := r.a.seedClaudeSettings(); err != nil {
+	if err := agentcli.SeedClaudeSettings(r.a.project); err != nil {
 		return err
 	}
 	for _, p := range []participant{r.a, r.b} {
