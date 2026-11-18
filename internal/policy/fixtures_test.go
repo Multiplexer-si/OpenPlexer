@@ -149,6 +149,9 @@ func runEvaluate(t *testing.T, bundle *Bundle, c fixtureCase) {
 		t.Fatal(err)
 	}
 	delete(got, "rule")
+	if want["throws"] == true {
+		want = map[string]any{"decision": "deny"}
+	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("result = %v, want %v (rule: %s)", got, want, result.Rule)
 	}

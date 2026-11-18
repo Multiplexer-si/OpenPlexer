@@ -19,8 +19,13 @@ function file(reference: Reference, name: string, description: string, policy: B
   const shared = asCommitted({ bundle: policy });
   const cases = authored.map(([caseName, why, query]): Case => {
     const input = asCommitted(query);
-    const { decision, area, rule } = reference.protocol.evaluate(shared.bundle, { ...input, now: new Date(input.now as string) });
-    return { name: caseName, why, input, expected: area === undefined ? { decision } : { decision, area }, informational: { rule } };
+    try {
+      const { decision, area, rule } = reference.protocol.evaluate(shared.bundle, { ...input, now: new Date(input.now as string) });
+      return { name: caseName, why, input, expected: area === undefined ? { decision } : { decision, area }, informational: { rule } };
+    } catch (error) {
+      if (!(error instanceof SyntaxError)) throw error;
+      return { name: caseName, why, input, expected: { throws: true }, informational: { error: error.message } };
+    }
   });
   return [fixturePath("policy", name), fixtureFile({ contract: "policy", operation: "evaluate", description, sources: SOURCES, shared, cases })];
 }
@@ -458,6 +463,104 @@ function globs(reference: Reference): [string, FixtureFile] {
   ]);
 }
 
+function classSyntax(reference: Reference): [string, FixtureFile] {
+  const patterns: [area: string, pattern: string][] = [
+    ["star", "a[]*]"],
+    ["alternative", "[]|x]"],
+    ["alternative-below", "secret/[]|x]"],
+    ["plus", "a[]+]"],
+    ["count", "a[]{0}]"],
+    ["count-of-letter", "[]|b{2}]"],
+    ["count-large", "[]|a{4000000000}]"],
+    ["brace", "a[]|{x}]"],
+    ["dot", "[]|a.]"],
+    ["inner-class", "[]|[ab]"],
+    ["group", "[]|(a|b)c]"],
+    ["two-classes", "[]|(]x[])?]"],
+    ["ahead", "[]|(?!a).]"],
+    ["behind", "[]|(?<=a)]"],
+    ["behind-b", "[]|(?<=b)]"],
+    ["not-behind", "[]|(?<!x)c]"],
+    ["behind-nested", "[]|(?<=(?<=a)b)c]"],
+    ["ahead-nested", "[]|(?=(?=a).b)..]"],
+    ["edges", "[]|^a$|]"],
+    ["named", "[]|(?<n>a)]"],
+    ["named-twice", "[]|(?<n>a)(?<n>b)]"],
+    ["named-digit", "[]|(?<1>a)]"],
+    ["literal-after", "[]|]*.pem"],
+    ["open-group", "[](]"],
+    ["close-group", "[])]"],
+    ["repeat", "[]**]"],
+    ["count-order", "[]{2,1}]"],
+    ["range-order", "src/[z-a]/**"],
+  ];
+  const policy = bundle({
+    areas: [
+      { name: "optional", patterns: ["optional:a[]?]"] },
+      ...patterns.map(([name, pattern]) => ({ name, patterns: [`${name}:${pattern}`], private: true })),
+    ],
+    roles: { dev: role({ write: ["optional"] }) },
+    members: { "mem-ana": "dev" },
+  });
+  const read = (repo: string, path: string): Query => ask("mem-ana", "read", path, { repo });
+  const write = (repo: string, path: string): Query => ask("mem-ana", "write", path, { repo });
+  const second = "The second open question of the README records the behavior.";
+  const long = "ab/".repeat(1333) + "c]";
+  return file(
+    reference,
+    "evaluate-class-syntax",
+    "A class whose first character is `]` and whose rest holds a syntax character of a regular expression, and a class range that is out of order. Each pattern applies only to the repository that has the name of its area, because a pattern that the reference fails on fails every read and write in its repository. Every area except `optional` is private, so for a read, deny with an area means that the pattern matched, and allow means that it did not.",
+    policy,
+    [
+      ["[]*] matches a lone ]", `The reference reads \`[]*\` as a class that matches nothing, any number of times, so \`a[]*]\` matches \`a]\`. ${second}`, read("star", "a]")],
+      ["[]*] needs the ]", "The `]` that closes the class is a literal character.", read("star", "a")],
+      ["[]?] matches a lone ]", `\`[]?\` is a class that matches nothing, zero or one time, so the role may write \`a]\`. ${second}`, write("optional", "a]")],
+      ["[]+] matches no path", "`[]+` needs the class that matches nothing at least once.", read("plus", "a]")],
+      ["[]{0}] matches a lone ]", "`{0}` is a count of zero.", read("count", "a]")],
+      ["a count applies to the letter before it", "`[]|b{2}]` matches a path that ends in `bb]`.", read("count-of-letter", "abb]")],
+      ["a count above the length of the path matches no path", "`[]|a{4000000000}]` needs four thousand million times `a`.", read("count-large", "aaa]")],
+      ["a { that starts no count is a literal character", "`{x}` is not a count, so `a[]|{x}]` matches a path that ends in `{x}]`.", read("brace", "{x}]")],
+      ["[]|x] matches a path that ends in x]", `The \`|\` splits the whole glob in two alternatives, and the second one is not held to the start of the path. ${second}`, read("alternative", "foo/x]")],
+      ["[]|x] does not match another path", "The second alternative is held to the end of the path.", read("alternative", "foo/x]y")],
+      ["[]|x] after a directory matches outside the directory", "The text of the glob before the class belongs to the first alternative, which matches nothing.", read("alternative-below", "other/x]")],
+      ["[]|x] after a directory does not match inside the directory by name", "The first alternative holds a class that matches nothing.", read("alternative-below", "secret/y")],
+      ["the glob after the class belongs to the last alternative", "`[]|]*.pem` matches a path that ends in `]`, a run of characters except `/`, and `.pem`.", read("literal-after", "keys/a]b.pem")],
+      ["the * after the class does not cross a slash", "The glob after the class keeps its glob meaning.", read("literal-after", "a]b/c.pem")],
+      ["a . in the rest of the class matches any character", "`[]|a.]` matches a path that ends in `a`, one character, and `]`.", read("dot", "xab]")],
+      ["a . in the rest of the class does not match a line feed", "The `.` of a regular expression matches no line terminator.", read("dot", "xa\n]")],
+      ["a [ in the rest of the class opens a class that the last ] closes", "`[]|[ab]` matches a path that ends in `a` or `b`.", read("inner-class", "src/B")],
+      ["a class in the rest of the class does not match another character", "`[]|[ab]` matches a path that ends in `a` or `b`.", read("inner-class", "src/c")],
+      ["a group in the rest of the class holds alternatives", "`[]|(a|b)c]` matches a path that ends in `ac]` or `bc]`.", read("group", "xbc]")],
+      ["a group does not match a character outside its alternatives", "`[]|(a|b)c]` matches a path that ends in `ac]` or `bc]`.", read("group", "xcc]")],
+      ["a group can open in one class and close in the next", "`[]|(]x[])?]` holds two classes. The group opens in the first and closes in the second, and it is optional, so the glob matches a path that ends in `]`.", read("two-classes", "a]")],
+      ["a negative lookahead holds when its text does not follow", "`[]|(?!a).]` matches a path that ends in a character other than `a`, and then `]`.", read("ahead", "b]")],
+      ["a negative lookahead fails when its text follows", "`[]|(?!a).]` does not match `a]`.", read("ahead", "a]")],
+      ["a lookbehind holds when its text comes before", "`[]|(?<=a)]` matches a path that ends in `a]`.", read("behind", "a]")],
+      ["a lookbehind fails when its text does not come before", "`[]|(?<=a)]` does not match `b]`.", read("behind", "b]")],
+      ["a lookbehind is tested at every position of a long path", "`[]|(?<=b)]` does not match a path of 4,001 characters that ends in `c]`. An implementation that tries every start for every position does not answer in time.", read("behind-b", long)],
+      ["a negative lookbehind is tested at every position of a long path", "`[]|(?<!x)c]` matches a path of 4,001 characters that ends in `c]`.", read("not-behind", long)],
+      ["a lookbehind inside a lookbehind holds", "`[]|(?<=(?<=a)b)c]` matches a path that ends in `abc]`.", read("behind-nested", "abc]")],
+      ["a lookbehind inside a lookbehind fails", "`[]|(?<=(?<=a)b)c]` does not match `bbc]`.", read("behind-nested", "bbc]")],
+      ["a lookahead inside a lookahead holds", "`[]|(?=(?=a).b)..]` matches a path that ends in `ab]`.", read("ahead-nested", "ab]")],
+      ["a lookahead inside a lookahead fails", "`[]|(?=(?=a).b)..]` does not match `bb]`.", read("ahead-nested", "bb]")],
+      ["^ and $ in the rest of the class hold a middle alternative to the whole path", "`[]|^a$|]` matches the path `a`.", read("edges", "A")],
+      ["^ in the rest of the class does not match inside the path", "`[]|^a$|]` does not match `ba`.", read("edges", "ba")],
+      ["a group with a name matches as a group without a name", "`[]|(?<n>a)]` matches a path that ends in `a]`.", read("named", "xa]")],
+      ["a group with a name does not match another character", "`[]|(?<n>a)]` does not match `b]`.", read("named", "b]")],
+      ["two groups with the same name make the reference fail on a read", "`[]|(?<n>a)(?<n>b)]` becomes a regular expression that gives one name to two groups.", read("named-twice", "x")],
+      ["a group name that starts with a digit makes the reference fail on a read", "`[]|(?<1>a)]` becomes a regular expression whose group name is not a name.", read("named-digit", "x")],
+      ["a group that is not closed makes the reference fail on a read", `\`[](]\` becomes a regular expression with a group that is not closed. ${second}`, read("open-group", "x")],
+      ["a ) that closes no group makes the reference fail on a read", "`[])]` becomes a regular expression with a `)` that closes no group.", read("close-group", "x")],
+      ["a second * makes the reference fail on a read", "`[]**]` becomes a regular expression with a `*` that has nothing to repeat.", read("repeat", "x")],
+      ["a count that is out of order makes the reference fail on a read", "`[]{2,1}]` becomes a regular expression whose count has a minimum above its maximum.", read("count-order", "x")],
+      ["a range that is out of order makes the reference fail on a read", `\`[z-a]\` is a range whose ends are out of order. ${second}`, read("range-order", "src/x")],
+      ["a range that is out of order makes the reference fail on a write", "The reference fails on every read and write in a repository that the pattern applies to.", write("range-order", "lib/x")],
+      ["the directory rule does not read the glob", "The path is the text of the pattern before `/**`, so the reference matches it without the regular expression, and it does not fail.", read("range-order", "src/[z-a]")],
+      ["a pattern that fails has no effect in another repository", "A pattern is read only for a repository that it applies to.", read("api", "src/x")],
+    ],
+  );
+}
+
 export function policyEvaluateFixtures(reference: Reference): [string, FixtureFile][] {
-  return [defaultsAndRoles, specificity, privateAndSystem, temporaryGrants, overrides, exec, gitPush, paths, globs].map((build) => build(reference));
+  return [defaultsAndRoles, specificity, privateAndSystem, temporaryGrants, overrides, exec, gitPush, paths, globs, classSyntax].map((build) => build(reference));
 }

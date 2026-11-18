@@ -1,0 +1,138 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "code": "behind",
+        "message": "outbound buffer too large; resume to catch up"
+      },
+      "name": "a code and a message is valid",
+      "why": "`code` and `message` are the required fields."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "client_event_id": "cev-17",
+        "code": "rate_limit",
+        "message": "too many events"
+      },
+      "name": "a client_event_id is valid",
+      "why": "An error that answers a post names the post."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "code": "made_up",
+        "message": "x"
+      },
+      "name": "a code that version 1 does not list is valid",
+      "why": "`code` is an open string, so that a newer hub can send a new code. The README says how a receiver treats it."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "code": "",
+        "message": ""
+      },
+      "name": "an empty code is valid",
+      "why": "The schema sets no minimum length for `code`."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "code: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "message": "x"
+      },
+      "name": "a missing code is invalid",
+      "why": "`code` is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "message: Invalid input: expected string, received undefined"
+      },
+      "input": {
+        "code": "behind"
+      },
+      "name": "a missing message is invalid",
+      "why": "`message` is required."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "code: Invalid input: expected string, received number"
+      },
+      "input": {
+        "code": 4401,
+        "message": "x"
+      },
+      "name": "a code that is a number is invalid",
+      "why": "`code` is a string."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "client_event_id: Invalid input: expected string, received number"
+      },
+      "input": {
+        "client_event_id": 17,
+        "code": "behind",
+        "message": "outbound buffer too large; resume to catch up"
+      },
+      "name": "a client_event_id that is a number is invalid",
+      "why": "`client_event_id` is a string."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "code": "behind",
+        "message": "outbound buffer too large; resume to catch up",
+        "retry_after": 5
+      },
+      "name": "an unknown field is valid",
+      "why": "The payload keeps fields that the schema does not name."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "informational": {
+        "reason": "(root): Invalid input: expected object, received null"
+      },
+      "input": null,
+      "name": "a null payload is invalid",
+      "why": "The payload is an object."
+    }
+  ],
+  "contract": "room",
+  "description": "Valid and invalid payloads of an `error` message.",
+  "operation": "validate",
+  "reference": {
+    "commit": "7d80045a",
+    "sources": [
+      "packages/protocol/src/ws-messages.ts"
+    ]
+  },
+  "schema": "urn:openplexer:spec:room:v1:error",
+  "version": 1
+}

@@ -96,6 +96,19 @@ func variants(value any) []any {
 		with := maps.Clone(value)
 		with["unknown_field"] = 1.0
 		out = append(out, with)
+		for _, key := range slices.Sorted(maps.Keys(value)) {
+			for _, cased := range []string{strings.ToUpper(key), strings.ToUpper(key[:1]) + key[1:]} {
+				if _, taken := value[cased]; taken || key == "" {
+					continue
+				}
+				renamed := maps.Clone(value)
+				delete(renamed, key)
+				renamed[cased] = value[key]
+				both := maps.Clone(value)
+				both[cased] = "x"
+				out = append(out, renamed, both)
+			}
+		}
 	case []any:
 		for i := range value {
 			for _, changed := range variants(value[i]) {
@@ -117,9 +130,10 @@ func TestParsersAgreeWithTheSchemas(t *testing.T) {
 		"bundle":     validators[idPrefix+"bundle"],
 		"override":   validators[idPrefix+"override"],
 		"eval-query": func(text []byte) error { _, err := ParseQuery(text); return err },
+		"jwks":       func(text []byte) error { _, err := ParseKeySet(text); return err },
 	}
 	seeds := map[string][]any{}
-	for name := range parsers {
+	for _, name := range []string{"bundle", "override", "eval-query"} {
 		examples, err := filepath.Glob(filepath.Join(specDir, "examples", name, "*.json"))
 		if err != nil || len(examples) == 0 {
 			t.Fatalf("found no example of %s: %v", name, err)
@@ -136,6 +150,8 @@ func TestParsersAgreeWithTheSchemas(t *testing.T) {
 			for _, c := range file.Cases {
 				seeds[name] = append(seeds[name], decodeDoubles(t, c.Input))
 			}
+		case "verify-signed-bundle":
+			seeds["jwks"] = append(seeds["jwks"], decodeDoubles(t, file.Shared.JWKS))
 		case "evaluate":
 			seeds["bundle"] = append(seeds["bundle"], decodeDoubles(t, file.Shared.Bundle))
 			for _, c := range file.Cases {
@@ -160,7 +176,7 @@ func TestParsersAgreeWithTheSchemas(t *testing.T) {
 				if (schemaErr == nil) != (parseErr == nil) {
 					t.Errorf("%s: the schema says %v and the parser says %v for %s", name, schemaErr, parseErr, text)
 				}
-				if parseErr != nil {
+				if parseErr != nil && name != "jwks" {
 					requireReasons(t, parseErr)
 				}
 			}
@@ -169,6 +185,24 @@ func TestParsersAgreeWithTheSchemas(t *testing.T) {
 			t.Errorf("%s: %d of %d documents are invalid, so the test compares one verdict only", name, invalid, compared)
 		}
 		t.Logf("%s: compared %d documents, %d of them invalid", name, compared, invalid)
+	}
+}
+
+func TestKeySetReadsAMemberNameWithItsCase(t *testing.T) {
+	key := `{"kty": "EC", "kid": "k"}`
+	for text, want := range map[string]int{
+		`{"keys": [], "Keys": [` + key + `]}`: 0,
+		`{"Keys": [], "keys": [` + key + `]}`: 1,
+		`{"keys": [` + key + `], "keys": []}`: 0,
+		`{"keys": [], "keys": [` + key + `]}`: 1,
+	} {
+		keys, err := ParseKeySet([]byte(text))
+		if err != nil || len(keys.keys) != want {
+			t.Errorf("%s: %d keys and the error %v, want %d keys", text, len(keys.keys), err, want)
+		}
+	}
+	if _, err := ParseKeySet([]byte(`{"Keys": [` + key + `]}`)); err == nil || err.Error() == "" {
+		t.Errorf("a key set with Keys and no keys is valid, and the schema requires keys")
 	}
 }
 

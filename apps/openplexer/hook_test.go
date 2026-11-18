@@ -238,6 +238,14 @@ func TestHookBlocksWritesThatCouldUndoIt(t *testing.T) {
 		{"a patch that adds a file to the home of OpenPlexer", "codex", callJSON("apply_patch", root, map[string]string{"command": "*** Begin Patch\n*** Add File: " + filepath.Join(gateHome, "policy.json") + "\n+{}\n*** End Patch"})},
 		{"a patch of the project hooks of Codex", "codex", callJSON("apply_patch", root, map[string]string{"command": "*** Begin Patch\n*** Delete File: .codex/hooks.json\n*** End Patch"})},
 		{"a shell write of the user hooks of Codex", "codex", callJSON("Bash", root, map[string]string{"command": "rm " + filepath.Join(os.Getenv("CODEX_HOME"), "hooks.json")})},
+		{"a move of the user settings of Claude", "claude-code", callJSON("Bash", root, map[string]string{"command": "mv " + claudeUser + " /private/tmp/s.json"})},
+		{"a move of the project settings of Claude", "claude-code", callJSON("Bash", root, map[string]string{"command": "mv .claude/settings.json src/s.json"})},
+		{"a move of the user hooks of Codex", "codex", callJSON("Bash", root, map[string]string{"command": "mv " + filepath.Join(os.Getenv("CODEX_HOME"), "hooks.json") + " /private/tmp/h.json"})},
+		{"a move of the user configuration of Codex", "codex", callJSON("Bash", root, map[string]string{"command": "mv " + filepath.Join(os.Getenv("CODEX_HOME"), "config.toml") + " src/c.toml"})},
+		{"a move of the stored policy", "claude-code", callJSON("Bash", root, map[string]string{"command": "mv " + filepath.Join(gateHome, "policy.json") + " src/p.json"})},
+		{"a move of an install record", "claude-code", callJSON("Bash", root, map[string]string{"command": "mv " + filepath.Join(gateHome, "installs", "0123.json") + " /tmp/r"})},
+		{"a move of the install journal", "codex", callJSON("Bash", root, map[string]string{"command": "mv " + filepath.Join(gateHome, "installs") + " src/i"})},
+		{"a git mv of the project hooks of Codex", "codex", callJSON("Bash", root, map[string]string{"command": "git mv .codex/hooks.json src/h.json"})},
 	} {
 		if status, reason, _ := c.hookCall(step.agent, step.call); status != 0 || !strings.Contains(reason, "OpenPlexer blocked a write to") {
 			t.Errorf("%s: exit %d, reason %q, want a denial before the policy", step.name, status, reason)
@@ -258,6 +266,7 @@ func TestHookPlacesPathsInTheProjectRootAboveTheWorkingDirectory(t *testing.T) {
 		{"claude-code Write of an absolute path outside src", "claude-code", callJSON("Write", web, map[string]string{"file_path": filepath.Join(root, "api", "server.ts"), "content": "x"}), "denied a write to api/server.ts"},
 		{"claude-code rm that climbs out of the working directory", "claude-code", callJSON("Bash", web, map[string]string{"command": "rm ../api/server.ts"}), "denied a write to api/server.ts"},
 		{"codex rm that climbs out of the working directory", "codex", callJSON("Bash", web, map[string]string{"command": "rm ../api/server.ts"}), "denied a write to api/server.ts"},
+		{"claude-code mv of a file outside src into src", "claude-code", callJSON("Bash", root, map[string]string{"command": "mv api/server.ts src/server.ts"}), "denied a write to api/server.ts"},
 		{"claude-code Write that climbs into src", "claude-code", callJSON("Write", web, map[string]string{"file_path": "../src/a.go", "content": "x"}), ""},
 		{"claude-code Write of a relative path in the working directory", "claude-code", callJSON("Write", web, map[string]string{"file_path": "a.ts", "content": "x"}), "denied a write to web/a.ts"},
 	} {
@@ -275,8 +284,8 @@ func TestHookBlocksAWriteWhenItFindsNoProjectRoot(t *testing.T) {
 		t.Fatal(err)
 	}
 	call := callJSON("Write", loose, map[string]string{"file_path": "src/a.go", "content": "x"})
-	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, "no project root") {
-		t.Fatalf("exit %d, reason %q, want a denial that names the missing project root", status, reason)
+	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, "no project root") || !strings.Contains(reason, "openplexer install claude-code --project <dir>") {
+		t.Fatalf("exit %d, reason %q, want a denial that names the missing project root and how to record one", status, reason)
 	}
 }
 

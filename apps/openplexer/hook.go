@@ -52,7 +52,7 @@ func (c command) projectRoot(agent, userHome string) func(cwd string) (string, e
 	return func(cwd string) (string, error) {
 		recorded, err := c.journal().Roots()
 		if err != nil {
-			return "", fmt.Errorf("the record of the installed projects cannot be read: %w. Run `openplexer install %s --project <dir>` again", err, agent)
+			return "", fmt.Errorf("the record of the installed projects cannot be read: %w. Make it readable or delete it yourself, then run `openplexer install %s --project <dir>` again for a project whose record you deleted", err, agent)
 		}
 		root, err := hook.Roots{Home: userHome, Recorded: recorded}.Find(cwd)
 		if err != nil {

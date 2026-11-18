@@ -54,15 +54,23 @@ interface Operation {
 
 const strict = (properties: Schema, required: string[] = Object.keys(properties)): Schema => ({ type: "object", properties, required, additionalProperties: false });
 const hex64: Schema = { type: "string", pattern: "^[0-9a-f]{64}$" };
+const seq: Schema = { type: "integer", minimum: 0 };
+const overlap = {
+  expected: { oneOf: [strict({ overlap: { type: "boolean" } }), strict({ throws: { const: true } })] },
+  informational: strict({ error: { type: "string" } }),
+};
+const OVERLAP_THROWS = "An `expected` of `throws` means that the reference returns no result, and an implementation must report an overlap.";
 
 const OPERATIONS: Record<string, Operation> = {
   evaluate: {
     contract: ["policy"],
-    description: "Evaluate the query in `input` against the bundle in `shared`.",
+    description: "Evaluate the query in `input` against the bundle in `shared`. An `expected` of `throws` means that the reference returns no result. The contract does not define one, and an implementation must deny with no `area` or fail.",
     shared: strict({ bundle: { $ref: schemaId("policy", "bundle") } }),
     input: { $ref: schemaId("policy", "eval-query") },
-    expected: strict({ decision: { enum: ["allow", "deny"] }, area: { type: "string" } }, ["decision"]),
-    informational: strict({ rule: { type: "string" } }),
+    expected: {
+      oneOf: [strict({ decision: { enum: ["allow", "deny"] }, area: { type: "string" } }, ["decision"]), strict({ throws: { const: true } })],
+    },
+    informational: { oneOf: [strict({ rule: { type: "string" } }), strict({ error: { type: "string" } })] },
   },
   validate: {
     contract: ["policy", "room"],
@@ -74,15 +82,51 @@ const OPERATIONS: Record<string, Operation> = {
   },
   "patterns-overlap": {
     contract: ["room"],
-    description: "Decide whether two claim patterns overlap.",
+    description: `Decide whether two claim patterns overlap. ${OVERLAP_THROWS}`,
     input: strict({ a: { type: "string" }, b: { type: "string" } }),
-    expected: strict({ overlap: { type: "boolean" } }),
+    ...overlap,
   },
   "path-sets-overlap": {
     contract: ["room"],
-    description: "Decide whether any pattern of one claim overlaps any pattern of another claim.",
+    description: `Decide whether any pattern of one claim overlaps any pattern of another claim. ${OVERLAP_THROWS}`,
     input: strict({ a: { type: "array", items: { type: "string" } }, b: { type: "array", items: { type: "string" } } }),
-    expected: strict({ overlap: { type: "boolean" } }),
+    ...overlap,
+  },
+  deliver: {
+    contract: ["room"],
+    description: "Run one subscription of the hub to one Room, from `input.since`, through `input.steps`, and list the `seq` of each event that it sends.",
+    input: strict({
+      since: seq,
+      steps: {
+        type: "array",
+        items: { oneOf: [strict({ step: { enum: ["replay", "live"] }, seq }), strict({ step: { const: "go-live" } })] },
+      },
+    }),
+    expected: strict({ sent: { type: "array", items: seq }, last_seq: seq }),
+  },
+  "active-claims": {
+    contract: ["room"],
+    description: "Apply the events in `input.events`, in the order given, to the claims of one Room, and list the claims that are active at `input.now`. The receiver gets every event at `input.now`.",
+    input: strict({ events: { type: "array", items: { $ref: schemaId("room", "room-event") } }, now: { type: "string" } }),
+    expected: strict({
+      claims: {
+        type: "array",
+        items: strict({
+          claim_id: { type: "string" },
+          paths: { type: "array", items: { type: "string" } },
+          intent: { type: "string" },
+          expires_at: { type: "string" },
+          agent_session_id: { type: "string" },
+          agent_vendor: { type: "string" },
+        }),
+      },
+    }),
+  },
+  "close-code": {
+    contract: ["room"],
+    description: "Give the WebSocket close code that the hub sends after an error with the code in `input.code`, or null if the hub keeps the connection.",
+    input: strict({ code: { type: "string" } }),
+    expected: strict({ close_code: { oneOf: [{ type: "integer" }, { type: "null" }] } }),
   },
   canonicalize: {
     contract: ["canonical-json"],

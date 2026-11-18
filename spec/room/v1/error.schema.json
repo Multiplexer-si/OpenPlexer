@@ -1,0 +1,26 @@
+{
+  "$id": "urn:openplexer:spec:room:v1:error",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": {},
+  "description": "What the hub sends when it refuses a message or stops sending. Generated from the reference.",
+  "properties": {
+    "client_event_id": {
+      "description": "The id that the client gave to the post that this error answers.",
+      "type": "string"
+    },
+    "code": {
+      "description": "A stable token that names the error. The README lists the codes of version 1.",
+      "type": "string"
+    },
+    "message": {
+      "description": "A sentence for a person. The wording is not part of the contract.",
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "message"
+  ],
+  "title": "Payload of an error message",
+  "type": "object"
+}

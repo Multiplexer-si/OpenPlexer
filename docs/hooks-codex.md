@@ -82,17 +82,45 @@ Every other byte stays as it was, including key order, a top-level `description`
 
 ## The project root
 
-The hook reads each path of a call from the project root. It finds the root in this order.
+The hook reads each path of a call from a project root. It finds the root of `cwd`, and the root of each file that the call writes, in this order.
 
 1. The nearest directory at or above `cwd` that a project-scope `install` recorded. A hook of the user scope uses the record too. A submodule, a worktree, or another `.git` below a recorded root does not move the root, wherever the agent runs `cd`.
-2. With no recorded root, the one directory at or above `cwd` that holds `.git`.
-3. With no `.git`, the one directory that holds `.codex`, `.claude`, or `.mcp.json`.
+2. With no recorded root, the outermost directory at or above `cwd` that holds `.git`. A submodule lies below that directory, and so does a repository that `git init` or `mkdir` makes in a subfolder, so neither moves the root. In a submodule at `web`, a write to `web/src/a.go` is judged as `web/src/a.go`, and `rm ../api/server.ts` is judged as `api/server.ts`.
+3. A linked worktree of that repository, while `cwd` is inside the worktree. The root is then the top directory of the worktree. In `.claude/worktrees/x`, a write to `src/a.go` is judged as `src/a.go`.
+4. With no `.git`, the one directory that holds `.codex`, `.claude`, or `.mcp.json`.
 
 Your home directory and the root of the file system are never the project root.
 
-The hook does not choose between two directories. If two directories at or above `cwd` hold `.git`, or if a directory above the one that holds `.git` holds only an agent directory, the hook denies every write and every judged command, and the reason names the directories. This happens inside a submodule and inside a worktree that lies in its repository. Record the root that you mean with `openplexer install codex --project <dir>`. For a worktree that is a project of its own, record the worktree.
+The hook reads the directories only. It does not run `git`, and it does not read `GIT_DIR` or `GIT_WORK_TREE`. A bare repository holds no `.git`, so it is not a root.
+
+A `.git` file alone does not make a linked worktree, because an agent can write that file. The git directory of the outermost repository must register the worktree. The `.git` file must name a directory in the `worktrees` directory of that git directory, the `commondir` file there must name the git directory, and the `gitdir` file there must name the `.git` file. The root stays the outermost repository for each of these:
+
+- a worktree of a submodule
+- a worktree of a repository other than the outermost one
+- a worktree that you moved without `git worktree repair`
+
+The hook judges each write by the project that holds the written file, which is not always the project of `cwd`.
+
+- From a linked worktree at `.claude/worktrees/x`, a write to `../../../src/a.go` is a write to the main checkout, and it is judged as `src/a.go`. An edit of `.claude/settings.json` of the main checkout is denied by the guard.
+- From a recorded project that lies inside another recorded project, a write into the outer project is judged from the outer root.
+- A write to a file that no project holds is not judged. The existing implementation does the same.
+- A write to a file whose project the hook cannot tell is denied, as the list below describes for `cwd`.
+
+The hook denies every write and every judged command in these cases, and the reason gives the `install` command that records the root:
+
+- No directory at or above `cwd` holds `.git` or an agent directory.
+- Two directories hold an agent directory and none holds `.git`.
+- A directory above the outermost `.git` holds only an agent directory. The reason names both directories.
+
+Record the root that you mean with `openplexer install codex --project <dir>`.
+
+You do not need to record a linked worktree or a submodule. A linked worktree is its own root, and the hook judges a write from it into the main checkout by the main checkout, so a write to `<repo>/.codex/hooks.json` is denied by the guard. A write that climbs out of a submodule, or out of a recorded directory inside another project, is judged by the project that holds the written file. A recorded root wins over the git layout. So with the repository recorded, the hook reads a file of a worktree as a path of the repository, such as `.claude/worktrees/x/src/a.go`, and the policy denies the write unless an area holds that path.
 
 `uninstall` with the same `--project` removes the record. If you move the project, run `install` again.
+
+If a record cannot be read, the hook denies every write and every judged command, and the reason names the file. `install` for the same hook file writes the record again. A file in `installs` that belongs to no install, or to a hook file that you no longer have, stays damaged, so delete it yourself. The hook does not let an agent delete it. The loss of a record costs only what it held: run `openplexer install codex --project <dir>` again to record the root, and with no record `uninstall` leaves `{}` in a file that `install` created.
+
+On macOS and Linux, `install` and `uninstall` lock the `installs` directory while they run, so two of them at the same time do not lose a record.
 
 ## What the hook does not see
 
@@ -102,11 +130,13 @@ Each item is an action that Codex can take and the hook cannot see, or a way to 
 
 **Tools that the matcher does not name.** An MCP tool and any other local tool can write a file, and the hook does not run for them. The Codex documentation says that hosted tools such as `WebSearch` do not use the hook path, and that some specialized tool paths can opt out of it. It calls the hooks a guardrail and not a complete enforcement boundary.
 
-**Writes that the reading of a command does not find.** The hook finds the files that a shell command names as a redirection target, as an argument of `tee`, `touch`, `rm`, `mkdir`, `rmdir`, `truncate`, as the destination of `mv`, `cp`, `ln`, and `install`, and as a file of `sed -i`. It does not find these.
+**Writes that the reading of a command does not find.** The hook finds the files that a shell command names as a redirection target, as an argument of `tee`, `touch`, `rm`, `mkdir`, `rmdir`, `truncate`, as the destination of `cp`, `ln`, and `install`, as a source or the destination of `mv` and of `git mv`, and as a file of `sed -i`. A move takes its source away, so the source is a write. It does not find these.
 
 - A write by a program that a command starts, such as `npm test`, `make`, `python script.py`, or `bash -c "..."`.
-- A write by a command that is not in the list, such as `git checkout`, `git apply`, `patch`, `tar`, `unzip`, `dd`, `curl -o`, or `wget -O`.
+- A write by a command that is not in the list, such as `git rm`, `git checkout`, `git apply`, `patch`, `tar`, `unzip`, `dd`, `curl -o`, or `wget -O`.
+- A command that follows another word or an opening parenthesis, such as `sudo rm`, `env rm`, `X=1 rm`, `(rm ...)`, or `then rm`.
 - A target with a variable, a command substitution, or a wildcard.
+- A source of `mv` under `~` is read as a path of the project, as every `~` in a shell command is, so `mv ~/Downloads/a.txt src/` is judged as a write to `~/Downloads/a.txt` and a policy with no area for it denies the call. Spell the path in full.
 - A relative path after `cd`. The hook reads it from the directory of the hook call.
 
 There is no check after the command. A write that the hook did not name stays unseen.
@@ -119,7 +149,7 @@ There is no check after the command. A write that the hook did not name stays un
 
 **Commands that the policy matches by their first words.** A granted `npm test` allows whatever script `npm test` runs. A granted command with a quoted `;`, `|`, `&`, `<`, or `>` is denied, as [the open questions of the adapter contract](../spec/adapter/README.md#open-questions) say.
 
-**A hook that does not run.** Codex runs no hook of a project until the project is trusted and the hook is trusted, and it skips a changed hook until you trust it again. A person who sets `hooks = false` under `[features]` in `config.toml` turns every hook off. The hook denies a write through `apply_patch` or `Bash` to `hooks.json` and `config.toml` of the user and of the project, to the settings files of Claude Code, and to the OpenPlexer home, whatever the policy says. A write by anything else is not seen.
+**A hook that does not run.** Codex runs no hook of a project until the project is trusted and the hook is trusted, and it skips a changed hook until you trust it again. A person who sets `hooks = false` under `[features]` in `config.toml` turns every hook off. The hook denies a write through `apply_patch` or `Bash` to `hooks.json` and `config.toml` of the user and of the project, to the settings files of Claude Code, and to the OpenPlexer home, whatever the policy says. For a shell command, that is a write that the hook finds, as the list above says, and it includes a move of one of these files to another place. A write that the hook does not find is not seen. More ways reach these files: a command that removes or moves a directory above a settings file, such as `rm -rf ~/.claude`, a command that copies or moves a file into that directory and names only the directory, such as `cp settings.json ~/.claude/`, a path through a symbolic link, and on macOS a path through `/System/Volumes/Data` or the `/tmp` spelling of `/private/tmp`. [The trust model](trust-model.md#decisions-settled-by-install-and-the-hook-command) gives the list. A write by anything else than these tools is not seen.
 
 **A failed hook.** The Codex documentation says that a `PreToolUse` error, a timeout, or a malformed response can let the tool run. Codex has no option that blocks the call when a hook fails, so a hook that cannot start, is killed, or runs past its `timeout` lets the call run. The hook blocks on its own errors with exit status 2, and it ends itself with exit status 2 after 4 seconds, before the `timeout` of 5 seconds. It cannot block when the binary is missing or the process never starts.
 
@@ -129,6 +159,6 @@ There is no check after the command. A write that the hook did not name stays un
 
 **The project root.** The hook reads the paths of a call from the project root, as [The project root](#the-project-root) describes. A call that the hook cannot place in a project is denied, if it writes a file or runs a judged command.
 
-**A path in another case.** On a file system that ignores case, a path that spells the project root in another case names a file of the project, and the hook reads it as a path outside the project. With the root at `/Users/dev/CaseProj`, a write to `/Users/dev/caseproj/api/server.ts` is not judged. The existing implementation reads the path the same way.
+**A path in another spelling.** The hook finds the project of a written file from the path as the call spells it. On a file system that ignores case, it finds the same project for a path in another case. With the root at `/Users/dev/CaseProj`, a write to `/Users/dev/caseproj/api/server.ts` is judged as `api/server.ts`. A path through a symbolic link to a project directory is judged in the same way. A path through a symbolic link that lies outside every project, to a file inside a project, is not judged.
 
 **The repository.** The hook does not know which repository of the bundle the project is. The gate then allows a write only when every repository of the bundle allows it, as [Local policy gate](local-policy.md) describes.
