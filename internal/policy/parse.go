@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode/utf16"
 )
 
 // Issue is one reason why a document is not valid. Path names the place in
@@ -76,12 +77,49 @@ func parse[T any](text []byte, read func(*reader, any) T) (T, error) {
 	if decoder.More() {
 		return none, &ValidationError{Issues: []Issue{{Reason: "has text after the JSON value"}}}
 	}
+	if hasLoneSurrogate(text[:decoder.InputOffset()]) {
+		return none, &ValidationError{Issues: []Issue{{Reason: `holds an escape of a lone surrogate, such as \ud800, which is not a character`}}}
+	}
 	r := &reader{}
 	value := read(r, doc)
 	if len(r.issues) > 0 {
 		return none, &ValidationError{Issues: r.issues}
 	}
 	return value, nil
+}
+
+// hasLoneSurrogate reports whether JSON text holds a \u escape of a
+// surrogate that is not half of a pair. encoding/json reads such an escape
+// as U+FFFD, so a pattern or a path would not be the text of the document.
+func hasLoneSurrogate(text []byte) bool {
+	for i := 0; i < len(text); i++ {
+		if text[i] != '\\' {
+			continue
+		}
+		unit, isUnit := escapedUnit(text[i:])
+		if !isUnit {
+			i++
+			continue
+		}
+		i += 5
+		if !utf16.IsSurrogate(unit) {
+			continue
+		}
+		low, _ := escapedUnit(text[i+1:])
+		if utf16.DecodeRune(unit, low) == '\uFFFD' {
+			return true
+		}
+		i += 6
+	}
+	return false
+}
+
+func escapedUnit(text []byte) (rune, bool) {
+	if len(text) < 6 || text[0] != '\\' || text[1] != 'u' {
+		return 0, false
+	}
+	unit, err := strconv.ParseUint(string(text[2:6]), 16, 16)
+	return rune(unit), err == nil
 }
 
 type reader struct {

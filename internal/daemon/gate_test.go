@@ -270,7 +270,8 @@ func TestGateEnforcesTheSignedBundleExample(t *testing.T) {
 // Every evaluate case that has no override runs through the gate: the
 // shared bundle is signed and loaded, the member of the case is the local
 // identity, and the time of the case is the clock. The decision and the
-// area must be the ones that the reference gave. A case with overrides is
+// area must be the ones that the reference gave. Where the reference throws,
+// the gate must deny with no area. A case with overrides is
 // left out, because the Phase 1 gate has no source of overrides.
 func TestGateGivesTheResultOfEveryEvaluateFixture(t *testing.T) {
 	paths, err := filepath.Glob(filepath.Join(specDir, "policy", "v1", "fixtures", "evaluate-*.json"))
@@ -304,8 +305,12 @@ func TestGateGivesTheResultOfEveryEvaluateFixture(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if got := decisionOf(t, verdict); !reflect.DeepEqual(got, c.Expected) {
-				t.Errorf("%s: %s: result = %v, want %v", filepath.Base(path), c.Name, got, c.Expected)
+			want := c.Expected
+			if want["throws"] == true {
+				want = map[string]any{"decision": "deny"}
+			}
+			if got := decisionOf(t, verdict); !reflect.DeepEqual(got, want) {
+				t.Errorf("%s: %s: result = %v, want %v", filepath.Base(path), c.Name, got, want)
 			}
 			ran++
 		}
@@ -578,6 +583,24 @@ func TestAReadOrWriteWithNoRepoMustBeAllowedInEveryRepo(t *testing.T) {
 	last := records[len(records)-1]
 	if targets, _ := last.Meta["targets"].([]any); last.Action != "policy.denied" || last.Target != "src/b.ts" || len(targets) != 3 {
 		t.Errorf("the audit record of the call is %+v, want policy.denied for src/b.ts with three targets", last)
+	}
+}
+
+func TestTheEvaluationsOfOneCallShareOneBudget(t *testing.T) {
+	keys := newSigner(t)
+	home := t.TempDir()
+	configure(t, home, Settings{KeySet: keys.keySet(t), MemberID: "mem-ana"})
+	bundle := []byte(`{"version": 1, "project_id": "p", "repos": ["r0", "r1", "r2", "r3", "r4", "r5", "r6", "r7", "r8", "r9"], "areas": [{"name": "slow", "patterns": ["*:[]|(?<=(?:.*){2972})]"]}], "roles": {"dev": {"read": [], "write": ["slow"], "exec": []}}, "members": {"mem-ana": "dev"}}`)
+	gate := open(t, home, loadedAt)
+	load(t, gate, keys.sign(t, bundle))
+	path := strings.Repeat("a", 4095) + "]"
+	verdict, err := gate.Decide("codex", policy.Query{Action: policy.Write, Repo: "r0", Path: path})
+	if result, _ := verdict.Result(); err != nil || result.Decision != policy.Allow {
+		t.Fatalf("a write in one repo: %+v, %v, want allow", result, err)
+	}
+	verdict, err = gate.Decide("codex", policy.Query{Action: policy.Write, Path: path})
+	if result, _ := verdict.Result(); err != nil || result.Decision != policy.Deny || !strings.Contains(result.Rule, "budget") {
+		t.Fatalf("a write with no repo in ten repos: %+v, %v, want deny, because the call is over its budget", result, err)
 	}
 }
 

@@ -1,6 +1,7 @@
 package policy
 
 import (
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -11,8 +12,43 @@ import (
 
 // Evaluate decides one action against a bundle, under the rules of
 // spec/policy/README.md. It reads no file, no network, and no clock. Every
-// result has a rule, which gives the reason.
+// result has a rule, which gives the reason. With no bundle, the result is
+// deny.
 func Evaluate(bundle *Bundle, q Query) Result {
+	return NewBudget().Evaluate(bundle, q)
+}
+
+// maxWork is the work that one call of an agent may do, in steps of one
+// state of an automaton over one character of a path. On the machine that
+// measured it, the work of maxWork takes about 260 ms, and a hook must
+// answer within 3 s.
+const maxWork = 100_000_000
+
+var errOverBudget = fmt.Errorf("the evaluation is over its budget: the globs that apply to the path, matched against it, are more than %d steps of work", maxWork)
+
+// A Budget is the work that the evaluations of one call of an agent may
+// still do. A glob that a read or a write matches against a path costs the
+// length of the path plus one, times the states of the automaton of the
+// glob. An evaluation that would go over the budget denies.
+type Budget struct{ left int }
+
+// NewBudget returns the budget of one call.
+func NewBudget() *Budget { return &Budget{left: maxWork} }
+
+func (b *Budget) spend(work int) error {
+	if work > b.left {
+		b.left = 0
+		return errOverBudget
+	}
+	b.left -= work
+	return nil
+}
+
+// Evaluate is [Evaluate] within the budget b.
+func (b *Budget) Evaluate(bundle *Bundle, q Query) Result {
+	if bundle == nil {
+		return deny("there is no policy bundle")
+	}
 	roleName, role := bundle.roleOf(q.Member)
 	switch q.Action {
 	case Exec:
@@ -20,7 +56,7 @@ func Evaluate(bundle *Bundle, q Query) Result {
 	case GitPush:
 		return evaluatePush(q, roleName, role)
 	case Read, Write:
-		return evaluateFile(bundle, q, roleName, role)
+		return evaluateFile(bundle, q, roleName, role, b)
 	}
 	return deny(fmt.Sprintf("%q is not an action", q.Action))
 }
@@ -97,12 +133,15 @@ func evaluatePush(q Query, roleName string, role *Role) Result {
 	return deny(fmt.Sprintf("git push to %s is not granted to role %s", q.Repo, roleName))
 }
 
-func evaluateFile(bundle *Bundle, q Query, roleName string, role *Role) Result {
+func evaluateFile(bundle *Bundle, q Query, roleName string, role *Role, budget *Budget) Result {
 	path, ok := canonicalPath(q.Path)
 	if !ok {
 		return deny("path is absolute or escapes the project root")
 	}
-	matched, err := bundle.matchAreas(q.Repo, path)
+	if utf16Length(path) > longestPath {
+		return deny(fmt.Sprintf("path is longer than %d characters", longestPath))
+	}
+	matched, err := bundle.matchAreas(q.Repo, path, budget)
 	if err != nil {
 		return deny(err.Error())
 	}
@@ -186,7 +225,7 @@ type match struct {
 	specificity
 }
 
-func (b *Bundle) matchAreas(repo, path string) ([]match, error) {
+func (b *Bundle) matchAreas(repo, path string, budget *Budget) ([]match, error) {
 	repoLower, pathLower := lowercase(repo), lowercase(path)
 	units := utf16.Encode([]rune(path))
 	var matched []match
@@ -204,11 +243,18 @@ func (b *Bundle) matchAreas(repo, path string) ([]match, error) {
 			glob = normalizeGlob(glob)
 			directory, isTree := strings.CutSuffix(glob, "/**")
 			if !isTree || lowercase(directory) != pathLower {
-				tokens, err := compileGlob(glob)
+				compiled, err := compileGlob(glob)
+				matches := false
+				if err == nil {
+					matches, err = globMatches(compiled, units, budget)
+				}
+				if errors.Is(err, errOverBudget) {
+					return nil, err
+				}
 				if err != nil {
 					return nil, fmt.Errorf("pattern %q of area %q is not a glob: %w", pattern, area.Name, err)
 				}
-				if !globMatches(tokens, units) {
+				if !matches {
 					continue
 				}
 			}
