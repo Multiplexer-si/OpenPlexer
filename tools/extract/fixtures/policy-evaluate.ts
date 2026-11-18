@@ -479,6 +479,10 @@ function classSyntax(reference: Reference): [string, FixtureFile] {
     ["two-classes", "[]|(]x[])?]"],
     ["ahead", "[]|(?!a).]"],
     ["behind", "[]|(?<=a)]"],
+    ["behind-b", "[]|(?<=b)]"],
+    ["not-behind", "[]|(?<!x)c]"],
+    ["behind-nested", "[]|(?<=(?<=a)b)c]"],
+    ["ahead-nested", "[]|(?=(?=a).b)..]"],
     ["edges", "[]|^a$|]"],
     ["named", "[]|(?<n>a)]"],
     ["named-twice", "[]|(?<n>a)(?<n>b)]"],
@@ -501,6 +505,7 @@ function classSyntax(reference: Reference): [string, FixtureFile] {
   const read = (repo: string, path: string): Query => ask("mem-ana", "read", path, { repo });
   const write = (repo: string, path: string): Query => ask("mem-ana", "write", path, { repo });
   const second = "The second open question of the README records the behavior.";
+  const long = "ab/".repeat(1333) + "c]";
   return file(
     reference,
     "evaluate-class-syntax",
@@ -532,6 +537,12 @@ function classSyntax(reference: Reference): [string, FixtureFile] {
       ["a negative lookahead fails when its text follows", "`[]|(?!a).]` does not match `a]`.", read("ahead", "a]")],
       ["a lookbehind holds when its text comes before", "`[]|(?<=a)]` matches a path that ends in `a]`.", read("behind", "a]")],
       ["a lookbehind fails when its text does not come before", "`[]|(?<=a)]` does not match `b]`.", read("behind", "b]")],
+      ["a lookbehind is tested at every position of a long path", "`[]|(?<=b)]` does not match a path of 4,001 characters that ends in `c]`. An implementation that tries every start for every position does not answer in time.", read("behind-b", long)],
+      ["a negative lookbehind is tested at every position of a long path", "`[]|(?<!x)c]` matches a path of 4,001 characters that ends in `c]`.", read("not-behind", long)],
+      ["a lookbehind inside a lookbehind holds", "`[]|(?<=(?<=a)b)c]` matches a path that ends in `abc]`.", read("behind-nested", "abc]")],
+      ["a lookbehind inside a lookbehind fails", "`[]|(?<=(?<=a)b)c]` does not match `bbc]`.", read("behind-nested", "bbc]")],
+      ["a lookahead inside a lookahead holds", "`[]|(?=(?=a).b)..]` matches a path that ends in `ab]`.", read("ahead-nested", "ab]")],
+      ["a lookahead inside a lookahead fails", "`[]|(?=(?=a).b)..]` does not match `bb]`.", read("ahead-nested", "bb]")],
       ["^ and $ in the rest of the class hold a middle alternative to the whole path", "`[]|^a$|]` matches the path `a`.", read("edges", "A")],
       ["^ in the rest of the class does not match inside the path", "`[]|^a$|]` does not match `ba`.", read("edges", "ba")],
       ["a group with a name matches as a group without a name", "`[]|(?<n>a)]` matches a path that ends in `a]`.", read("named", "xa]")],

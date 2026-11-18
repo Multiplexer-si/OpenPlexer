@@ -441,6 +441,111 @@
     },
     {
       "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/c]",
+        "repo": "behind-b"
+      },
+      "name": "a lookbehind is tested at every position of a long path",
+      "why": "`[]|(?<=b)]` does not match a path of 4,001 characters that ends in `c]`. An implementation that tries every start for every position does not answer in time."
+    },
+    {
+      "expected": {
+        "area": "not-behind",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"not-behind\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/ab/c]",
+        "repo": "not-behind"
+      },
+      "name": "a negative lookbehind is tested at every position of a long path",
+      "why": "`[]|(?<!x)c]` matches a path of 4,001 characters that ends in `c]`."
+    },
+    {
+      "expected": {
+        "area": "behind-nested",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"behind-nested\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "abc]",
+        "repo": "behind-nested"
+      },
+      "name": "a lookbehind inside a lookbehind holds",
+      "why": "`[]|(?<=(?<=a)b)c]` matches a path that ends in `abc]`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "bbc]",
+        "repo": "behind-nested"
+      },
+      "name": "a lookbehind inside a lookbehind fails",
+      "why": "`[]|(?<=(?<=a)b)c]` does not match `bbc]`."
+    },
+    {
+      "expected": {
+        "area": "ahead-nested",
+        "decision": "deny"
+      },
+      "informational": {
+        "rule": "area \"ahead-nested\" is private and not readable by any role"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "ab]",
+        "repo": "ahead-nested"
+      },
+      "name": "a lookahead inside a lookahead holds",
+      "why": "`[]|(?=(?=a).b)..]` matches a path that ends in `ab]`."
+    },
+    {
+      "expected": {
+        "decision": "allow"
+      },
+      "informational": {
+        "rule": "path is in no area; reads are allowed by default"
+      },
+      "input": {
+        "action": "read",
+        "member": "mem-ana",
+        "now": "2026-01-15T12:00:00.000Z",
+        "path": "bb]",
+        "repo": "ahead-nested"
+      },
+      "name": "a lookahead inside a lookahead fails",
+      "why": "`[]|(?=(?=a).b)..]` does not match `bb]`."
+    },
+    {
+      "expected": {
         "area": "edges",
         "decision": "deny"
       },
@@ -795,6 +900,34 @@
           "name": "behind",
           "patterns": [
             "behind:[]|(?<=a)]"
+          ],
+          "private": true
+        },
+        {
+          "name": "behind-b",
+          "patterns": [
+            "behind-b:[]|(?<=b)]"
+          ],
+          "private": true
+        },
+        {
+          "name": "not-behind",
+          "patterns": [
+            "not-behind:[]|(?<!x)c]"
+          ],
+          "private": true
+        },
+        {
+          "name": "behind-nested",
+          "patterns": [
+            "behind-nested:[]|(?<=(?<=a)b)c]"
+          ],
+          "private": true
+        },
+        {
+          "name": "ahead-nested",
+          "patterns": [
+            "ahead-nested:[]|(?=(?=a).b)..]"
           ],
           "private": true
         },
