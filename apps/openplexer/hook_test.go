@@ -230,19 +230,41 @@ func TestHookBlocksWritesThatCouldUndoIt(t *testing.T) {
 	root := project(t)
 	gateHome := os.Getenv("OPENPLEXER_HOME")
 	claudeUser := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), "settings.json")
-	for name, call := range map[string]string{
-		"a Write of the stored policy":             callJSON("Write", root, map[string]string{"file_path": filepath.Join(gateHome, "policy.json"), "content": "{}"}),
-		"a shell write of the key set":             callJSON("Bash", root, map[string]string{"command": "cp keys.json " + filepath.Join(gateHome, "keys.json")}),
-		"a Write of the user settings of Claude":   callJSON("Write", root, map[string]string{"file_path": claudeUser, "content": "{}"}),
-		"a patch of the project hooks of Codex":    callJSON("apply_patch", root, map[string]string{"command": "*** Begin Patch\n*** Delete File: .codex/hooks.json\n*** End Patch"}),
-		"a shell write of the user hooks of Codex": callJSON("Bash", root, map[string]string{"command": "rm " + filepath.Join(os.Getenv("CODEX_HOME"), "hooks.json")}),
+	for _, step := range []struct{ name, agent, call string }{
+		{"a Write of the stored policy", "claude-code", callJSON("Write", root, map[string]string{"file_path": filepath.Join(gateHome, "policy.json"), "content": "{}"})},
+		{"an Edit of the stored policy", "claude-code", callJSON("Edit", root, map[string]string{"file_path": filepath.Join(gateHome, "policy.json"), "old_string": "a", "new_string": "b"})},
+		{"a NotebookEdit of a notebook in the home of OpenPlexer", "claude-code", callJSON("NotebookEdit", root, map[string]string{"notebook_path": filepath.Join(gateHome, "notes.ipynb"), "new_source": "x"})},
+		{"a shell write of the key set", "claude-code", callJSON("Bash", root, map[string]string{"command": "cp keys.json " + filepath.Join(gateHome, "keys.json")})},
+		{"a Write of the user settings of Claude", "claude-code", callJSON("Write", root, map[string]string{"file_path": claudeUser, "content": "{}"})},
+		{"a patch that adds a file to the home of OpenPlexer", "codex", callJSON("apply_patch", root, map[string]string{"command": "*** Begin Patch\n*** Add File: " + filepath.Join(gateHome, "policy.json") + "\n+{}\n*** End Patch"})},
+		{"a patch of the project hooks of Codex", "codex", callJSON("apply_patch", root, map[string]string{"command": "*** Begin Patch\n*** Delete File: .codex/hooks.json\n*** End Patch"})},
+		{"a shell write of the user hooks of Codex", "codex", callJSON("Bash", root, map[string]string{"command": "rm " + filepath.Join(os.Getenv("CODEX_HOME"), "hooks.json")})},
 	} {
-		agent := "claude-code"
-		if strings.Contains(call, "apply_patch") {
-			agent = "codex"
+		if status, reason, _ := c.hookCall(step.agent, step.call); status != 0 || !strings.Contains(reason, "OpenPlexer blocked a write to") {
+			t.Errorf("%s: exit %d, reason %q, want a denial before the policy", step.name, status, reason)
 		}
-		if status, reason, _ := c.hookCall(agent, call); status != 0 || !strings.Contains(reason, "OpenPlexer blocked a write to") {
-			t.Errorf("%s: exit %d, reason %q, want a denial before the policy", name, status, reason)
+	}
+}
+
+func TestHookPlacesPathsInTheProjectRootAboveTheWorkingDirectory(t *testing.T) {
+	c := loadedCLI(t)
+	root := project(t)
+	web := filepath.Join(root, "web")
+	if err := os.MkdirAll(web, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, step := range []struct {
+		name, agent, call, denied string
+	}{
+		{"claude-code Write of an absolute path outside src", "claude-code", callJSON("Write", web, map[string]string{"file_path": filepath.Join(root, "api", "server.ts"), "content": "x"}), "denied a write to api/server.ts"},
+		{"claude-code rm that climbs out of the working directory", "claude-code", callJSON("Bash", web, map[string]string{"command": "rm ../api/server.ts"}), "denied a write to api/server.ts"},
+		{"codex rm that climbs out of the working directory", "codex", callJSON("Bash", web, map[string]string{"command": "rm ../api/server.ts"}), "denied a write to api/server.ts"},
+		{"claude-code Write that climbs into src", "claude-code", callJSON("Write", web, map[string]string{"file_path": "../src/a.go", "content": "x"}), ""},
+		{"claude-code Write of a relative path in the working directory", "claude-code", callJSON("Write", web, map[string]string{"file_path": "a.ts", "content": "x"}), "denied a write to web/a.ts"},
+	} {
+		status, reason, stderr := c.hookCall(step.agent, step.call)
+		if status != 0 || stderr != "" || !strings.Contains(reason, step.denied) || (step.denied == "") != (reason == "") {
+			t.Errorf("%s: exit %d, reason %q, stderr %q, want exit 0 and a denial that says %q", step.name, status, reason, stderr, step.denied)
 		}
 	}
 }
