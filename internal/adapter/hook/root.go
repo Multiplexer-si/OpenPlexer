@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -10,7 +11,10 @@ import (
 
 var agentMarkers = []string{".claude", ".codex", ".mcp.json"}
 
-// Roots places a working directory in a project.
+// ErrNoRoot says that no project holds a path.
+var ErrNoRoot = errors.New("no project root")
+
+// Roots places a path in a project.
 type Roots struct {
 	// Home is never a project root, and the search stops below it.
 	Home     string
@@ -53,7 +57,7 @@ func (r Roots) Find(cwd string) (string, error) {
 	var candidates []string
 	switch {
 	case noRepo && len(marked) == 0:
-		return "", fmt.Errorf("no project root above %s: no directory there is a recorded project, and none holds .git, .claude, .codex, or .mcp.json", cwd)
+		return "", fmt.Errorf("%w above %s: no directory there is a recorded project, and none holds .git, .claude, .codex, or .mcp.json", ErrNoRoot, cwd)
 	case noRepo && len(marked) == 1:
 		return dirs[marked[0]], nil
 	case noRepo:

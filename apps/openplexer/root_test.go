@@ -83,6 +83,9 @@ func TestHookJudgesALinkedWorktreeInsideItsRepositoryFromTheWorktree(t *testing.
 		{"an rm that climbs out of cwd", "claude-code", callJSON("Bash", src, map[string]string{"command": "rm ../api/server.ts"}), "denied a write to api/server.ts"},
 		{"a patch that deletes a file of the worktree", "codex", callJSON("apply_patch", src, map[string]string{"command": "*** Begin Patch\n*** Delete File: ../api/server.ts\n*** End Patch"}), "denied a write to api/server.ts"},
 		{"an Edit of the settings of the worktree", "claude-code", callJSON("Edit", src, map[string]string{"file_path": filepath.Join(worktree, ".claude", "settings.json"), "old_string": "a", "new_string": "b"}), "OpenPlexer blocked a write to"},
+		{"a Write into the main checkout", "claude-code", callJSON("Write", src, map[string]string{"file_path": filepath.Join(root, "api", "server.ts"), "content": "x"}), "denied a write to api/server.ts"},
+		{"an rm that climbs into the main checkout", "codex", callJSON("Bash", src, map[string]string{"command": "rm ../../../../api/server.ts"}), "denied a write to api/server.ts"},
+		{"an Edit of the settings of the main checkout", "claude-code", callJSON("Edit", src, map[string]string{"file_path": filepath.Join(root, ".claude", "settings.json"), "old_string": "a", "new_string": "b"}), "OpenPlexer blocked a write to"},
 	} {
 		status, reason, stderr := c.hookCall(step.agent, step.call)
 		if status != 0 || stderr != "" || !strings.Contains(reason, step.denied) {
@@ -97,6 +100,29 @@ func TestHookJudgesALinkedWorktreeInsideItsRepositoryFromTheWorktree(t *testing.
 	c.must(exitOK, "install", "claude-code", "--project", root)
 	if status, reason, _ := c.hookCall("claude-code", inside); status != 0 || !strings.Contains(reason, "denied a write to .claude/worktrees/x/src/a.go") {
 		t.Errorf("with the repository recorded: exit %d, reason %q, want the write judged from the recorded root", status, reason)
+	}
+}
+
+func TestHookJudgesAWriteFromAnInnerRecordedProjectByTheOuterOne(t *testing.T) {
+	c := loadedCLI(t)
+	root := project(t)
+	web := filepath.Join(root, "web")
+	nestedRepositories["a nested .git directory"](t, web)
+	c.must(exitOK, "install", "claude-code", "--project", root)
+	c.must(exitOK, "install", "claude-code", "--project", web)
+	for _, step := range []struct{ name, call, denied string }{
+		{"a Write into the outer project", callJSON("Write", web, map[string]string{"file_path": filepath.Join(root, "api", "server.ts"), "content": "x"}), "denied a write to api/server.ts"},
+		{"an rm that climbs into the outer project", callJSON("Bash", web, map[string]string{"command": "rm ../api/server.ts"}), "denied a write to api/server.ts"},
+		{"an Edit of the settings of the outer project", callJSON("Edit", web, map[string]string{"file_path": filepath.Join(root, ".claude", "settings.json"), "old_string": "a", "new_string": "b"}), "OpenPlexer blocked a write to"},
+		{"a Write inside the inner project", callJSON("Write", web, map[string]string{"file_path": "api/server.ts", "content": "x"}), "denied a write to api/server.ts"},
+	} {
+		status, reason, stderr := c.hookCall("claude-code", step.call)
+		if status != 0 || stderr != "" || !strings.Contains(reason, step.denied) {
+			t.Errorf("%s: exit %d, reason %q, stderr %q, want a denial that says %q", step.name, status, reason, stderr, step.denied)
+		}
+	}
+	if status, reason, _ := c.hookCall("claude-code", callJSON("Write", web, map[string]string{"file_path": "src/a.go", "content": "x"})); status != 0 || reason != "" {
+		t.Errorf("a write to src/a.go of the inner project: exit %d, reason %q, want it judged from the inner root and allowed", status, reason)
 	}
 }
 

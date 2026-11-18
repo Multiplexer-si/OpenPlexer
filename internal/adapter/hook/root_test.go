@@ -145,6 +145,56 @@ func TestPathsAreMeasuredFromTheRootWhenCwdIsBelowIt(t *testing.T) {
 	}
 }
 
+func TestAWriteIsPlacedInTheProjectThatHoldsItsTarget(t *testing.T) {
+	home := t.TempDir()
+	proj := filepath.Join(home, "proj")
+	other := filepath.Join(home, "other")
+	doubtful := filepath.Join(home, "doubtful")
+	mkdirs(t, filepath.Join(proj, ".git"), filepath.Join(other, ".git"), filepath.Join(doubtful, ".claude"), filepath.Join(doubtful, "web", ".git"), filepath.Join(home, "loose"))
+	alias := filepath.Join(home, "alias")
+	if err := os.Symlink(other, alias); err != nil {
+		t.Fatal(err)
+	}
+	env := Env{Root: Roots{Home: home}.Find, Home: home}
+	tools := Tools{"Write": FileTool("file_path"), "Bash": ShellTool}
+	for _, c := range []struct{ name, tool, target, want, reason string }{
+		{name: "a file of another project", tool: "Write", target: filepath.Join(other, "api", "server.ts"), want: "write api/server.ts"},
+		{name: "a relative path into another project", tool: "Bash", target: "rm ../other/api/server.ts", want: "write api/server.ts"},
+		{name: "a path through ~", tool: "Bash", target: "rm ~/other/api/server.ts", want: "write api/server.ts"},
+		{name: "a path through a symbolic link to a project", tool: "Write", target: filepath.Join(alias, "api", "server.ts"), want: "write api/server.ts"},
+		{name: "a path in another case", tool: "Write", target: filepath.Join(home, "OTHER", "api", "server.ts"), want: "write api/server.ts"},
+		{name: "a file that no project holds", tool: "Write", target: filepath.Join(home, "loose", "a.txt")},
+		{name: "a file in a directory with two candidates", tool: "Write", target: filepath.Join(doubtful, "web", "a.txt"), reason: "more than one directory"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			if _, err := os.Stat(filepath.Join(home, "OTHER")); c.name == "a path in another case" && err != nil {
+				t.Skip("this file system does not ignore case")
+			}
+			field := "file_path"
+			if c.tool == "Bash" {
+				field = "command"
+			}
+			input := `{"hook_event_name":"PreToolUse","tool_name":"` + c.tool + `","cwd":"` + proj + `","tool_input":{"` + field + `":"` + c.target + `"}}`
+			var asked []string
+			v := Decide([]byte(input), env, recordQueries(&asked), tools)
+			switch {
+			case c.want != "":
+				if v.Outcome != Deny || len(asked) != 1 || asked[0] != c.want {
+					t.Fatalf("verdict %+v after queries %q, want a denial after %q", v, asked, c.want)
+				}
+			case c.reason != "":
+				if v.Outcome != Deny || len(asked) != 0 || !strings.Contains(v.Reason, c.reason) {
+					t.Fatalf("verdict %+v after queries %q, want a denial that says %q and no query", v, asked, c.reason)
+				}
+			default:
+				if v.Outcome != Allow || len(asked) != 0 {
+					t.Fatalf("verdict %+v after queries %q, want no query", v, asked)
+				}
+			}
+		})
+	}
+}
+
 func TestWithNoRootEveryWriteAndGatedCommandIsDenied(t *testing.T) {
 	home := t.TempDir()
 	cwd := filepath.Join(home, "loose", "dir")

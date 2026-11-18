@@ -175,16 +175,27 @@ func TestCallsInANestedCheckoutAreJudgedFromTheRootOfItsRepository(t *testing.T)
 			{"Write", "a.go", "write src/a.go"},
 			{"Bash", "rm ../api/server.ts", "write api/server.ts"},
 			{"Edit", filepath.Join(c.inRepo, ".claude", "settings.json"), guarded},
-			{"Write", filepath.Join(c.super, "api", "server.ts"), unjudged},
-			{"Bash", "rm ../../../../api/server.ts", unjudged},
+			{"Write", filepath.Join(c.super, "api", "server.ts"), "write api/server.ts"},
+			{"Bash", "rm ../../../../api/server.ts", "write api/server.ts"},
+			{"Write", "../../../../src/a.go", "write src/a.go"},
+			{"Edit", filepath.Join(c.super, ".claude", "settings.json"), guarded},
+			{"Bash", "rm ../../../../.claude/settings.json", guarded},
+			{"Write", filepath.Join(c.external, "src", "a.go"), "write src/a.go"},
+			{"Write", filepath.Join(c.home, "loose", "a.go"), unjudged},
 		}},
-		{name: "a submodule that is recorded", cwd: c.web, recorded: []string{c.web}, calls: []call{
-			{"Write", "src/a.go", "write src/a.go"},
-			{"Write", filepath.Join(c.super, "api", "server.ts"), unjudged},
+		{name: "the main checkout of a linked worktree", cwd: c.super, calls: []call{
+			{"Write", filepath.Join(c.inRepo, "src", "a.go"), "write src/a.go"},
+			{"Edit", filepath.Join(c.inRepo, ".claude", "settings.json"), guarded},
 		}},
-		{name: "a subfolder repository that is recorded", cwd: c.scratch, recorded: []string{c.scratch}, calls: []call{
+		{name: "a recorded submodule inside a recorded superproject", cwd: c.web, recorded: []string{c.super, c.web}, calls: []call{
 			{"Write", "src/a.go", "write src/a.go"},
-			{"Bash", "rm ../api/server.ts", unjudged},
+			{"Write", filepath.Join(c.super, "api", "server.ts"), "write api/server.ts"},
+			{"Bash", "rm ../api/server.ts", "write api/server.ts"},
+			{"Edit", filepath.Join(c.super, ".claude", "settings.json"), guarded},
+		}},
+		{name: "a recorded subfolder repository in a superproject with no record", cwd: c.scratch, recorded: []string{c.scratch}, calls: []call{
+			{"Write", "src/a.go", "write src/a.go"},
+			{"Bash", "rm ../api/server.ts", "write api/server.ts"},
 		}},
 		{name: "a linked worktree whose repository is recorded", cwd: filepath.Join(c.inRepo, "src"), recorded: []string{c.super}, calls: []call{
 			{"Write", "a.go", "write " + filepath.ToSlash(inWorktree) + "/src/a.go"},

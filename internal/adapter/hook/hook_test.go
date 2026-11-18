@@ -7,21 +7,6 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
 
-func TestNormalizeTargetWithProjectRoot(t *testing.T) {
-	for _, c := range []struct{ name, path, cwd, want string }{
-		{"a relative path is under the root, not under cwd", "src/a.go", "/p/sub", "sub/src/a.go"},
-		{"an absolute path in the root", "/p/web/a.ts", "/p/sub", "web/a.ts"},
-		{"a path that leaves the root stays absolute", "../x", "/p", "/x"},
-		{"an absolute path outside the root", "/home/u/.claude/x", "/p", "/home/u/.claude/x"},
-	} {
-		t.Run(c.name, func(t *testing.T) {
-			if got := normalizeTarget(c.path, c.cwd, "/p"); got != c.want {
-				t.Fatalf("normalizeTarget(%q, %q) = %q, want %q", c.path, c.cwd, got, c.want)
-			}
-		})
-	}
-}
-
 func TestInProject(t *testing.T) {
 	for path, want := range map[string]bool{"web/a.ts": true, "": true, "/etc/x": false, "C:/x": false, "..": false, "../x": false, "..x": true} {
 		if got := inProject(path); got != want {

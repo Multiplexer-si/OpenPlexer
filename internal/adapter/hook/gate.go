@@ -2,7 +2,9 @@ package hook
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 
 	"github.com/multiplexer-si/openplexer/internal/policy"
@@ -17,12 +19,17 @@ type Env struct {
 	AgentSessionID *string
 	MissionID      *string
 	Overrides      []policy.Override
-	// Root finds the project root of the working directory of a call. When it
-	// returns an error, every write and every command that the policy would
-	// judge is denied, and the reason gives the error. With no Root, a path is
-	// read as a path under the working directory, as the reference reads it
-	// when it finds no root, and the adapter fixtures run that way.
-	Root   func(cwd string) (string, error)
+	// Root finds the root of the project that holds a path. The adapter asks
+	// it about the working directory of a call and about each file that the
+	// call writes, so a write is judged by the project that holds the file.
+	// When Root returns an error for the working directory, every write and
+	// every command that the policy would judge is denied, and the reason
+	// gives the error. A written file with ErrNoRoot is outside every project
+	// and is not judged, and any other error for it denies the call. With no
+	// Root, a path is read as a path under the working directory, as the
+	// reference reads it when it finds no root, and the adapter fixtures run
+	// that way.
+	Root   func(path string) (string, error)
 	Guards []Guard
 	Home   string
 	// ExecGated is set when the role of the member lists commands. A shell
@@ -132,14 +139,41 @@ func ShellTool(call Call) (Effect, error) {
 	return effect, nil
 }
 
-func (e Env) queries(call Call, root string, effect Effect) []policy.Query {
+type target struct {
+	named      string
+	absolute   string
+	root       string
+	policyPath string
+	judged     bool
+	unplaced   error
+}
+
+func (e Env) place(cwd string, writes []string) []target {
+	var out []target
+	for _, write := range writes {
+		t := target{named: write, absolute: e.absolute(write, cwd)}
+		if e.Root == nil {
+			t.policyPath = normalizePath(write, cwd)
+			t.judged = inProject(t.policyPath)
+		} else if root, err := e.Root(t.absolute); err == nil {
+			rel, _ := filepath.Rel(root, t.absolute)
+			t.root, t.policyPath, t.judged = root, filepath.ToSlash(rel), true
+		} else if !errors.Is(err, ErrNoRoot) {
+			t.unplaced = err
+		}
+		out = append(out, t)
+	}
+	return out
+}
+
+func (e Env) queries(call Call, targets []target, effect Effect) []policy.Query {
 	if e.AgentSessionID == nil && call.Session != "" {
 		e.AgentSessionID = &call.Session
 	}
 	var out []policy.Query
-	for _, path := range effect.Writes {
-		if rel := normalizeTarget(path, call.Cwd, root); inProject(rel) {
-			out = append(out, e.query(policy.Write, rel, ""))
+	for _, t := range targets {
+		if t.judged {
+			out = append(out, e.query(policy.Write, t.policyPath, ""))
 		}
 	}
 	if e.ExecGated {
@@ -218,7 +252,8 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	if env.Root != nil {
 		root, noRoot = env.Root(call.Cwd)
 	}
-	if v, guarded := env.guard(call.Cwd, root, effect.Writes); guarded {
+	targets := env.place(call.Cwd, effect.Writes)
+	if v, guarded := env.guard(root, targets); guarded {
 		return v
 	}
 	if noRoot != nil {
@@ -227,7 +262,12 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 		}
 		return Verdict{}
 	}
-	queries := env.queries(call, root, effect)
+	for _, t := range targets {
+		if t.unplaced != nil {
+			return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked this call because it cannot place %s in a project: %v.", t.named, t.unplaced)}
+		}
+	}
+	queries := env.queries(call, targets, effect)
 	if len(queries) == 0 {
 		return Verdict{}
 	}
