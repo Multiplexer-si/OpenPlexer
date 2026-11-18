@@ -207,7 +207,7 @@
           "type": "string"
         },
         "path": {
-          "description": "The path that the gate denied. For `exec` it is the command.",
+          "description": "The denied path or an omission marker. OpenPlexer omits command text and absolute local paths.",
           "type": "string"
         },
         "reply_to": {
@@ -215,7 +215,7 @@
           "type": "string"
         },
         "rule": {
-          "description": "The `rule` text of the evaluation result.",
+          "description": "The evaluation rule or a fixed public denial reason.",
           "type": "string"
         },
         "thread_id": {

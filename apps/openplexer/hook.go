@@ -93,6 +93,9 @@ func (c command) judge(agent string, gate *daemon.Gate, openErr error) hook.Judg
 		case !decided:
 			return blocked("OpenPlexer cannot verify its policy, so it blocks this call: %s. Run `openplexer policy status`, then load a policy that verifies.", verdict.Policy.Detail)
 		case result.Decision == policy.Deny:
+			if err := gate.QueueDenial(verdict, agent); err != nil {
+				fmt.Fprintf(c.stderr, "openplexer: cannot queue Room denial: %v\n", err)
+			}
 			return hook.Denied(verdict.Query, result)
 		case err != nil:
 			return blocked("The policy allows this call, but OpenPlexer could not record the decision, so it blocks the call: %v", err)

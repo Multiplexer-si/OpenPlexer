@@ -69,19 +69,29 @@ type Call struct {
 
 // ParseCall reads the JSON that a coding agent writes to a hook.
 func ParseCall(stdin []byte) (Call, error) {
-	var raw struct {
-		Event   string          `json:"hook_event_name"`
-		Tool    string          `json:"tool_name"`
-		Cwd     string          `json:"cwd"`
-		Session string          `json:"session_id"`
-		Input   json.RawMessage `json:"tool_input"`
-	}
+	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(stdin, &raw); err != nil {
 		return Call{}, fmt.Errorf("the hook input is not a JSON object: %w", err)
 	}
-	call := Call{Event: raw.Event, Tool: raw.Tool, Cwd: raw.Cwd, Session: raw.Session}
-	if len(raw.Input) > 0 {
-		if err := json.Unmarshal(raw.Input, &call.Input); err != nil {
+	if raw == nil {
+		return Call{}, errors.New("the hook input is not a JSON object")
+	}
+	var call Call
+	for _, field := range []struct {
+		name string
+		dest *string
+	}{
+		{"hook_event_name", &call.Event}, {"tool_name", &call.Tool},
+		{"cwd", &call.Cwd}, {"session_id", &call.Session},
+	} {
+		if value, ok := raw[field.name]; ok {
+			if err := json.Unmarshal(value, field.dest); err != nil {
+				return Call{}, fmt.Errorf("invalid %s: %w", field.name, err)
+			}
+		}
+	}
+	if input, ok := raw["tool_input"]; ok {
+		if err := json.Unmarshal(input, &call.Input); err != nil {
 			return Call{}, fmt.Errorf("tool_input is not a JSON object: %w", err)
 		}
 	}

@@ -1,10 +1,35 @@
 # Local policy gate
 
-This page describes the gate that `openplexer` runs on a developer's machine in Phase 1: its commands, its files, the states of a policy, and its rules. The gate needs no hub and no network. The [trust model](trust-model.md) explains what the gate does not protect against.
+The local gate decides actions from the last verified policy on disk. You can load a signed file or run the daemon to sync policy from a team hub. The [trust model](trust-model.md) explains what the gate does not protect against.
 
 `openplexer install` connects a coding agent to the gate, and the hook that it writes runs `openplexer hook`. [Claude Code hooks](hooks-claude-code.md) and [Codex hooks](hooks-codex.md) describe both. `openplexer policy check` asks the gate about one action by hand.
 
-## Set up the gate
+## Connect to a team hub
+
+Get the hub URL, project ID, member ID, bearer token, and trusted public key set from the hub operator. Save the token in a private file. Set `OPENPLEXER_HOME` to a separate directory for each project. Use the same value for setup, hooks, and the daemon.
+
+```sh
+bin/openplexer configure --hub https://hub.example --project prj-shop --member mem-ana \
+  --keys trusted-jwks.json --token-file member-token
+bin/openplexer policy sync
+bin/openplexer daemon
+```
+
+`policy sync` fetches the first policy immediately. `daemon` syncs on startup and every 15 seconds. It writes received Room events as JSON lines to standard output and connection errors to standard error. Run one daemon per home. The hooks continue to open the verified local policy for each call.
+
+The daemon verifies the bundle against both the advertised JWKS and the operator-provided pin. Replace the pin explicitly with `configure --keys <jwks.json>` after you confirm the new keys with the operator. To renew a member token, run `configure --token-file <file>`. Use the same member ID as the token's owner.
+
+Queue a Room post by passing a hub event request on standard input. See the [hub HTTP API](hub.md#http-api) for the request fields.
+
+```sh
+bin/openplexer room post <<'JSON'
+{"type":"status","agent":{"id":"session-1","vendor":"codex"},"body":{"summary":"Ready for review"}}
+JSON
+```
+
+The daemon retries queued posts after disconnect. Room output resumes after the last saved sequence number. A process crash between writing an event to standard output and saving its sequence can replay that event. Consumers that save Room events can use their event IDs to deduplicate them.
+
+## Load a signed file
 
 You need two files from the person who signs the policy of your team: the signed bundle, and the key set that verifies it. The examples under `spec/policy/v1/examples/` are a bundle and a key set that you can try.
 
@@ -44,6 +69,9 @@ You need two files from the person who signs the policy of your team: the signed
 | `openplexer configure --member <member-id>` | Stores the member id of the developer. |
 | `openplexer configure --stale-after-days <days>` | Stores the number of days after which a policy is stale. The default is 14. |
 | `openplexer policy load <signed-bundle.json>` | Verifies a signed bundle and makes it the policy in force. The file is a message, as `spec/policy/v1/signed-bundle.schema.json` defines. |
+| `openplexer policy sync` | Fetches and verifies the current hub policy once. |
+| `openplexer daemon` | Runs policy sync and the Room client in the foreground. |
+| `openplexer room post` | Validates and queues one JSON event request from standard input. |
 | `openplexer policy status` | Prints the state of the stored policy, the member, and the home directory. |
 | `openplexer policy check [--agent <name>] [--session <id>] [--repo <repo>] <action> <target>` | Decides one action and prints the result. The action is `read`, `write`, `exec`, or `git.push`. The target is a path for `read` and `write`, a command for `exec`, and a repo for `git.push`. |
 
@@ -65,8 +93,11 @@ The gate keeps its files in the directory that `OPENPLEXER_HOME` names, or in `.
 | File | Content | Written by |
 |---|---|---|
 | `keys.json` | The key set | `configure --keys` |
-| `config.json` | `member_id` and `stale_after_days` | `configure` |
-| `policy.json` | The signed token of the policy in force, and the time `confirmed_at` at which a load last confirmed it | `policy load` |
+| `config.json` | Local member and stale settings. A hub configuration also holds its URL, project, and bearer token. Created with mode `0600`. | `configure` |
+| `room-cursor.json` | Highest Room sequence received, including skipped event types | `daemon` |
+| `room-outbox/` | Filtered posts waiting for acknowledgement, with one idempotency key per file | `room post`, hooks, and `daemon` |
+| `room.lock` | Exclusive lock for the daemon that owns the Room cursor | `daemon` |
+| `policy.json` | The signed token of the policy in force, and the time `confirmed_at` at which a load last confirmed it | `policy load` and hub sync |
 | `audit.jsonl` | The audit log, one record on each line | `policy load` and `policy check` |
 | `installs/` | The install journal, one record for each hook file: the agent, the file, the project root of a project-scope install, and what `install` added ([The project root](hooks-claude-code.md#the-project-root)) | `install` and `uninstall` |
 | `lock` | An empty file that the commands lock while they write | Every command that writes |
@@ -111,15 +142,15 @@ With no verified policy, the gate does not answer allow or deny. It answers that
 | The same version with the same content | Accepted. The load confirms the policy, which makes it fresh. The signature can be a new one. |
 | An older version for the same project | Refused by `policy load`. An old policy cannot replace a newer one through a load. |
 | The same version with another content | Refused. One version has one content. |
-| A bundle for another project | Refused. One home directory holds the policy of one project. To change the project, remove `policy.json` and load the new bundle. |
+| A bundle for another project | A hub home always refuses it. A file-based home refuses it while a verified policy is in force. |
 
-When the state is absent or rejected, the gate has no version to compare with, and it accepts every bundle that verifies.
+When the state is absent or rejected, the gate has no version to compare with. A hub home still requires a verified bundle for its configured project with one repository.
 
 ## Offline and stale
 
-The gate reads only files, so it works the same with and without a network. If the file of a bundle is gone, or is not a signed bundle message, `policy load` fails and the policy in force stays.
+The gate reads local files. If the source is unavailable, the pinned key check fails, or the hub supplies an older policy while a verified policy is in force, the gate keeps enforcing the stored policy. The daemon retries while it runs.
 
-A bundle carries no issue time and no expiry. So the gate measures the age of a policy on the machine: a policy is stale when no load has confirmed it for `stale_after_days`. A stale policy stays in force. `policy status` reports it with exit status 3, `policy check` prints a notice, and each decision record names the state in `meta.policy_state`. The records of a load do not carry it. To make the policy fresh, load the current bundle again.
+A bundle carries no issue time and no expiry. So the gate measures the age of a policy on the machine: a policy is stale when no load has confirmed it for `stale_after_days`. A stale policy stays in force. `policy status` reports it with exit status 3, `policy check` prints a notice, and each decision record names the state in `meta.policy_state`. The records of a load do not carry it. A successful load or hub sync confirms the policy and makes it fresh.
 
 `confirmed_at` is a local time and is not signed. A program that runs as you can change it.
 
@@ -129,9 +160,9 @@ The gate passes each action to the [policy evaluator](../spec/policy/README.md#e
 
 - The member is the member id of `config.json`. If no member is configured, or the bundle does not name the member, the evaluator finds no role, and it denies every action that needs a grant.
 - The time is the clock of the machine.
-- The overrides are empty. An override comes from a hub, and Phase 1 has none.
+- The overrides are empty. Enforcement requires a signed override contract.
 
-A `read` or a `write` with no `--repo` is evaluated in every repo of the bundle, and one deny decides. If every pattern of the bundle names a listed repo or `*`, a repo that the caller does not know opens no path. A query with no repo never checks a pattern that names a repo the bundle does not list. With `repos: []` and a private area `api:config/**`, `check read config/key.pem` allows, and `check --repo api read config/key.pem` denies.
+In a hub home, the sole repository ID from the signed bundle selects the read and write rules. In a file-based home, a `read` or a `write` with no `--repo` is evaluated in every repo of the bundle, and one deny decides. If every pattern of the bundle names a listed repo or `*`, a repo that the caller does not know opens no path. A query with no repo never checks a pattern that names a repo the bundle does not list. With `repos: []` and a private area `api:config/**`, `check read config/key.pem` allows, and `check --repo api read config/key.pem` denies.
 
 ## The audit log
 
@@ -154,10 +185,10 @@ Each `policy check` appends one record to `audit.jsonl`. Each `policy load` that
 | `reason` | The rule that decided, the reason why no policy is in force, or the reason why a bundle was refused. |
 | `meta` | For a decision: `agent`, `action`, `repo`, `area`, `policy_state`, and `policy_version`. For a load: `version`. |
 
-The log is a file that your user can write, so it has the limits that [the trust model](trust-model.md#what-a-verifier-can-prove-from-a-chain-alone) gives for a chain alone. Nothing sends the log to another machine in Phase 1.
+The log is a file that your user can write, so it has the limits that [the trust model](trust-model.md#what-a-verifier-can-prove-from-a-chain-alone) gives for a chain alone. The log stays on the machine. A hub-configured hook queues a separate Room denial with the action, a filtered relative path or omission marker, and a fixed rule.
 
 ## Limits
 
 - The gate locks its home directory with `flock`, which exists on Unix only. On another system, `configure`, a load, and an audit record fail, so no policy can be put in force there. `policy check` still prints its result.
 - The log grows by one record for each checked action, and nothing removes old records.
-- The member id is a claim. The gate does not check that the developer is that member.
+- The operator configures the member ID used for policy decisions. The hub assigns the Room author from the bearer token.

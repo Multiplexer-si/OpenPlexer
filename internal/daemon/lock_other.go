@@ -10,3 +10,7 @@ import (
 func lockFileExclusive(*os.File) error {
 	return errors.ErrUnsupported
 }
+
+func tryLockFileExclusive(*os.File) error {
+	return errors.ErrUnsupported
+}
