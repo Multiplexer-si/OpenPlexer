@@ -3,6 +3,7 @@ package hook
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/multiplexer-si/openplexer/internal/policy"
@@ -120,6 +121,11 @@ func ShellTool(call Call) (Effect, error) {
 		return Effect{}, err
 	}
 	effect := Effect{Writes: WriteTargets(command)}
+	for _, path := range MovedPaths(command) {
+		if !slices.Contains(effect.Writes, path) {
+			effect.Writes = append(effect.Writes, path)
+		}
+	}
 	if substitution.MatchString(command) {
 		effect.Commands = []string{command}
 		return effect, nil

@@ -74,9 +74,6 @@ func (j Journal) put(r record) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(j.Dir, 0o700); err != nil {
-		return err
-	}
 	return writeAtomic(j.recordPath(r.Agent, r.File), append(text, '\n'), 0o600, func() error { return nil })
 }
 
@@ -86,7 +83,18 @@ func (j Journal) put(r record) error {
 // The record is written before the file, and Uninstall removes it after the
 // file, so a run that is killed leaves a record too many and never a hook
 // without one.
+//
+// Install and Uninstall hold a lock on the directory of the journal, so two
+// runs cannot undo the record of each other.
 func (j Journal) Install(path string, h Handler, root string) (Change, error) {
+	if err := os.MkdirAll(j.Dir, 0o700); err != nil {
+		return Unchanged, fmt.Errorf("%w. The file is unchanged", err)
+	}
+	unlock, err := lockDir(j.Dir)
+	if err != nil {
+		return Unchanged, fmt.Errorf("%w. The file is unchanged", err)
+	}
+	defer unlock()
 	was, known := j.get(h.Agent, path)
 	change, err := editFile(path, func(text []byte, exists bool) ([]byte, bool, Change, error) {
 		out, change, added, err := Install(text, exists, h)
@@ -116,6 +124,13 @@ func (j Journal) Install(path string, h Handler, root string) (Change, error) {
 // Uninstall removes the handlers of ours for agent from the hook file at
 // path, and the record of the file.
 func (j Journal) Uninstall(path, agent string) (Change, error) {
+	unlock, err := lockDir(j.Dir)
+	switch {
+	case err == nil:
+		defer unlock()
+	case !errors.Is(err, fs.ErrNotExist):
+		return Unchanged, fmt.Errorf("%w. The file is unchanged", err)
+	}
 	was, _ := j.get(agent, path)
 	change, err := editFile(path, func(text []byte, exists bool) ([]byte, bool, Change, error) {
 		if !exists {

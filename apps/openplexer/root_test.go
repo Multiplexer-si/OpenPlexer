@@ -122,7 +122,7 @@ func TestInstallAgainReplacesADamagedRecordOfTheSameHookFile(t *testing.T) {
 	damaged := filepath.Join(installs, entries[0].Name())
 	writeFile(t, damaged, `{"agent": "claude-co`)
 	call := callJSON("Write", root, map[string]string{"file_path": "src/a.go", "content": "x"})
-	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, damaged) || !strings.Contains(reason, "Delete") {
+	if status, reason, _ := c.hookCall("claude-code", call); status != 0 || !strings.Contains(reason, damaged) || !strings.Contains(reason, "delete it yourself") {
 		t.Errorf("with a damaged record: exit %d, reason %q, want a denial that names the file and says to delete it", status, reason)
 	}
 	c.must(exitOK, "install", "claude-code", "--project", root)

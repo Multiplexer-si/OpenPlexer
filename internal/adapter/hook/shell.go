@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"path/filepath"
 	"regexp"
 	"strings"
 )
@@ -361,6 +362,59 @@ func WriteTargets(command string) []string {
 	}
 	flush()
 	return targets
+}
+
+var gitValueOptions = map[string]bool{"-C": true, "-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--config-env": true}
+
+// MovedPaths lists every operand of mv and of git mv, in the order that the
+// command names them. A move takes its source away, which WriteTargets does
+// not report, because the reference reads only the destination of mv and
+// nothing of git mv.
+func MovedPaths(command string) []string {
+	var moved []string
+	for _, words := range Segments(command) {
+		verb, args := words[0][strings.LastIndexAny(words[0], `\/`)+1:], words[1:]
+		dir := ""
+		if verb == "git" {
+			for len(args) > 0 && strings.HasPrefix(args[0], "-") {
+				if gitValueOptions[args[0]] && len(args) > 1 {
+					if args[0] == "-C" {
+						dir = filepath.Join(dir, args[1])
+					}
+					args = args[1:]
+				}
+				args = args[1:]
+			}
+			if len(args) == 0 || args[0] != "mv" {
+				continue
+			}
+			args = args[1:]
+		} else if verb != "mv" {
+			continue
+		}
+		if dynamic.MatchString(dir) {
+			continue
+		}
+		ended := false
+		for k := 0; k < len(args); k++ {
+			a := args[k]
+			switch {
+			case !ended && a == "--":
+				ended = true
+			case ended || !strings.HasPrefix(a, "-") || len(a) == 1:
+				if a == "" || dynamic.MatchString(a) {
+					continue
+				}
+				if dir != "" && !filepath.IsAbs(a) && a != "~" && !strings.HasPrefix(a, "~/") {
+					a = filepath.Join(dir, a)
+				}
+				moved = append(moved, a)
+			case verb == "mv" && (targetDirOpt.MatchString(a) || valueOptions["mv"].MatchString(a)):
+				k++
+			}
+		}
+	}
+	return moved
 }
 
 var substitution = regexp.MustCompile("\\$\\(|`|[<>]\\(")
