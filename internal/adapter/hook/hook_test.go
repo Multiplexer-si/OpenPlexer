@@ -72,3 +72,16 @@ func TestRender(t *testing.T) {
 		t.Errorf("a refused call has output %+v", refuse)
 	}
 }
+
+func TestParseCallUsesExactFinalMembers(t *testing.T) {
+	call, err := ParseCall([]byte(`{"session_id":"old","session_id":"current","Session_ID":"ignored","tool_input":{"old":"ignored"},"tool_input":{"file_path":"new"}}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if call.Session != "current" || len(call.Input) != 1 {
+		t.Fatalf("call = %+v", call)
+	}
+	if path, err := call.Text("file_path"); path != "new" || err != nil {
+		t.Fatalf("file_path = %q, %v", path, err)
+	}
+}

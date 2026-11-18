@@ -56,7 +56,7 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	policyDone := make(chan struct{})
 	go func() {
 		defer close(policyDone)
-		pollPolicy(ctx, home, now, report)
+		pollHub(ctx, home, now, report)
 	}()
 	defer func() {
 		cancel()
@@ -98,9 +98,11 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	return nil
 }
 
-func pollPolicy(ctx context.Context, home string, now func() time.Time, report func(error)) {
+func pollHub(ctx context.Context, home string, now func() time.Time, report func(error)) {
 	policies := time.NewTicker(15 * time.Second)
+	posts := time.NewTicker(time.Second)
 	defer policies.Stop()
+	defer posts.Stop()
 	syncPolicy := func() {
 		gate, err := Open(home, now)
 		if err == nil {
@@ -115,6 +117,10 @@ func pollPolicy(ctx context.Context, home string, now func() time.Time, report f
 		select {
 		case <-policies.C:
 			syncPolicy()
+		case <-posts.C:
+			if err := flushRoom(ctx, home, report); err != nil && ctx.Err() == nil {
+				report(fmt.Errorf("Room posts: %w", err))
+			}
 		case <-ctx.Done():
 			return
 		}

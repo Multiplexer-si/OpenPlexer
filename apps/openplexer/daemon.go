@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"sync"
@@ -23,6 +24,17 @@ func (c command) daemon() int {
 		defer log.Unlock()
 		fmt.Fprintf(c.stderr, "openplexer: %v\n", err)
 	})
+	if err != nil {
+		return c.fail(err)
+	}
+	return exitOK
+}
+
+func (c command) post() int {
+	text, err := io.ReadAll(io.LimitReader(c.stdin, (64<<10)+1))
+	if err == nil {
+		err = daemon.QueuePost(c.home, text)
+	}
 	if err != nil {
 		return c.fail(err)
 	}
