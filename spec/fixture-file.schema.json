@@ -791,7 +791,7 @@
         ]
       },
       "then": {
-        "description": "Verify the export in `input.export` using `input.checkpoints` and the checkpoint key set in `shared.jwks`. The export can be malformed on purpose.",
+        "description": "Verify the export in `input.export` using `input.checkpoints` and the checkpoint key set in `shared.jwks`. A case can override that key set with the JSON text in `input.jwks_json`. The export and JWKS text can be malformed on purpose.",
         "properties": {
           "cases": {
             "items": {
@@ -809,7 +809,10 @@
                       },
                       "type": "array"
                     },
-                    "export": {}
+                    "export": {},
+                    "jwks_json": {
+                      "type": "string"
+                    }
                   },
                   "required": [
                     "export",

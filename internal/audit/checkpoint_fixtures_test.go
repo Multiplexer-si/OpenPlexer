@@ -28,9 +28,10 @@ type checkpointSchemas struct {
 type checkpointInput struct {
 	Export      json.RawMessage `json:"export"`
 	Checkpoints []string        `json:"checkpoints"`
+	JWKSJSON    *string         `json:"jwks_json"`
 }
 
-func checkpointRunner(t *testing.T, keys []map[string]any) func(*testing.T, json.RawMessage, json.RawMessage) {
+func checkpointRunner(t *testing.T, sharedJWKS json.RawMessage) func(*testing.T, json.RawMessage, json.RawMessage) {
 	t.Helper()
 	compiler := jsonschema.NewCompiler()
 	for _, name := range []string{"export", "checkpoint-protected-header", "checkpoint-payload"} {
@@ -55,7 +56,11 @@ func checkpointRunner(t *testing.T, keys []map[string]any) func(*testing.T, json
 	return func(t *testing.T, input, expected json.RawMessage) {
 		var in checkpointInput
 		decode(t, input, &in)
-		got := checkCheckpointFixture(t, schemas, keys, in)
+		jwks := sharedJWKS
+		if in.JWKSJSON != nil {
+			jwks = json.RawMessage(*in.JWKSJSON)
+		}
+		got := checkCheckpointFixture(t, schemas, jwks, in)
 		var want any
 		decode(t, expected, &want)
 		encoded, err := json.Marshal(got)
@@ -72,7 +77,7 @@ func checkpointRunner(t *testing.T, keys []map[string]any) func(*testing.T, json
 
 // checkCheckpointFixture evaluates the published cases using the published
 // schemas, the audit hash code, and the Go crypto package.
-func checkCheckpointFixture(t *testing.T, schemas checkpointSchemas, keys []map[string]any, in checkpointInput) map[string]any {
+func checkCheckpointFixture(t *testing.T, schemas checkpointSchemas, jwks json.RawMessage, in checkpointInput) map[string]any {
 	export, err := parse(in.Export)
 	if err != nil {
 		return fixtureFailure("A6", 0)
@@ -116,6 +121,10 @@ func checkCheckpointFixture(t *testing.T, schemas checkpointSchemas, keys []map[
 	type claim struct {
 		position
 		tip string
+	}
+	var keys []value
+	if len(in.Checkpoints) > 0 {
+		keys = fixtureKeys(jwks)
 	}
 	claims := make([]claim, len(in.Checkpoints))
 	for i, token := range in.Checkpoints {
@@ -214,19 +223,15 @@ func fixtureSegment(segment string) []byte {
 	return decoded
 }
 
-func fixtureCanonicalObject(raw []byte) map[string]any {
-	canonical, err := Canonical(raw)
-	if err != nil || !bytes.Equal(raw, canonical) {
-		return nil
-	}
-	var doc map[string]any
-	if err := json.Unmarshal(raw, &doc); err != nil {
-		return nil
+func fixtureCanonicalObject(raw []byte) value {
+	doc, err := parse(raw)
+	if err != nil || doc.kind != kindObject || !bytes.Equal(raw, doc.appendCanonical(nil)) {
+		return value{}
 	}
 	return doc
 }
 
-func checkFixtureToken(schemas checkpointSchemas, keys []map[string]any, token string) (map[string]any, string) {
+func checkFixtureToken(schemas checkpointSchemas, keys []value, token string) (map[string]any, string) {
 	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return nil, "K1"
@@ -236,10 +241,11 @@ func checkFixtureToken(schemas checkpointSchemas, keys []map[string]any, token s
 		return nil, "K1"
 	}
 	header := fixtureCanonicalObject(headerBytes)
-	if header == nil || schemas.header.Validate(header) != nil {
+	if schemas.header.Validate(fixtureJSON(header)) != nil {
 		return nil, "K2"
 	}
-	public := fixturePublicKey(keys, header["kid"].(string))
+	kid, _ := header.member("kid")
+	public := fixturePublicKey(keys, kid)
 	if public == nil {
 		return nil, "K3"
 	}
@@ -247,7 +253,7 @@ func checkFixtureToken(schemas checkpointSchemas, keys []map[string]any, token s
 	if len(signature) != 64 || !ecdsa.Verify(public, digest[:], new(big.Int).SetBytes(signature[:32]), new(big.Int).SetBytes(signature[32:])) {
 		return nil, "K4"
 	}
-	body := fixtureCanonicalObject(payloadBytes)
+	body, _ := fixtureJSON(fixtureCanonicalObject(payloadBytes)).(map[string]any)
 	if body == nil {
 		return nil, "K6"
 	}
@@ -263,14 +269,33 @@ func checkFixtureToken(schemas checkpointSchemas, keys []map[string]any, token s
 	return body, ""
 }
 
-func fixturePublicKey(keys []map[string]any, kid string) *ecdsa.PublicKey {
+func fixtureKeys(raw []byte) []value {
+	r := reader{text: raw}
+	jwks, err := r.parse()
+	if err != nil || r.repeatedMember {
+		return nil
+	}
+	keys, _ := jwks.member("keys")
+	if keys.kind != kindArray {
+		return nil
+	}
+	for _, key := range keys.items {
+		if key.kind != kindObject {
+			return nil
+		}
+	}
+	return keys.items
+}
+
+func fixturePublicKey(keys []value, kid value) *ecdsa.PublicKey {
 	var key map[string]any
 	for _, candidate := range keys {
-		if candidate["kid"] == kid {
+		candidateID, _ := candidate.member("kid")
+		if candidateID.kind == kindString && slices.Equal(candidateID.units, kid.units) {
 			if key != nil {
 				return nil
 			}
-			key = candidate
+			key = fixtureJSON(candidate).(map[string]any)
 		}
 	}
 	if key["kty"] != "EC" || key["crv"] != "P-256" {

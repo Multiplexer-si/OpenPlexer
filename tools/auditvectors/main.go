@@ -194,7 +194,15 @@ func generate() []byte {
 	page.Input["export"] = map[string]any{"entries": full, "next_cursor": "11"}
 	overflow := vector("out-of-range number in an unknown export field", "The export allows any value for this field, including an out-of-range number read as infinity.", []any{}, nil, success(0, nil))
 	overflow.Input["export"].(map[string]any)["extra"] = json.Number("1e400")
-	cases = append(cases, page, overflow)
+
+	keysJSON := string(must(json.Marshal([]any{oldKey.jwk()})))
+	duplicateJWKS := vector("duplicate keys member in the JWKS", "The trusted JWKS repeats the keys member, even though its last value contains the signer.", []any{}, []string{zeroToken}, failure("K3", 1, 0, ""))
+	duplicateJWKS.Input["jwks_json"] = `{"keys":[],"keys":` + keysJSON + `}`
+	nestedDuplicate := vector("duplicate member inside JWKS metadata", "Member names are compared after decoding escapes, even inside ignored arrays and objects.", []any{}, []string{zeroToken}, failure("K3", 1, 0, ""))
+	nestedDuplicate.Input["jwks_json"] = `{"keys":` + keysJSON + `,"metadata":[{"a":1,"\u0061":2}]}`
+	caseSensitiveJWKS := vector("JWKS members that differ in case", "The unrecognized uppercase KEYS member is distinct from keys.", []any{}, []string{zeroToken}, success(0, 0))
+	caseSensitiveJWKS.Input["jwks_json"] = `{"keys":` + keysJSON + `,"KEYS":[]}`
+	cases = append(cases, page, overflow, duplicateJWKS, nestedDuplicate, caseSensitiveJWKS)
 
 	data := map[string]any{
 		"contract": "audit", "version": 1, "operation": "verify-checkpoints",

@@ -1455,6 +1455,64 @@
         "entries": 0,
         "ok": true
       }
+    },
+    {
+      "name": "duplicate keys member in the JWKS",
+      "why": "The trusted JWKS repeats the keys member, even though its last value contains the signer.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjowLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.WOoYtvz59zxJDY32ypkNSK_g_2wPe6VfJX_h2czU3-POjZph6WBCWOELWfNhRYQsj9aRzdMj_lfcbLRDH5BUHA"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        },
+        "jwks_json": "{\"keys\":[],\"keys\":[{\"alg\":\"ES256\",\"crv\":\"P-256\",\"kid\":\"checkpoint-test-old\",\"kty\":\"EC\",\"use\":\"sig\",\"x\":\"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\",\"y\":\"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}]}"
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K3"
+      }
+    },
+    {
+      "name": "duplicate member inside JWKS metadata",
+      "why": "Member names are compared after decoding escapes, even inside ignored arrays and objects.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjowLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.WOoYtvz59zxJDY32ypkNSK_g_2wPe6VfJX_h2czU3-POjZph6WBCWOELWfNhRYQsj9aRzdMj_lfcbLRDH5BUHA"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        },
+        "jwks_json": "{\"keys\":[{\"alg\":\"ES256\",\"crv\":\"P-256\",\"kid\":\"checkpoint-test-old\",\"kty\":\"EC\",\"use\":\"sig\",\"x\":\"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\",\"y\":\"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}],\"metadata\":[{\"a\":1,\"\\u0061\":2}]}"
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K3"
+      }
+    },
+    {
+      "name": "JWKS members that differ in case",
+      "why": "The unrecognized uppercase KEYS member is distinct from keys.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjowLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.WOoYtvz59zxJDY32ypkNSK_g_2wPe6VfJX_h2czU3-POjZph6WBCWOELWfNhRYQsj9aRzdMj_lfcbLRDH5BUHA"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        },
+        "jwks_json": "{\"keys\":[{\"alg\":\"ES256\",\"crv\":\"P-256\",\"kid\":\"checkpoint-test-old\",\"kty\":\"EC\",\"use\":\"sig\",\"x\":\"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\",\"y\":\"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}],\"KEYS\":[]}"
+      },
+      "expected": {
+        "checkpoint_entries": 0,
+        "completeness": "through_checkpoint",
+        "entries": 0,
+        "ok": true
+      }
     }
   ],
   "contract": "audit",

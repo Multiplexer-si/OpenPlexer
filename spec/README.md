@@ -147,7 +147,7 @@ To run a case, do the operation on `shared` and `input`, and compare the whole r
 | `close-code` | room | None | `code`, the code of an error | `close_code`, the close code that the hub sends after the error, or null if it keeps the connection |
 | `canonicalize` | canonical-json | None | `json`, a JSON text | `canonical`, and `sha256` of its UTF-8 bytes |
 | `verify-chain` | audit | None | `records`, in chain order | A chain verification result |
-| `verify-checkpoints` | audit | `jwks` | `export` and `checkpoints`, a list of compact JWS strings | A checkpoint verification result with a rule ID on failure |
+| `verify-checkpoints` | audit | `jwks` | `export`, `checkpoints` (a list of compact JWS strings), and optional `jwks_json` (JWKS text that replaces `shared.jwks`) | A checkpoint verification result with a rule ID on failure |
 | `bash-targets` | adapter | None | `command`, a shell command line | `targets`, the paths that the line writes |
 | `exec-segments` | adapter | None | `command`, a shell command line | `segments`, the words of each command |
 | `patch-targets` | adapter | None | `patch`, the text of an `apply_patch` call | `targets`, the paths of the patch, or null for a patch that Codex rejects |

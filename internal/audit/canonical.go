@@ -77,17 +77,21 @@ func object(members ...member) value {
 }
 
 func parse(text []byte) (value, error) {
-	if !utf8.Valid(text) || !json.Valid(text) {
-		return value{}, errors.New("the text is not JSON")
-	}
 	r := &reader{text: text}
-	return r.value(), nil
+	return r.parse()
 }
 
-// reader reads a text that json.Valid accepted, so it checks no syntax.
 type reader struct {
-	text []byte
-	at   int
+	text           []byte
+	at             int
+	repeatedMember bool
+}
+
+func (r *reader) parse() (value, error) {
+	if !utf8.Valid(r.text) || !json.Valid(r.text) {
+		return value{}, errors.New("the text is not JSON")
+	}
+	return r.value(), nil
 }
 
 func (r *reader) space() {
@@ -158,6 +162,7 @@ func (r *reader) object() value {
 		r.at++
 		m := member{key: key, value: r.value()}
 		if i := slices.IndexFunc(members, func(m member) bool { return slices.Equal(m.key, key) }); i >= 0 {
+			r.repeatedMember = true
 			members[i] = m
 		} else {
 			members = append(members, m)
