@@ -9,7 +9,7 @@
 
 ## Cut a release
 
-To cut a release, see the release guide tracked in [issue #29](https://github.com/Multiplexer-si/OpenPlexer/issues/29).
+To cut a release, follow the [release guide](docs/release.md).
 Include [LICENSE](LICENSE), [NOTICE](NOTICE), and [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) with the binaries.
 
 ## Triage a security report
