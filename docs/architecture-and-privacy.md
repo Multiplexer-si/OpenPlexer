@@ -9,7 +9,7 @@ flowchart LR
     subgraph local["Developer machine"]
         agent["Claude Code or Codex"] -->|PreToolUse| hook["openplexer hook and local gate"]
         hook -->|reads| policy["Signed policy on disk"]
-        hook -->|writes| log["Local decision log"]
+        hook -->|attempts to append| log["Local decision log"]
         hook -->|queues denials| outbox["Room outbox"]
         outbox --> daemon["openplexer daemon"]
         daemon -->|stores verified policy| policy
@@ -18,7 +18,7 @@ flowchart LR
     hub -->|Export and checkpoint| verify["openplexer-verify offline"]
 ```
 
-- **Local gate.** The coding agent runs `openplexer hook` before a matched tool call. The adapter turns the input into policy queries. The hook opens and verifies the local policy, returns its verdict to the agent, and records decisions that reach the gate. The gate can use a signed bundle from disk and a trusted local key set without a hub. [Local policy gate](local-policy.md).
+- **Local gate.** The coding agent runs `openplexer hook` before a matched tool call. The adapter turns the input into policy queries. The hook opens and verifies the local policy and attempts to record decisions that reach the gate. If the audit append fails, the hook preserves a policy denial and blocks an otherwise allowed call. The gate can use a signed bundle from disk and a trusted local key set without a hub. [Local policy gate](local-policy.md).
 - **Hub and signed policy.** `openplexer-hub` serves one team. Each project names one repository and has a Room with the same ID. The hub signs the policy bundle with its ES256 key. On sync, `openplexer` checks the bundle against both the hub's advertised keys and the public keys pinned locally. A load or sync rejects an older version or different content at the same version while a verified policy is in force. [Hub setup](hub.md) and [team enrollment](local-policy.md#connect-to-a-team-hub).
 - **Room.** The Room is a sequence of events for a project. The hub serves replay and live updates and provides an API for claim leases. `openplexer daemon` resumes the stream from its saved position and writes received events as JSON lines to standard output. The daemon also delivers queued posts. The local hook reads policy directly from disk. [Room HTTP API](hub.md#http-api).
 - **Team audit log and verifier.** The hub writes its own hash chain and signs a checkpoint at export with a separate ES256 key. `openplexer-verify` reads the JSON export, a checkpoint key set, and any supplied checkpoints from files. It runs offline on any review machine. [Export and verify an audit log](audit.md).
@@ -44,8 +44,10 @@ The local hook and a policy loaded from a file need no network. When you configu
 |---|---|---|
 | On `policy sync`, on daemon startup, and every 15 seconds while the daemon runs | `GET /api/v1/projects/{project}/policy.bundle` | The project ID in the route and the member bearer token in the authorization header. No request body. |
 | During each sync that gets a policy response with a signed token | `GET /.well-known/jwks.json` | A request for the public policy JSON Web Key Set (JWKS). No bearer token or request body. The advertised keys do not replace the local pin. |
-| When the daemon starts or reconnects to the Room stream, or resumes after a gap | `POST /api/v1/rooms/{room}/stream` | The Room ID and member bearer token. Each newline-delimited resume has `v`, `type`, `room`, `sender.id` with the member ID, `sender.kind` set to `daemon`, and `payload.last_seq` with the cursor. The cursor starts at zero. |
+| When the daemon connects or reconnects to the Room stream | `POST /api/v1/rooms/{room}/stream` | The Room ID and member bearer token. Each newline-delimited resume has `v`, `type`, `room`, `sender.id` with the member ID, `sender.kind` set to `daemon`, and `payload.last_seq` with the cursor. The cursor starts at zero. |
 | When the running daemon flushes the outbox, which it checks on a one-second timer | `POST /api/v1/rooms/{room}/events` | The Room ID, member bearer token, and an `Idempotency-Key` made from the local queue time and a random suffix. The JSON contains `type`, `body`, and, for an agent post, `agent.id`, `agent.vendor`, and optional `agent.parent`. Retries use the same key. |
+
+A hub `behind` error prompts the daemon to send another resume frame on the open POST with its current cursor. A valid event with a higher sequence advances the cursor even across a gap. A sequence gap alone triggers no resume.
 
 ### Room post fields
 
@@ -61,7 +63,7 @@ The local hook and a policy loaded from a file need no network. When you configu
 | `human` | `text`, `mentions` |
 | `policy.denied` | For a hook-generated denial, `action`, `path`, and `rule` set to `denied by policy` |
 
-A hub-configured hook can queue `policy.denied` when a verified policy denies a call and the hook has a valid session ID. It includes that ID and the adapter name. The `path` is a filtered relative path or `[omitted]`. Absolute paths and unsafe targets use `[omitted]`, as do `exec` and `git.push` targets. The event carries no command text, detailed rule, or area. A refusal before policy evaluation, such as an unreadable tool call or missing policy, does not generate this post. [Denial reporting](trust-model.md#decisions-settled-by-the-hub-connection).
+A hub-configured hook can queue `policy.denied` when a verified policy denies a call and the hook has a valid session ID. It includes that ID and the adapter name. The adapter converts a write target inside a recognized project to a project-relative path before the policy check, even if the tool input names an absolute path. The Room can receive that relative path if it passes the filter. The filter sets `path` to `[omitted]` for `exec` and `git.push` and for any resulting policy target that is still absolute or otherwise unsafe. The event carries no command text, detailed rule, or area. A refusal before policy evaluation, such as an unreadable tool call or missing policy, does not generate this post. [Denial reporting](trust-model.md#decisions-settled-by-the-hub-connection).
 
 The daemon makes no claim API calls. A member who creates a claim through the hub API sends an agent identity, an item, paths, and intent. The request can include a claim mode, duration, and the `implicit` flag. Renewals and releases send a claim ID and a session ID, plus a new duration or an optional release outcome. The daemon's content filter does not run for direct HTTP requests. The hub validates events, but direct posts can contain prose and extra body fields that the daemon would have rejected or dropped. [Hub HTTP API](hub.md#http-api) and [content filters](trust-model.md#free-text-filtering-is-a-heuristic).
 

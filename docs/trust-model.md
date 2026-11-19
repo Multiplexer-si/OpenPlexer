@@ -12,7 +12,7 @@ OpenPlexer provides these guarantees.
 - When an installed hook runs and finishes, it can block a write that the policy denies if the hook recognizes the target before the tool runs. The coding agent receives the reason.
 - With a hub configured, the daemon can send filtered Room posts with paths, identifiers, and prose. OpenPlexer sends no file contents or raw tool payloads as part of its protocol.
 - A load or sync verifies a policy before storing it. The gate verifies the stored signature against the local key set when it opens. It can keep using that policy while the hub is unreachable.
-- With a trusted checkpoint, a verifier can show that an exported audit log was not altered up to that checkpoint.
+- With a trusted checkpoint, a verifier can check that the records' nine hash-covered fields, in chain order, match the signed history through the checkpoint's record count. Display fields such as `id` can change without affecting this check. [Audit verification limits](audit.md#what-the-verifier-cannot-prove).
 
 The hooks do not give you these things.
 
@@ -124,7 +124,7 @@ Treat the Room as a shared channel that the hub operator can read. The filters c
 - A write to a path outside the project tree. The policy governs only project-relative paths. The one exception is the daemon's home directory, which the gate protects when a policy is loaded (S18).
 - Git operations that get around the git hooks. The git hooks are advisory, and a process that controls its own environment or writes the repository's internals gets around them (S6).
 
-**OpenPlexer.** Calls outside the configured hook matchers do not reach the gate. A write outside every recognized project goes unchecked unless it hits a guarded path. A hook cannot stop work done by a process outside the coding agent.
+**OpenPlexer.** Calls outside the configured hook matchers do not reach the gate. For a matched call, the hook blocks a recognized write if it cannot resolve the call's working directory to a project. With a recognized working directory, a write to an unguarded path outside every recognized project makes no file-policy query. The hook blocks writes it recognizes to guarded paths. A hook cannot stop work done by a process outside the coding agent.
 
 ### Shell write checks
 
@@ -297,7 +297,7 @@ The operator made these decisions on 2026-11-19. [Issue 23](https://github.com/M
 - **Transport.** The agent accepts HTTPS and loopback HTTP. Requests refuse redirects. The public JWKS request carries no member token.
 - **Credentials.** The developer installs the member bearer token in `config.json` with mode `0600`. The hub authenticates Room authors from that token. A token stays valid until the operator removes the member, and the developer can install a replacement with `configure --token-file`. A revoked token blocks network requests. The gate still evaluates the cached bundle and uses the configured member ID.
 - **Overrides.** A permission-widening override requires its own signed contract. Until that exists, the gate ignores override inputs, including anything reported in Room events.
-- **Denials.** The hook queues the action and a project-relative path that passes the content filter. Command text, absolute local paths, and other unsafe targets become `[omitted]`. The Room gets a fixed reason. Detailed rules stay local.
+- **Denials.** The hook queues the action and a filtered policy target. The adapter makes a write target inside a recognized project relative to its project root before the policy check, even when the tool input names an absolute path. The Room can receive that relative path if it passes the content filter. The filter uses `[omitted]` for `exec` and `git.push` and for any resulting policy target that is still absolute or otherwise unsafe. The Room gets a fixed reason. Command text and detailed rules stay local.
 - **Repository identifier.** Use the ID the lead set with `add-project -repo`. The sole repository in the signed bundle supplies the ID for file queries. The daemon derives no identifier from the Git remote or directory.
 - **Room delivery.** The daemon resumes a Room stream with its saved cursor and writes received events to standard output. The installed hooks do not inject Room content into the coding agent. The hub offers a claim API. Claims are advisory and the hooks do not consult them.
 - **Outbound data.** The daemon filters supported Room posts before queueing and again before sending. It makes policy and JWKS requests, sends Room resume envelopes with a cursor, and posts Room events with idempotency keys. There are no presence, ledger, metrics, audit export, or raw tool payloads on this connection.
