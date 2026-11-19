@@ -279,7 +279,7 @@ The operator made these decisions on 2026-11-19. [Issue 23](https://github.com/M
 - **Checkpoint signing keys.** The hub signs checkpoints with a dedicated ES256 key and `kid`. It publishes every checkpoint public key it has used in a checkpoint JWKS. Keepers store the JWKS next to the checkpoints.
 - **Distribution.** The hub pushes checkpoints to connected daemons. Each daemon keeps every checkpoint it receives and never overwrites one.
 - **Verification.** The verifier checks the export and each checkpoint's signature, workspace, count, and tip. Two authenticated tips at the same workspace and count must agree. Without a checkpoint, the result says completeness is not proven.
-- **JSON exports.** The verifier reverses the newest-first export. A filtered export that omits genesis or leaves a gap fails the chain check. A contiguous prefix needs a later checkpoint to detect a missing suffix. CSV verification stays out of scope.
+- **JSON exports.** The verifier reverses the newest-first export. A nonempty filtered export that omits genesis or leaves a gap fails the chain check. An empty export or a contiguous prefix needs a later checkpoint to detect a missing suffix. CSV verification stays out of scope.
 - **Hash compatibility.** Version 1 keeps the existing hash inputs. It uses the previous hash as hexadecimal text followed by canonical JSON with UTF-16 key order and the reference's string and number rules. [Canonical JSON contract](../spec/canonical-json/README.md).
 - **Workspace identity.** `workspace_id` names the team. A single-team hub uses one stable ID for its team in audit records and checkpoints.
 

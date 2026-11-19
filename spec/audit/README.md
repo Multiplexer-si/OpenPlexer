@@ -68,7 +68,7 @@ A log with no records is valid, with `entries` equal to 0.
 
 **A6. Export shape and order.** The JSON export is one UTF-8 JSON object with an `entries` array and a null `next_cursor`. Read its values under the [canonical JSON input rules](../canonical-json/README.md#the-input). `entries` lists the records newest first. The verifier reverses the array once and checks it from genesis. Chain positions are 1-based after reversal. The verifier uses array positions and never sorts by `id` or by time.
 
-A filtered export that omits genesis fails A4. A gap after genesis fails A5 at the next included record. The export carries no filter marker. An empty export or a contiguous prefix can pass the chain checks. A later checkpoint detects a missing suffix under K9.
+A nonempty filtered export that omits genesis fails A4. A gap after genesis fails A5 at the next included record. The export carries no filter marker. An empty export or a contiguous prefix can pass the chain checks. A later checkpoint detects a missing suffix under K9.
 
 **A7. Export display fields.** Each entry has the twelve fields of a record and `result`, and it can also have `agent_member_id`. `result` is the part of `action` after its last `.` or `-`, or the whole `action` if it has neither character. `agent_member_id` is the member that owns the agent session, or null. Neither field is hashed. A verifier uses `action` to compute any `result` it displays.
 

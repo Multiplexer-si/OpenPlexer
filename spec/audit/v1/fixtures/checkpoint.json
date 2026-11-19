@@ -1160,6 +1160,41 @@
       }
     },
     {
+      "name": "empty filtered export",
+      "why": "Filtering out every record leaves a valid empty export whose completeness is not proven.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint_entries": null,
+        "completeness": "not_proven",
+        "entries": 0,
+        "ok": true
+      }
+    },
+    {
+      "name": "empty filtered export with a later checkpoint",
+      "why": "The empty export passes chain checks, but the checkpoint requires three records.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.1DLbqabTYsLNqWEnp_SA4jRaBdwq22UU_YAxiPC3lHoj_sHWtwTp2bpBxAEhXWaxa-a1gqU_BsOAgnT7IBjzGA"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K9"
+      }
+    },
+    {
       "name": "padded compact JWS",
       "why": "The signature segment ends in a padding character.",
       "input": {

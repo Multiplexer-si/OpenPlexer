@@ -187,6 +187,8 @@ func generate() []byte {
 		vector("checkpoint beyond the chain", "The checkpoint claims a fourth record and the export has three.", full, []string{aheadToken}, failure("K9", 1, 0, "")),
 		vector("contradicting checkpoints", "Both signatures verify and the two tips differ at the same count.", full, []string{tipToken, oldKey.sign(checkpointType, oldKey.kid, conflicting)}, failure("K8", 2, 0, "")),
 		vector("filtered export", "The export starts at the second record, whose previous hash is not genesis.", []any{third, second}, nil, failure("A4", 0, 1, second.ID)),
+		vector("empty filtered export", "Filtering out every record leaves a valid empty export whose completeness is not proven.", []any{}, nil, success(0, nil)),
+		vector("empty filtered export with a later checkpoint", "The empty export passes chain checks, but the checkpoint requires three records.", []any{}, []string{tipToken}, failure("K9", 1, 0, "")),
 		vector("padded compact JWS", "The signature segment ends in a padding character.", full, []string{tipToken + "="}, failure("K1", 1, 0, "")),
 		vector("impossible issue date", "The signed date is February 30.", full, []string{newKey.sign(checkpointType, newKey.kid, badDate)}, failure("K6", 1, 0, "")),
 		vector("issue date in year zero", "A checkpoint issue date cannot use year 0000.", []any{}, []string{oldKey.sign(checkpointType, oldKey.kid, yearZero)}, failure("K6", 1, 0, "")),

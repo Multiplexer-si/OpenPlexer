@@ -21,6 +21,17 @@ import (
 
 const auditSchemaID = "urn:openplexer:spec:audit:v1:"
 
+func TestMissingGenesisRuleAppliesToNonemptyExports(t *testing.T) {
+	for _, path := range []string{
+		filepath.Join(specDir, "audit", "README.md"),
+		filepath.Join("..", "..", "docs", "trust-model.md"),
+	} {
+		if !bytes.Contains(readFile(t, path), []byte("nonempty filtered export that omits genesis")) {
+			t.Errorf("%s must qualify the missing-genesis claim with nonempty", path)
+		}
+	}
+}
+
 type checkpointSchemas struct {
 	entry, header, payload *jsonschema.Schema
 }
