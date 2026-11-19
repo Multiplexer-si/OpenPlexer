@@ -1,4 +1,6 @@
-.PHONY: check build fmt
+.PHONY: check build fmt release
+
+export VERSION
 
 check:
 	@test -z "$$(gofmt -l .)" || { echo "gofmt needed on:"; gofmt -l .; exit 1; }
@@ -7,6 +9,9 @@ check:
 
 build:
 	go build -o bin/ ./apps/...
+
+release:
+	go run ./tools/release -version "$$VERSION"
 
 fmt:
 	gofmt -w .
