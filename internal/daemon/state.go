@@ -82,7 +82,7 @@ func classify(home string, staleAfter time.Duration, now time.Time) (Status, *po
 	case keys == nil:
 		return rejected("no key set is configured, so the stored policy cannot be verified")
 	}
-	verified, err := policy.VerifySignedBundle(stored.Token, *keys)
+	verified, err := verifyPolicyBundle(stored.Token, *keys)
 	if err != nil {
 		return rejected("the stored policy does not verify against the key set: %v", err)
 	}
@@ -99,4 +99,19 @@ func classify(home string, staleAfter time.Duration, now time.Time) (Status, *po
 		status.Detail += fmt.Sprintf(", stale since %s", status.StaleAt.UTC().Format(time.RFC3339))
 	}
 	return status, verified
+}
+
+func verifyPolicyBundle(token string, keys policy.KeySet) (*policy.Verified, error) {
+	// Allow room for base64, the header, and the signature before decoding.
+	if len(token) > 2*policy.MaxBundleBytes {
+		return nil, fmt.Errorf("the signed policy is longer than %d bytes", 2*policy.MaxBundleBytes)
+	}
+	verified, err := policy.VerifySignedBundle(token, keys)
+	if err != nil {
+		return nil, err
+	}
+	if len(verified.Payload) > policy.MaxBundleBytes {
+		return nil, fmt.Errorf("the policy payload is longer than %d bytes", policy.MaxBundleBytes)
+	}
+	return verified, nil
 }

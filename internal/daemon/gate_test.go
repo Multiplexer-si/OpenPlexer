@@ -604,6 +604,35 @@ func TestTheEvaluationsOfOneCallShareOneBudget(t *testing.T) {
 	}
 }
 
+func TestGateRejectsSignedPayloadOverTheHubLimit(t *testing.T) {
+	keys := newSigner(t)
+	home := t.TempDir()
+	configure(t, home, Settings{KeySet: keys.keySet(t)})
+	gate := open(t, home, loadedAt)
+	prefix := `{"version":1,"project_id":"p","repos":[],"areas":[],"roles":{},"members":{},"pad":"`
+	suffix := `"}`
+	for _, length := range []int{policy.MaxBundleBytes, policy.MaxBundleBytes + 1} {
+		payload := prefix + strings.Repeat("x", length-len(prefix)-len(suffix)) + suffix
+		token := keys.sign(t, []byte(payload))
+		state, err := gate.Load(t.Context(), token)
+		if length == policy.MaxBundleBytes {
+			if err != nil || state.State != Verified || open(t, home, loadedAt).Status().State != Verified {
+				t.Fatalf("bundle at the limit: %v, %v", state, err)
+			}
+			continue
+		}
+		if !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "payload is longer") {
+			t.Fatalf("bundle over the limit: %v, %v", state, err)
+		}
+		if err := writeJSON(home, policyFile, storedPolicy{Token: string(token), ConfirmedAt: loadedAt}); err != nil {
+			t.Fatal(err)
+		}
+		if status := open(t, home, loadedAt).Status(); status.State != Rejected || !strings.Contains(status.Detail, "payload is longer") {
+			t.Fatalf("stored bundle over the limit: %v", status)
+		}
+	}
+}
+
 func TestTheGateOwnsTheMemberAndTheOverridesOfAQuery(t *testing.T) {
 	keys := newSigner(t)
 	bundle := []byte(`{"version": 1, "project_id": "p", "repos": ["api"], "areas": [{"name": "backend", "patterns": ["api:src/**"]}, {"name": "docs", "patterns": ["api:docs/**"]}], "roles": {"backend": {"read": [], "write": ["backend"], "exec": []}, "writer": {"read": [], "write": ["docs"], "exec": []}}, "members": {"mem-ana": "backend", "mem-wu": "writer"}}`)

@@ -28,7 +28,11 @@ var errOverBudget = fmt.Errorf("the evaluation is over its budget: the globs tha
 
 // A Budget is the work that the evaluations of one call of an agent may
 // still do. An evaluation that would go over the budget denies.
-type Budget struct{ left int }
+type Budget struct {
+	left      int
+	lowercase map[string]string
+	path      filePath
+}
 
 // NewBudget returns the budget of one call.
 func NewBudget() *Budget { return &Budget{left: maxWork} }
@@ -40,6 +44,19 @@ func (b *Budget) spend(work int) error {
 	}
 	b.left -= work
 	return nil
+}
+
+// A call can compare the same scopes and directory roots in many repos.
+func (b *Budget) lower(text string) string {
+	if form, ok := b.lowercase[text]; ok {
+		return form
+	}
+	form := lowercase(text)
+	if b.lowercase == nil {
+		b.lowercase = make(map[string]string)
+	}
+	b.lowercase[text] = form
+	return form
 }
 
 // Evaluate is [Evaluate] within the budget b.
@@ -135,14 +152,17 @@ func evaluateFile(bundle *Bundle, q Query, roleName string, role *Role, budget *
 	if err := budget.spend(len(q.Path) + len(q.Repo) + 1); err != nil {
 		return deny(err.Error())
 	}
-	path, ok := canonicalPath(q.Path)
-	if !ok {
-		return deny("path is absolute or escapes the project root")
+	if !budget.path.ready || q.Path != budget.path.raw {
+		path, ok := canonicalPath(q.Path)
+		if !ok {
+			return deny("path is absolute or escapes the project root")
+		}
+		if utf16Length(path) > MaxGlobPath {
+			return deny(errPathTooLong.Error())
+		}
+		budget.path = filePath{raw: q.Path, lower: lowercase(path), units: utf16.Encode([]rune(path)), ready: true}
 	}
-	if utf16Length(path) > MaxGlobPath {
-		return deny(errPathTooLong.Error())
-	}
-	matched, err := bundle.matchAreas(q.Repo, path, budget)
+	matched, err := bundle.matchAreas(q.Repo, budget)
 	if err != nil {
 		return deny(err.Error())
 	}
@@ -180,6 +200,12 @@ func evaluateFile(bundle *Bundle, q Query, roleName string, role *Role, budget *
 		return allow(winner.allowRule(q, roleName)).in(winner.area)
 	}
 	return deny(bundle.denyRule(winner.area, q, roleName, role)).in(winner.area)
+}
+
+type filePath struct {
+	raw, lower string
+	units      []uint16
+	ready      bool
 }
 
 func canonicalPath(raw string) (string, bool) {
@@ -229,9 +255,9 @@ type match struct {
 	specificity
 }
 
-func (b *Bundle) matchAreas(repo, path string, budget *Budget) ([]match, error) {
-	repoLower, pathLower := lowercase(repo), lowercase(path)
-	units := utf16.Encode([]rune(path))
+func (b *Bundle) matchAreas(repo string, budget *Budget) ([]match, error) {
+	repoLower := budget.lower(repo)
+	path := budget.path
 	var scratch globScratch
 	var matched []match
 	for i := range b.Areas {
@@ -248,13 +274,13 @@ func (b *Bundle) matchAreas(repo, path string, budget *Budget) ([]match, error) 
 			if !found {
 				patternRepo, glob = "*", pattern
 			}
-			if patternRepo != "*" && lowercase(patternRepo) != repoLower {
+			if patternRepo != "*" && patternRepo != repoLower && budget.lower(patternRepo) != repoLower {
 				continue
 			}
 			glob = NormalizeGlob(glob)
 			directory, isTree := strings.CutSuffix(glob, "/**")
-			if !isTree || lowercase(directory) != pathLower {
-				matches, err := scratch.matches(glob, units, true, budget, nil)
+			if !isTree || budget.lower(directory) != path.lower {
+				matches, err := scratch.matches(glob, path.units, true, budget, nil)
 				if errors.Is(err, errOverBudget) {
 					return nil, err
 				}

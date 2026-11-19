@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -40,7 +41,12 @@ func (c config) staleAfter() time.Duration {
 }
 
 func readJSON(home, name string, fields map[string]any) (bool, error) {
-	text, err := os.ReadFile(filepath.Join(home, name))
+	path := filepath.Join(home, name)
+	read := os.ReadFile
+	if name == policyFile {
+		read = readPolicyFile
+	}
+	text, err := read(path)
 	if errors.Is(err, fs.ErrNotExist) {
 		return false, nil
 	}
@@ -66,6 +72,21 @@ func readJSON(home, name string, fields map[string]any) (bool, error) {
 		}
 	}
 	return true, nil
+}
+
+func readPolicyFile(path string) ([]byte, error) {
+	// Leave space for JSON escaping, including older unencoded JWS payloads.
+	const maxStoredPolicyBytes = 8 * policy.MaxBundleBytes
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxStoredPolicyBytes+1))
+	if len(data) > maxStoredPolicyBytes {
+		return nil, fmt.Errorf("%s exceeds %d bytes", policyFile, maxStoredPolicyBytes)
+	}
+	return data, err
 }
 
 func readConfig(home string) (config, error) {

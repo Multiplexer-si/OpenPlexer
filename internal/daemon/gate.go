@@ -132,7 +132,7 @@ func (g *Gate) admit(token string, inForce *policy.Verified) (*policy.Verified, 
 	if keys == nil {
 		return nil, "", errors.New("no key set is configured")
 	}
-	candidate, err := policy.VerifySignedBundle(token, *keys)
+	candidate, err := verifyPolicyBundle(token, *keys)
 	if err != nil {
 		return nil, "", err
 	}

@@ -14,7 +14,7 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
 
-const MaxPolicyBytes = 1 << 20
+const MaxPolicyBytes = policy.MaxBundleBytes
 
 const (
 	policyAlg = "ES256"
@@ -57,6 +57,9 @@ func (s *Store) publishPolicy(st *state, project string, text []byte, actor *str
 	canonical, err := audit.Canonical(text)
 	if err != nil {
 		return SignedBundle{}, fmt.Errorf("%w: policy cannot be canonicalized", errInvalid)
+	}
+	if len(canonical) > MaxPolicyBytes {
+		return SignedBundle{}, fmt.Errorf("%w: canonical policy exceeds %d bytes", errInvalid, MaxPolicyBytes)
 	}
 	if latest, exists := st.Policies[project]; exists && bundle.Version <= latest.Version {
 		// The display copy may have been escaped by the file's JSON encoder.

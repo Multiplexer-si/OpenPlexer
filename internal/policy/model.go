@@ -1,5 +1,8 @@
 package policy
 
+// MaxBundleBytes bounds the JSON payload a hub signs or a gate enforces.
+const MaxBundleBytes = 1 << 20
+
 type Action string
 
 const (
