@@ -192,7 +192,9 @@ func generate() []byte {
 	}
 	page := vector("paged export", "The cursor is a string. The audit export requires null.", full, nil, failure("A6", 0, 0, ""))
 	page.Input["export"] = map[string]any{"entries": full, "next_cursor": "11"}
-	cases = append(cases, page)
+	overflow := vector("out-of-range number in an unknown export field", "The export allows any value for this field, including an out-of-range number read as infinity.", []any{}, nil, success(0, nil))
+	overflow.Input["export"].(map[string]any)["extra"] = json.Number("1e400")
+	cases = append(cases, page, overflow)
 
 	data := map[string]any{
 		"contract": "audit", "version": 1, "operation": "verify-checkpoints",

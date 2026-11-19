@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf16"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -72,24 +73,21 @@ func checkpointRunner(t *testing.T, keys []map[string]any) func(*testing.T, json
 // checkCheckpointFixture evaluates the published cases using the published
 // schemas, the audit hash code, and the Go crypto package.
 func checkCheckpointFixture(t *testing.T, schemas checkpointSchemas, keys []map[string]any, in checkpointInput) map[string]any {
-	var export map[string]any
-	if err := json.Unmarshal(in.Export, &export); err != nil {
-		return fixtureFailure("A6", 0)
-	}
-	entries, isList := export["entries"].([]any)
-	cursor, hasCursor := export["next_cursor"]
-	if !isList || !hasCursor || cursor != nil {
-		return fixtureFailure("A6", 0)
-	}
-	wire, err := parse(in.Export)
+	export, err := parse(in.Export)
 	if err != nil {
-		t.Fatal(err)
+		return fixtureFailure("A6", 0)
 	}
-	records, _ := wire.member("entries")
-	slices.Reverse(entries)
+	records, _ := export.member("entries")
+	cursor, hasCursor := export.member("next_cursor")
+	if records.kind != kindArray || !hasCursor || cursor.kind != kindNull {
+		return fixtureFailure("A6", 0)
+	}
 	slices.Reverse(records.items)
+	entries := make([]any, len(records.items))
 	previous := GenesisHash
-	for i, entry := range entries {
+	for i, wireRecord := range records.items {
+		entry := fixtureJSON(wireRecord)
+		entries[i] = entry
 		if schemas.entry.Validate(entry) != nil {
 			return atRecord(fixtureFailure("A1", 0), entries, i)
 		}
@@ -101,7 +99,7 @@ func checkCheckpointFixture(t *testing.T, schemas checkpointSchemas, keys []map[
 			}
 			return atRecord(fixtureFailure(rule, 0), entries, i)
 		}
-		computed, err := hashOf(previous, records.items[i])
+		computed, err := hashOf(previous, wireRecord)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -163,6 +161,32 @@ func checkCheckpointFixture(t *testing.T, schemas checkpointSchemas, keys []map[
 		result["completeness"] = "through_checkpoint"
 	}
 	return result
+}
+
+func fixtureJSON(v value) any {
+	switch v.kind {
+	case kindBool:
+		return v.flag
+	case kindNumber:
+		return v.number
+	case kindString:
+		s, _ := v.str()
+		return s
+	case kindArray:
+		items := make([]any, len(v.items))
+		for i, item := range v.items {
+			items[i] = fixtureJSON(item)
+		}
+		return items
+	case kindObject:
+		members := make(map[string]any, len(v.members))
+		for _, m := range v.members {
+			members[string(utf16.Decode(m.key))] = fixtureJSON(m.value)
+		}
+		return members
+	default:
+		return nil
+	}
 }
 
 func fixtureFailure(rule string, checkpoint int) map[string]any {

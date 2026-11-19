@@ -1437,6 +1437,24 @@
         "ok": false,
         "rule": "A6"
       }
+    },
+    {
+      "name": "out-of-range number in an unknown export field",
+      "why": "The export allows any value for this field, including an out-of-range number read as infinity.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [],
+          "extra": 1e400,
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint_entries": null,
+        "completeness": "not_proven",
+        "entries": 0,
+        "ok": true
+      }
     }
   ],
   "contract": "audit",
