@@ -22,7 +22,7 @@ The field descriptions are in the schemas. This page gives the rules that a sche
 
 ## The hash of a record
 
-**A1. Record shape.** A record must satisfy `v1/record.schema.json`. An export entry must satisfy the entry schema in `v1/export.schema.json`. Both accept unknown fields.
+**A1. Record shape.** A record must satisfy `v1/record.schema.json`. An export entry must satisfy the entry schema in `v1/export.schema.json`. Both accept unknown fields. Reject a repeated member name anywhere in an export entry, including inside `meta` and unknown fields. Report the record's chain position and its `id` if the record has a string `id`.
 
 **A2. Hash input.**
 Nine fields of a record are hashed: `workspace_id`, `actor_member_id`, `agent_session_id`, `action`, `target`, `reason`, `meta`, `flagged`, and `created_at`. The fields `id`, `prev_hash`, and `hash` are not.
@@ -66,7 +66,11 @@ A log with no records is valid, with `entries` equal to 0.
 
 ## The export
 
-**A6. Export shape and order.** The JSON export is one UTF-8 JSON object with an `entries` array and a null `next_cursor`. Read its values under the [canonical JSON input rules](../canonical-json/README.md#the-input). `entries` lists the records newest first. The verifier reverses the array once and checks it from genesis. Chain positions are 1-based after reversal. The verifier uses array positions and never sorts by `id` or by time.
+**A6. Export shape and order.** The JSON export is one UTF-8 JSON object with an `entries` array and a null `next_cursor`. Read its values under the [canonical JSON input rules](../canonical-json/README.md#the-input), with a stricter rule for object member names. Compare decoded member names case-sensitively without Unicode normalization. Reject repeated member names at any depth. Report A6 for a repeat outside the entries, and apply A1 within each entry.
+
+Rejecting repeats prevents a reader from displaying one value while the verifier hashes another. The reference writes exports with `JSON.stringify`, which emits each member name once per object. A2 and A3 define the hash computation.
+
+`entries` lists the records newest first. The verifier reverses the array once and checks it from genesis. Chain positions are 1-based after reversal. The verifier uses array positions and never sorts by `id` or by time.
 
 A nonempty filtered export that omits genesis fails A4. A gap after genesis fails A5 at the next included record. The export carries no filter marker. An empty export or a contiguous prefix can pass the chain checks. A later checkpoint detects a missing suffix under K9.
 
@@ -164,7 +168,7 @@ The reference is at commit `7d80045a`.
 
 The verification function of the reference reads its records from a Postgres database, so the extractor cannot call it. The extractor runs the same loop over a list of records, and it calls the `computeAuditHash` function of the reference for every hash. The loop is in `tools/extract/audit.ts`.
 
-Run the checkpoint generator from the repository root. The tests evaluate each committed case and compare the fixture file with fresh generator output. The checkpoint signing keys are public test keys and must stay in tests. [Generator](../../tools/auditvectors).
+Run the checkpoint generator from the repository root. Test each case with the original JSON bytes of `input.export`. Parsing and serializing that value can discard repeated members. The tests evaluate each committed case and compare the fixture file with fresh generator output. The checkpoint signing keys are public test keys and must stay in tests. [Generator](../../tools/auditvectors).
 
 ## Intentional differences from the reference
 
