@@ -22,6 +22,7 @@ import (
 )
 
 const usage = `usage:
+  openplexer --version
   openplexer configure [--keys <jwks.json>] [--member <member-id>] [--stale-after-days <days>]
   openplexer configure --hub <url> --project <id> --member <id> --keys <jwks.json> --token-file <file>
   openplexer daemon
@@ -58,6 +59,8 @@ const (
 	exitDenied     = 5
 )
 
+var version = "dev"
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdin, os.Stdout, os.Stderr, time.Now))
 }
@@ -70,6 +73,10 @@ type command struct {
 }
 
 func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() time.Time) int {
+	if len(args) == 1 && args[0] == "--version" {
+		fmt.Fprintln(stdout, version)
+		return exitOK
+	}
 	c := command{stdin: stdin, stdout: stdout, stderr: stderr, now: now}
 	var err error
 	if c.home, err = homeDirectory(); err != nil {

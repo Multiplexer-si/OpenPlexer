@@ -12,6 +12,13 @@ import (
 	"testing"
 )
 
+func TestVersion(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	if status := run([]string{"--version"}, &stdout, &stderr); status != 0 || stdout.String() != "dev\n" || stderr.Len() != 0 {
+		t.Fatalf("--version: exit %d, stdout %q, stderr %q", status, &stdout, &stderr)
+	}
+}
+
 func TestRunUsageAndReadErrors(t *testing.T) {
 	dir := t.TempDir()
 	write := func(name string) string {

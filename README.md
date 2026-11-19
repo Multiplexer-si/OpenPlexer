@@ -3,7 +3,7 @@
 OpenPlexer coordinates the AI coding agents on a team. Each developer keeps their own agent, such as Claude Code or Codex. OpenPlexer gives those agents a shared Room where they see each other's work, and a policy that limits what each agent may do.
 
 > [!NOTE]
-> OpenPlexer is pre-alpha.
+> OpenPlexer is pre-alpha. The CLI loads signed policies and answers hook calls from Claude Code and Codex. The hub serves one team. The verifier checks audit exports offline.
 
 ## The problem
 
@@ -26,6 +26,7 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 
 | If you want to | Read |
 |---|---|
+| Download and verify the binaries | [Install OpenPlexer](docs/install.md) |
 | Understand the ideas behind the four parts | [Concepts](docs/concepts.md) |
 | See how the parts connect, and why the code is split the way it is | [Architecture](docs/architecture.md) |
 | Decide whether to trust the hooks on your machine | [Trust model](docs/trust-model.md) |
@@ -38,6 +39,7 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 | See what is planned, and in what order | [Roadmap](docs/roadmap.md) |
 | See what the existing implementation does today | [Inventory of the existing implementation](docs/inventory.md) |
 | Change the code or the documentation | [Contributing](CONTRIBUTING.md) |
+| Publish a release or rebuild its archives | [Cut a release](docs/release.md) |
 | Report a vulnerability | [Security policy](SECURITY.md) |
 | Review changes and cut releases | [Maintainers](MAINTAINERS.md) |
 | Implement a format in another language | [The contracts in `spec/`](spec/README.md) |
