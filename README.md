@@ -3,7 +3,7 @@
 OpenPlexer coordinates the AI coding agents on a team. Each developer keeps their own agent, such as Claude Code or Codex. OpenPlexer gives those agents a shared Room where they see each other's work, and a policy that limits what each agent may do.
 
 > [!NOTE]
-> OpenPlexer is pre-alpha and you cannot use it yet. This repository holds the project structure, the design documents, the plan, the contracts and fixtures in `spec/`, the policy evaluator in `internal/policy`, and the local policy gate in `internal/daemon`. The `openplexer` binary loads a signed policy bundle, installs a hook in Claude Code and Codex, and answers each hook call from the policy. No run of a real agent has checked the hooks yet. The other two binaries print "not implemented yet" and exit with status 1.
+> OpenPlexer is pre-alpha.
 
 ## The problem
 
@@ -39,6 +39,8 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 | See what is planned, and in what order | [Roadmap](docs/roadmap.md) |
 | See what the existing implementation does today | [Inventory of the existing implementation](docs/inventory.md) |
 | Change the code or the documentation | [Contributing](CONTRIBUTING.md) |
+| Report a vulnerability | [Security policy](SECURITY.md) |
+| Review changes and cut releases | [Maintainers](MAINTAINERS.md) |
 | Implement a format in another language | [The contracts in `spec/`](spec/README.md) |
 | Check where the material in this repository comes from | [Provenance and scope](docs/provenance.md) |
 
@@ -56,3 +58,5 @@ make build
 ## License
 
 OpenPlexer is licensed under Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+See the [third-party notices](THIRD_PARTY_NOTICES.md) for the licenses of code included in the binaries.

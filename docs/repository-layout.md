@@ -43,7 +43,7 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 | `internal/adapter/codex` | The `Agent` value of Codex: its table of gated tools, the reader of `apply_patch` patches, its hook files, and its hook entry. |
 | `internal/jsonedit` | Edits of JSON text that keep every byte they do not change. It imports nothing from the module. |
 | `internal/hub` | The hub file store, membership, repository scope, policy signing, Room sequencing, audit storage and export, and the HTTP API. |
-| `internal/layering` | The tests that enforce the dependency rules, and the rule that only a test may import another module. |
+| `internal/layering` | The tests that enforce the dependency rules, restrict imports from other modules to tests, and check the notices for shipped modules. |
 | `internal/doclinks` | The tests that check relative documentation links and the trust-model section links in the architecture and privacy guide. |
 | `internal/spectest` | The tests that check the contracts: every file under `spec/` is in its place, every schema compiles, every example validates against its schema, every fixture file validates against the fixture-file schema, and every hash follows from its rule. |
 
