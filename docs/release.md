@@ -1,6 +1,6 @@
 # Cut a release
 
-Run the checks on `main` before tagging. Pick a tag such as `v0.1.0` for a release or `v0.1.0-rc.1` for a release candidate.
+Run the checks on `main` before tagging. Pick a tag such as `v0.1.0` for a release or `v0.1.0-rc.1` for a release candidate. Record the checks, supported agent versions, and known limits in `docs/releases/`. To publish a custom release body, commit `.github/release-notes/<tag>.md` before tagging. The workflow uses that file from the tag with `gh release create --notes-file`. If the file is absent, it uses `--generate-notes`. [v0.1.0-rc.1 checks and limits](releases/v0.1.0-rc.1.md)
 
 Pushing a `v*` tag starts the release workflow. Publication requires a pushed tag that matches `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`.
 
@@ -22,15 +22,18 @@ To build the archives on demand, choose **Run workflow** on the release workflow
 
 ## Rebuild and compare
 
-Use a clean Git checkout with LF line endings and the exact Go version shown in the original workflow's setup log. Set `tag` to the release you want to check. The release tool uses the checked-out commit's timestamp unless you set `SOURCE_DATE_EPOCH` to a Unix timestamp in seconds. Leave it unset to match the workflow.
+Use a clean Git worktree or detached checkout of the release tag with LF line endings. Leave `SOURCE_DATE_EPOCH` unset so the release tool takes the timestamp from that checkout's HEAD. Use the exact Go version from the tagged workflow or its setup log. The example uses Go 1.27.4, which built `v0.1.0-rc.1` on Linux amd64.
 
 The build requires a new output directory. By default it publishes the complete set of files to `dist/release/<tag>/` when the build succeeds. Use `-out` with a new directory to rebuild the same tag again.
 
 ```sh
-tag=v0.1.0
+tag=v0.1.0-rc.1
 git fetch origin "refs/tags/$tag:refs/tags/$tag"
-git switch --detach "$tag"
+rebuild=$(mktemp -d "${TMPDIR:-/tmp}/openplexer-rebuild.XXXXXX")
+git worktree add --detach "$rebuild" "$tag"
+cd "$rebuild"
 unset SOURCE_DATE_EPOCH
+export GOTOOLCHAIN=go1.27.4
 make release VERSION="$tag"
 gh release download "$tag" --repo Multiplexer-si/OpenPlexer --pattern SHA256SUMS --output dist/published-SHA256SUMS
 cmp dist/published-SHA256SUMS "dist/release/$tag/SHA256SUMS"

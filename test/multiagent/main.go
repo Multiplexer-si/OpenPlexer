@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/multiplexer-si/openplexer/internal/testbin"
 	"github.com/multiplexer-si/openplexer/test/internal/agentcli"
 )
 
@@ -163,18 +164,25 @@ func (r *run) prepare(ctx context.Context, record *report) error {
 	}
 	r.session = agentcli.NewSessionID()
 	r.deniedPath = "sentinel/blocked-" + strings.ToLower(rand.Text()[:8]) + ".txt"
-	bin := filepath.Join(r.dir, "bin")
-	if err := os.Mkdir(bin, 0o700); err != nil {
+	bin, err := testbin.Dir("openplexer", "openplexer-hub")
+	if err != nil {
 		return err
 	}
-	if _, err := runCommand(ctx, "", nil, "go", nil, "build", "-o", bin+string(os.PathSeparator),
-		"./apps/openplexer", "./apps/openplexer-hub"); err != nil {
-		return err
+	prebuilt := bin != ""
+	if !prebuilt {
+		bin = filepath.Join(r.dir, "bin")
+		if err := os.Mkdir(bin, 0o700); err != nil {
+			return err
+		}
+		if _, err := runCommand(ctx, "", nil, "go", nil, "build", "-o", bin+string(os.PathSeparator),
+			"./apps/openplexer", "./apps/openplexer-hub"); err != nil {
+			return err
+		}
 	}
 	r.cliBin = filepath.Join(bin, "openplexer")
 	r.hubBin = filepath.Join(bin, "openplexer-hub")
 	for _, path := range []string{r.cliBin, r.hubBin} {
-		if err := record.binaryVersion(path); err != nil {
+		if err := record.binaryVersion(ctx, path, prebuilt); err != nil {
 			return err
 		}
 	}

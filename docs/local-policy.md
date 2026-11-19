@@ -6,13 +6,13 @@ The local gate decides actions from the last verified policy on disk. You can lo
 
 ## Connect to a team hub
 
-Get the hub URL, project ID, member ID, bearer token, and trusted public key set from the hub operator. Save the token in a private file. Set `OPENPLEXER_HOME` to a separate directory for each project. Use the same value for setup, hooks, and the daemon.
+Install `openplexer` on `PATH`. Get the hub URL, project ID, member ID, bearer token, and trusted public key set from the hub operator. Save the token in a private file. Export `OPENPLEXER_HOME` with a separate directory for each project. Use the same value for setup, the agent that runs the hooks, and the daemon. [Install OpenPlexer](install.md)
 
 ```sh
-bin/openplexer configure --hub https://hub.example --project prj-shop --member mem-ana \
+openplexer configure --hub https://hub.example.com --project prj-shop --member mem-ana \
   --keys trusted-jwks.json --token-file member-token
-bin/openplexer policy sync
-bin/openplexer daemon
+openplexer policy sync
+openplexer daemon
 ```
 
 `policy sync` fetches the first policy immediately. `daemon` syncs on startup and every 15 seconds. It writes received Room events as JSON lines to standard output and connection errors to standard error. Run one daemon per home. The hooks continue to open the verified local policy for each call.
@@ -22,7 +22,7 @@ The daemon verifies the bundle against both the advertised JWKS and the operator
 Queue a Room post by passing a hub event request on standard input. See the [hub HTTP API](hub.md#http-api) for the request fields.
 
 ```sh
-bin/openplexer room post <<'JSON'
+openplexer room post <<'JSON'
 {"type":"status","agent":{"id":"session-1","vendor":"codex"},"body":{"summary":"Ready for review"}}
 JSON
 ```

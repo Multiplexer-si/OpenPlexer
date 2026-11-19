@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/multiplexer-si/openplexer/internal/testbin"
 	"github.com/multiplexer-si/openplexer/test/internal/agentcli"
 )
 
@@ -131,7 +132,19 @@ func refuseInsideAgent() int {
 }
 
 func buildInTemp() (bin, version string, cleanup func(), err error) {
-	dir, err := os.MkdirTemp("", "realagent-bin-")
+	dir, err := testbin.Dir("openplexer")
+	if err != nil {
+		return "", "", nil, err
+	}
+	if dir != "" {
+		bin = filepath.Join(dir, "openplexer")
+		version, err = versionOf(bin)
+		if err != nil {
+			return "", "", nil, fmt.Errorf("%s --version: %w", bin, err)
+		}
+		return bin, version, func() {}, nil
+	}
+	dir, err = os.MkdirTemp("", "realagent-bin-")
 	if err != nil {
 		return "", "", nil, err
 	}

@@ -1,6 +1,6 @@
 # Install OpenPlexer
 
-Open the [releases page](https://github.com/Multiplexer-si/OpenPlexer/releases) and choose a version. Download `SHA256SUMS` and one archive into an empty directory. Match the suffix to your system. Each archive contains `openplexer`, `openplexer-hub`, and `openplexer-verify`.
+Open the [releases page](https://github.com/Multiplexer-si/OpenPlexer/releases) and choose a version. Download `SHA256SUMS` and one archive into an empty directory. Match the suffix to your system. Each archive contains `openplexer`, `openplexer-hub`, `openplexer-verify`, `LICENSE`, `NOTICE`, and `README.md`. The Windows binaries have an `.exe` suffix.
 
 | System | Archive suffix |
 |---|---|
@@ -26,11 +26,17 @@ fi
 
 Continue after the checksum command prints `OK`. You can also [verify the build attestation](#verify-the-build-attestation).
 
-Unpack the archive and install the three binaries in your home directory.
+Unpack the archive.
 
 ```sh
-mkdir -p unpacked "$HOME/.local/bin"
+mkdir -p unpacked
 tar -xzf "$archive" -C unpacked
+```
+
+Install the three binaries in your home directory.
+
+```sh
+mkdir -p "$HOME/.local/bin"
 install -m 0755 unpacked/openplexer unpacked/openplexer-hub unpacked/openplexer-verify "$HOME/.local/bin/"
 export PATH="$HOME/.local/bin:$PATH"
 openplexer --version

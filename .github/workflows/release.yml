@@ -28,7 +28,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-go@v7
         with:
-          go-version-file: go.mod
+          go-version: '1.27.4'
       - run: make check
       - name: Build release archives
         id: archives
@@ -59,6 +59,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.ref }}
+          persist-credentials: false
       - uses: actions/download-artifact@v7
         with:
           name: openplexer-release
@@ -94,7 +98,13 @@ jobs:
           diff -u <(printf '%s\n' "${archives[@]}" | sort) \
             <(sed -E -e 's/^[0-9a-f]{64}  //' -e 't' -e 's/^/invalid checksum entry: /' SHA256SUMS | sort)
           sha256sum -c SHA256SUMS
-          flags=(--verify-tag --generate-notes)
+          flags=(--verify-tag)
+          notes="$GITHUB_WORKSPACE/.github/release-notes/$GITHUB_REF_NAME.md"
+          if [[ -f "$notes" ]]; then
+            flags+=(--notes-file "$notes")
+          else
+            flags+=(--generate-notes)
+          fi
           if [[ "$GITHUB_REF_NAME" == *-* ]]; then
             flags+=(--prerelease)
           fi

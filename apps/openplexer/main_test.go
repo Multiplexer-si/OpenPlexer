@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/multiplexer-si/openplexer/internal/testbin"
 )
 
 const policySpec = "../../spec/policy/v1"
@@ -29,6 +32,7 @@ type cli struct {
 	t     *testing.T
 	now   time.Time
 	stdin string
+	bin   string
 }
 
 // run gives the exit status, the standard output, and the standard error
@@ -36,6 +40,15 @@ type cli struct {
 func (c cli) run(args ...string) (int, string, string) {
 	c.t.Helper()
 	var stdout, stderr bytes.Buffer
+	if c.bin != "" {
+		cmd := exec.CommandContext(c.t.Context(), c.bin, args...)
+		cmd.Stdin, cmd.Stdout, cmd.Stderr = strings.NewReader(c.stdin), &stdout, &stderr
+		status, err := testbin.Run(cmd)
+		if err != nil {
+			c.t.Fatal(err)
+		}
+		return status, stdout.String(), stderr.String()
+	}
 	status := run(args, strings.NewReader(c.stdin), &stdout, &stderr, func() time.Time { return c.now })
 	return status, stdout.String(), stderr.String()
 }
@@ -52,7 +65,7 @@ func (c cli) must(want int, args ...string) string {
 func newCLI(t *testing.T) cli {
 	t.Helper()
 	t.Setenv("OPENPLEXER_HOME", filepath.Join(t.TempDir(), "home"))
-	return cli{t: t, now: loadedAt}
+	return cli{t: t, now: loadedAt, bin: prebuiltCLI}
 }
 
 func readJSON(t *testing.T, path string, into any) {
@@ -160,6 +173,7 @@ func TestStatusReportsAStalePolicyAndCheckStillDecides(t *testing.T) {
 	const good = "a bundle signed by a key in the key set verifies"
 	keys, messages := fixtureFiles(t, good)
 	c := newCLI(t)
+	c.bin = "" // This test advances the in-process clock.
 	c.must(exitOK, "configure", "--keys", keys, "--member", "mem-ana", "--stale-after-days", "2")
 	c.must(exitOK, "policy", "load", messages[good])
 

@@ -61,6 +61,7 @@ Fetch the public key set and the signed bundle for each member. The local CLI sh
 
 ```sh
 curl --noproxy 127.0.0.1 --fail --silent --show-error --max-time 2 \
+	--retry 5 --retry-connrefused --retry-delay 1 \
 	"$hub_url/.well-known/jwks.json" -o "$hub_root/keys.json"
 for member in mem-lee mem-ana mem-sam; do
 	printf 'Authorization: Bearer %s\n' "$(cat "$hub_root/$member.token")" |
@@ -136,9 +137,9 @@ hub.example.com {
 }
 ```
 
-Load the Caddyfile into Caddy's service. Check `https://hub.example.com/.well-known/jwks.json` from a teammate's machine to confirm the certificate and proxy work. Give teammates the HTTPS URL, project ID, member IDs, and their individual tokens. [Run Caddy as a service](https://caddyserver.com/docs/running)
+Load the Caddyfile into Caddy's service. Check `https://hub.example.com/.well-known/jwks.json` from a teammate's machine to confirm the certificate and proxy work. Give each teammate the HTTPS URL, project ID, their member ID and token, and the trusted policy key set from `$hub_root/keys.json`. [Run Caddy as a service](https://caddyserver.com/docs/running)
 
-Teammates can load the policy into their local gate. Install OpenPlexer and save your token as `member.token` in a private directory. Run these commands from that directory with your team's URL, project ID, and your member ID. [Install OpenPlexer](install.md)
+To load the policy by hand, install OpenPlexer and save your token as `member.token` in a private directory. Run these commands from that directory with your team's URL, project ID, and your member ID. [Install OpenPlexer](install.md)
 
 ```sh
 hub_url=https://hub.example.com
@@ -152,7 +153,15 @@ openplexer configure --keys keys.json --member "$member"
 openplexer policy load signed-bundle.json
 ```
 
-Repeat the download and load when the policy changes. [Local policy gate](local-policy.md) · [Automatic policy refresh and live Room delivery in issue #20](https://github.com/Multiplexer-si/OpenPlexer/issues/20)
+Repeat the manual load when the policy changes. For automatic policy refresh and live Room delivery, configure the connection with `openplexer configure --hub`. Then run `openplexer policy sync` and `openplexer daemon`. [Connect to a team hub](local-policy.md#connect-to-a-team-hub)
+
+## Connect each developer's agent
+
+1. Configure the team hub connection and sync the first policy. [Connect to a team hub](local-policy.md#connect-to-a-team-hub)
+2. Install and trust the hook for your agent. Start the agent with the same `OPENPLEXER_HOME` you used to sync the policy. [Claude Code setup](hooks-claude-code.md#set-up) or [Codex setup](hooks-codex.md#set-up)
+3. Run `openplexer daemon` in another terminal with the same `OPENPLEXER_HOME`. Keep it running to refresh policy and receive Room events. [Room daemon and posts](local-policy.md#connect-to-a-team-hub)
+
+On the hub host, export the team's audit log so a reviewer can verify it offline. [Export and verify an audit log](audit.md)
 
 ## Back up and upgrade
 

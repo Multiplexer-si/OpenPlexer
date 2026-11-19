@@ -23,12 +23,20 @@ type outcome struct {
 
 func newReport() *report { return &report{started: time.Now().UTC()} }
 
-func (r *report) binaryVersion(path string) error {
+func (r *report) binaryVersion(ctx context.Context, path string, prebuilt bool) error {
 	info, err := buildinfo.ReadFile(path)
 	if err != nil {
 		return err
 	}
 	revision, modified := info.Main.Version, ""
+	if prebuilt {
+		output, err := runCommand(ctx, "", nil, path, nil, "--version")
+		if err != nil {
+			return err
+		}
+		r.versions = append(r.versions, [2]string{filepath.Base(path), strings.TrimSpace(string(output)) + " · " + info.GoVersion})
+		return nil
+	}
 	for _, s := range info.Settings {
 		switch s.Key {
 		case "vcs.revision":

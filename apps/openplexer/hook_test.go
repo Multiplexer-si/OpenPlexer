@@ -10,13 +10,22 @@ import (
 	"encoding/json"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/multiplexer-si/openplexer/internal/testbin"
 )
 
+var prebuiltCLI string
+
 func TestMain(m *testing.M) {
+	bin, err := testbin.Dir("openplexer")
+	if err != nil {
+		panic(err)
+	}
 	dir, err := os.MkdirTemp("", "openplexer-test")
 	if err != nil {
 		panic(err)
@@ -25,6 +34,13 @@ func TestMain(m *testing.M) {
 		os.Setenv(name, filepath.Join(dir, strings.ToLower(name)))
 	}
 	executablePath = func() (string, error) { return filepath.Join(dir, "bin", "openplexer"), nil }
+	if bin != "" {
+		prebuiltCLI = filepath.Join(bin, "openplexer")
+		executablePath = func() (string, error) { return prebuiltCLI, nil }
+		// Stop project root discovery at the private home above every fixture.
+		os.Setenv("HOME", dir)
+		os.Setenv("TMPDIR", dir)
+	}
 	code := m.Run()
 	os.RemoveAll(dir)
 	os.Exit(code)
@@ -297,6 +313,19 @@ func TestHookRefusesInputThatItCannotRead(t *testing.T) {
 }
 
 func TestHookThatRunsPastItsBudgetBlocksTheCall(t *testing.T) {
+	if prebuiltCLI != "" {
+		cmd := exec.CommandContext(t.Context(), prebuiltCLI, "hook", "codex", "pre-tool")
+		stdin, err := cmd.StdinPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer stdin.Close()
+		out, err := cmd.CombinedOutput()
+		if exit, ok := err.(*exec.ExitError); !ok || exit.ExitCode() != 2 || !strings.Contains(string(out), "did not answer") {
+			t.Fatalf("hook with open stdin: %v, output %q", err, out)
+		}
+		return
+	}
 	budget, end := hookBudget, abort
 	defer func() { hookBudget, abort = budget, end }()
 	stdin, never := io.Pipe()

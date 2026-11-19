@@ -4,12 +4,16 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/multiplexer-si/openplexer/internal/testbin"
 )
 
 func TestVersion(t *testing.T) {
@@ -55,6 +59,10 @@ func TestRunUsageAndReadErrors(t *testing.T) {
 }
 
 func TestRunVerifiesCheckpointVectors(t *testing.T) {
+	bin, err := testbin.Dir("openplexer-verify")
+	if err != nil {
+		t.Fatal(err)
+	}
 	raw, err := os.ReadFile("../../spec/audit/v1/fixtures/checkpoint.json")
 	if err != nil {
 		t.Fatal(err)
@@ -74,6 +82,18 @@ func TestRunVerifiesCheckpointVectors(t *testing.T) {
 	decodeJSON(t, raw, &vectors)
 	for _, vector := range vectors.Cases {
 		t.Run(vector.Name, func(t *testing.T) {
+			invoke := run
+			if bin != "" {
+				invoke = func(args []string, stdout, stderr io.Writer) int {
+					cmd := exec.CommandContext(t.Context(), filepath.Join(bin, "openplexer-verify"), args...)
+					cmd.Stdout, cmd.Stderr = stdout, stderr
+					status, err := testbin.Run(cmd)
+					if err != nil {
+						t.Fatal(err)
+					}
+					return status
+				}
+			}
 			dir := t.TempDir()
 			write := func(name string, data []byte) string {
 				t.Helper()
@@ -104,7 +124,7 @@ func TestRunVerifiesCheckpointVectors(t *testing.T) {
 				exit = 1
 			}
 			var stdout, stderr bytes.Buffer
-			if got := run(args, &stdout, &stderr); got != exit {
+			if got := invoke(args, &stdout, &stderr); got != exit {
 				t.Fatalf("exit %d, want %d; stdout %q, stderr %q", got, exit, &stdout, &stderr)
 			}
 			if want.OK {
@@ -130,7 +150,7 @@ func TestRunVerifiesCheckpointVectors(t *testing.T) {
 			}
 			stdout.Reset()
 			stderr.Reset()
-			if got := run(append(slices.Clone(args), "--json"), &stdout, &stderr); got != exit || stderr.Len() != 0 {
+			if got := invoke(append(slices.Clone(args), "--json"), &stdout, &stderr); got != exit || stderr.Len() != 0 {
 				t.Fatalf("--json exit %d, want %d; stdout %q, stderr %q", got, exit, &stdout, &stderr)
 			}
 			var gotJSON, wantJSON any

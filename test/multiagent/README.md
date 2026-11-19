@@ -12,13 +12,17 @@ Run the flow from the repository root.
 go run ./test/multiagent
 ```
 
+Set `OPENPLEXER_BIN_DIR` to the absolute path of a directory containing prebuilt `openplexer` and `openplexer-hub` binaries. With the variable unset, the flow builds both from source.
+
 From inside an agent session, clear the inherited environment first.
 
 ```sh
-env -i HOME="$HOME" USER="$USER" PATH="$PATH" SHELL="$SHELL" TMPDIR="$TMPDIR" go run ./test/multiagent
+env -i HOME="$HOME" USER="$USER" PATH="$PATH" SHELL="$SHELL" TMPDIR="$TMPDIR" OPENPLEXER_BIN_DIR="${OPENPLEXER_BIN_DIR:-}" go run ./test/multiagent
 ```
 
-The command exits 0 when all steps pass. It writes CLI versions, models, the OpenPlexer build revisions, and per-step results to [results.md](results.md). A failure records the failed step and marks pending steps as skipped.
+The command exits 0 when all steps pass. It writes CLI versions, models, the OpenPlexer build revisions or release versions, and per-step results to [results.md](results.md). A failure records the failed step and marks pending steps as skipped.
+
+`go test -count=1 ./test/multiagent` works offline. Its flow test substitutes agents, binaries, and HTTP responses in process. The live flow needs loopback TCP and both agent sign-ins.
 
 The command prints the path to a private temporary directory with both projects, audit logs, Room logs, agent output, and the test hub's keys and member tokens. Keep it private and delete it when you finish reviewing the run. The runner stops the hub and daemons on exit.
 

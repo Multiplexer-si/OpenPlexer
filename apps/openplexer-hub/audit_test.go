@@ -10,9 +10,34 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/multiplexer-si/openplexer/internal/testbin"
 )
 
+func TestHubAuditRequiresTheSelectedVerifier(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("OPENPLEXER_BIN_DIR", dir)
+	hub := filepath.Join(dir, "openplexer-hub")
+	if err := os.WriteFile(hub, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	binary, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.CommandContext(t.Context(), binary, "-test.run=^TestHubExportVerifiesWithStandaloneBinary$")
+	output, err := cmd.CombinedOutput()
+	if err == nil || !strings.Contains(string(output), "OPENPLEXER_BIN_DIR") ||
+		!strings.Contains(string(output), filepath.Join(dir, "openplexer-verify")) {
+		t.Fatalf("hub audit without the selected verifier: %v\n%s", err, output)
+	}
+}
+
 func TestHubExportVerifiesWithStandaloneBinary(t *testing.T) {
+	bin, err := testbin.Dir("openplexer-hub", "openplexer-verify")
+	if err != nil {
+		t.Fatal(err)
+	}
 	hubDir := filepath.Join(t.TempDir(), "hub")
 	admin := commands(t, hubDir)
 	admin(0, "init")
@@ -53,14 +78,17 @@ func TestHubExportVerifiesWithStandaloneBinary(t *testing.T) {
 		t.Fatal("a second export overwrote a populated directory")
 	}
 
-	binary := filepath.Join(t.TempDir(), "openplexer-verify")
-	build := exec.Command("go", "build", "-o", binary, "../openplexer-verify")
-	if output, err := build.CombinedOutput(); err != nil {
-		t.Fatalf("build verifier: %v\n%s", err, output)
+	binary := filepath.Join(bin, "openplexer-verify")
+	if bin == "" {
+		binary = filepath.Join(t.TempDir(), "openplexer-verify")
+		build := exec.CommandContext(t.Context(), "go", "build", "-o", binary, "../openplexer-verify")
+		if output, err := build.CombinedOutput(); err != nil {
+			t.Fatalf("build verifier: %v\n%s", err, output)
+		}
 	}
 	verify := func(export string) (string, error) {
 		t.Helper()
-		cmd := exec.Command(binary, "--export", export, "--jwks", "jwks.json", "--checkpoint", "checkpoint.jws")
+		cmd := exec.CommandContext(t.Context(), binary, "--export", export, "--jwks", "jwks.json", "--checkpoint", "checkpoint.jws")
 		cmd.Dir = offline
 		output, err := cmd.CombinedOutput()
 		return string(output), err

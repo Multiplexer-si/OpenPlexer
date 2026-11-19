@@ -27,6 +27,7 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 | If you want to | Read |
 |---|---|
 | Download and verify the binaries | [Install OpenPlexer](docs/install.md) |
+| See the checks and limits for the release candidate | [v0.1.0-rc.1](docs/releases/v0.1.0-rc.1.md) |
 | Understand the ideas behind the four parts | [Concepts](docs/concepts.md) |
 | See how the parts connect, and why the code is split the way it is | [Architecture](docs/architecture.md) |
 | See what stays local, what the hub receives, and what each part guarantees | [Architecture and privacy](docs/architecture-and-privacy.md) |

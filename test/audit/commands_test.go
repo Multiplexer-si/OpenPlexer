@@ -3,18 +3,26 @@ package audit_test
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"testing"
+
+	"github.com/multiplexer-si/openplexer/internal/testbin"
 )
 
 const root = "../.."
 
 func buildBinaries(t *testing.T, apps ...string) string {
 	t.Helper()
-	bin := t.TempDir()
+	bin, err := testbin.Dir(apps...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bin != "" {
+		return bin
+	}
+	bin = t.TempDir()
 	args := []string{"build", "-o", bin + string(os.PathSeparator)}
 	for _, app := range apps {
 		args = append(args, "./apps/"+app)
@@ -35,14 +43,11 @@ func run(t *testing.T, dir, home, bin, program string, args ...string) (int, str
 	cmd.Env = []string{"HOME=" + home, "PATH=" + bin + ":/usr/bin:/bin", "TMPDIR=" + dir}
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &stdout, &stderr
-	if err := cmd.Run(); err != nil {
-		var exit *exec.ExitError
-		if !errors.As(err, &exit) {
-			t.Fatalf("run %s: %v", program, err)
-		}
-		return exit.ExitCode(), stdout.String(), stderr.String()
+	status, err := testbin.Run(cmd)
+	if err != nil {
+		t.Fatalf("run %s: %v", program, err)
 	}
-	return 0, stdout.String(), stderr.String()
+	return status, stdout.String(), stderr.String()
 }
 
 func read(t *testing.T, path string) []byte {
