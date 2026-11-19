@@ -98,11 +98,12 @@ The gate keeps its files in the directory that `OPENPLEXER_HOME` names, or in `.
 | `room-outbox/` | Filtered posts waiting for acknowledgement, with one idempotency key per file | `room post`, hooks, and `daemon` |
 | `room.lock` | Exclusive lock for the daemon that owns the Room cursor | `daemon` |
 | `policy.json` | The signed token of the policy in force, and the time `confirmed_at` at which a load last confirmed it | `policy load` and hub sync |
+| `policy-floor.json` | The highest admitted version and SHA-256 hash of its canonical bundle JSON, keyed by project ID | `policy load` and hub sync |
 | `audit.jsonl` | The audit log, one record on each line | `policy load` and `policy check` |
 | `installs/` | The install journal, one record for each hook file: the agent, the file, the project root of a project-scope install, and what `install` added ([The project root](hooks-claude-code.md#the-project-root)) | `install` and `uninstall` |
 | `lock` | An empty file that the commands lock while they write | Every command that writes |
 
-When `policy load` or `policy sync` admits a new token, the gate checks its size, verifies its signature against `keys.json`, and validates the bundle. With a hub configured, the bundle must match the configured project ID and name exactly one repository. If a verified or stale policy is already in force, the incoming bundle must also match its project and either have a higher version or match both its version and content. A rejected incoming load keeps the previously verified policy in force.
+When `policy load` or `policy sync` admits a token, the gate checks its size, verifies its signature against `keys.json`, and validates the bundle. With a hub configured, the bundle must match the configured project ID and name exactly one repository. The gate then checks the project's version floor and any policy in force. [What a load accepts](#what-a-load-accepts)
 
 The gate stores the signed token in `policy.json`. On reopen it checks the same size limits, verifies the signature against the current `keys.json`, and validates the bundle and any configured project and repository requirements. If a stored token fails these checks, the gate enforces no policy. Reopen uses the version in the stored token without a version comparison. A program running as you can roll back the policy by writing an older token that passes the reopen checks. The hook denies agent writes into the OpenPlexer home. [Issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15) · [What a same-user attacker can still do](trust-model.md#what-a-same-user-attacker-can-still-do-with-the-policy)
 
@@ -112,47 +113,54 @@ The gate limits the compact JWS token to 2 MiB and the raw payload to 1 MiB befo
 
 | State | Meaning | What the gate does |
 |---|---|---|
-| `absent` | No policy is stored. | It decides nothing, and reports that no policy is in force. |
-| `verified` | The stored token verifies, and a load confirmed it within the stale limit. | It decides each action. |
-| `stale` | The stored token verifies, and no load confirmed it within the stale limit. | It decides each action, and reports that the policy is stale. |
-| `rejected` | The stored policy failed a reopen check. | It decides nothing, and reports the reason. |
+| `absent` | No policy is stored. | It reports that no policy is in force. Future loads still use the version floor. |
+| `verified` | The stored policy passes its reopen checks, and a load confirmed it within the stale limit. | It decides each action. |
+| `stale` | The stored policy passes its reopen checks, and no load confirmed it within the stale limit. | It decides each action and reports that the policy is stale. |
+| `rejected` | The stored policy failed a reopen check. | It reports the reason and makes no decision. Future loads still use the version floor. |
 
 The gate computes the state from `policy.json`, `keys.json`, `config.json`, and the clock each time it opens the policy.
 
 ```mermaid
 stateDiagram-v2
     [*] --> absent
-    absent --> verified: load of a bundle that verifies
+    absent --> verified: load or sync passes admission checks
     verified --> stale: the stale limit passes
-    stale --> verified: load of the same bundle, or of a newer version
-    verified --> verified: load of the same bundle, or of a newer version
-    verified --> rejected: the token or the key set changes
-    stale --> rejected: the token or the key set changes
-    rejected --> verified: load of a bundle that verifies
+    stale --> verified: load or sync passes admission checks
+    verified --> verified: load or sync passes admission checks
+    verified --> rejected: token, key set, or config change fails a reopen check
+    stale --> rejected: token, key set, or config change fails a reopen check
+    rejected --> verified: load or sync passes admission checks
     verified --> absent: policy.json is removed
+    stale --> absent: policy.json is removed
+    rejected --> absent: policy.json is removed
 ```
 
-A load that fails changes no state. The policy in force stays as it was.
+A refused load or sync leaves the stored policy as it was.
 
 With no verified policy, the gate does not answer allow or deny. It answers that no policy is in force, and the command that calls the gate chooses what the coding agent may do. The hook denies every call that it judges, with a reason ([the trust model](trust-model.md#decisions-settled-by-install-and-the-hook-command)).
 
 ## What a load accepts
 
-`policy load` verifies the bundle under the steps of [the signed bundle](../spec/policy/README.md#the-signed-bundle). While a verified or stale policy is in force, the bundle must also pass these rules.
+`policy load` and `policy sync` check the version floor for the incoming bundle's project. The floor applies in every state. A policy in force also sets a minimum version and requires matching content at that version. [Signed bundle verification](../spec/policy/README.md#the-signed-bundle)
 
 | Bundle | Result |
 |---|---|
-| A newer version for the same project | Accepted. It becomes the policy in force. |
-| The same version with the same content | Accepted. The load confirms the policy, which makes it fresh. The signature can be a new one. |
-| An older version for the same project | Refused by `policy load`. An old policy cannot replace a newer one through a load. |
-| The same version with another content | Refused. One version has one content. |
-| A bundle for another project | A hub home always refuses it. A file-based home refuses it while a verified policy is in force. |
+| A version above the floor and any version in force | Accepted. It becomes the policy in force and raises the project's floor. |
+| A version that matches the floor, with the same canonical content | Accepted if it also passes the checks against any policy in force. It becomes fresh and can carry a new signature. |
+| A version below the floor | Refused, even when the state is absent or rejected. |
+| A version that matches the floor, with different content | Refused, even when the state is absent or rejected. |
+| A bundle for another project | A hub home requires its configured project. A file-based home can switch projects when no policy is in force. The incoming project's floor still applies. |
+| An unreadable or malformed floor | Refused. Duplicate keys and incorrectly cased field names are invalid. The audit log records the reason. |
 
-When the state is absent or rejected, the gate has no version to compare with. A hub home still requires a verified bundle for its configured project with one repository.
+The floor stores one version and hash per project because every older version is already refused. The gate saves the floor before replacing `policy.json`. Both writes use the home lock and replace each file atomically. If the policy write fails after the floor is saved, retry with the same bundle or a higher version.
+
+For an existing home without a floor file, the first load or sync that verifies an eligible bundle seeds the floor from the stored token's `project_id`, `version`, and canonical content hash. If the stored policy is rejected, the gate reads the payload under the same size and parsing rules as a load, without trusting its signature. That seed can only narrow which verified bundles the gate admits. If the rejected policy cannot be parsed and hashed, the floor starts empty. The gate saves a seeded floor even if the version checks then refuse the incoming bundle. Opening the home stays read-only.
+
+`openplexer configure` preserves the floor, including when you change the key set. Removing `policy.json` alone also preserves the floor. To reset all project floors, stop any commands writing to the home and remove `policy-floor.json` by hand. To load an older version, also remove any stored policy that would block the load or seed the floor again.
 
 ## Offline and stale
 
-The gate reads local files. If the source is unavailable, the pinned key check fails, or the hub supplies an older policy while a verified policy is in force, the gate keeps enforcing the stored policy. The daemon retries while it runs.
+The gate reads local files. It keeps enforcing any policy in force if the source is unavailable, the pinned key check fails, or a sync fails a version check. The daemon retries while it runs.
 
 A bundle carries no issue time and no expiry. So the gate measures the age of a policy on the machine: a policy is stale when no load has confirmed it for `stale_after_days`. A stale policy stays in force. `policy status` reports it with exit status 3, `policy check` prints a notice, and each decision record names the state in `meta.policy_state`. The records of a load do not carry it. A successful load or hub sync confirms the policy and makes it fresh.
 

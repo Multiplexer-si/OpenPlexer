@@ -9,14 +9,14 @@ import (
 
 // State is the state of the stored policy.
 //
-//	Absent    load of a token that verifies              -> Verified
+//	Absent    load of a token that passes admission      -> Verified
 //	Verified  the clock passes StaleAt                   -> Stale
 //	Verified  load of the same bundle or a newer version -> Verified
 //	Stale     load of the same bundle or a newer version -> Verified
-//	Verified  the stored token or the key set changes,
-//	Stale     and the token no longer verifies           -> Rejected
-//	Rejected  load of a token that verifies              -> Verified
-//	Rejected  the key set verifies the token again       -> Verified or Stale
+//	Verified  a token, key set or config change causes
+//	Stale     a reopen check to fail                     -> Rejected
+//	Rejected  load of a token that passes admission      -> Verified
+//	Rejected  the token passes reopen checks again       -> Verified or Stale
 //	any       the stored policy is removed               -> Absent
 //
 // A load that fails changes no state. The policy in force stays.

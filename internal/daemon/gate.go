@@ -81,10 +81,10 @@ func bundleSizeError(err error) bool {
 }
 
 // Load fetches a signed bundle from the source and makes it the policy in
-// force. The bundle must verify against the configured key set. While a
-// policy is in force, the bundle must also be for the same project, and it
-// must be a newer version or the same bundle again. The same bundle again
-// confirms the policy, which makes it fresh.
+// force. The bundle must verify against the configured key set and meet its
+// project's version floor. While a policy is in force, the bundle must also
+// be for the same project, and it must be a newer version or the same bundle
+// again. The same bundle again confirms the policy, which makes it fresh.
 //
 // Load returns the status after the load. With an error, the policy in
 // force stays as it was: a source that is not available and a bundle that
@@ -109,6 +109,11 @@ func (g *Gate) Load(ctx context.Context, source Source) (Status, error) {
 	if bundleSizeError(err) {
 		return g.reject(err)
 	}
+	current, configErr := readConfig(g.home)
+	if configErr != nil {
+		return g.reject(configErr)
+	}
+	g.config = current
 	inForce := g.read()
 	if err != nil {
 		return g.reject(err)
@@ -162,21 +167,56 @@ func (g *Gate) admit(signed *policy.SignedBundle, inForce *policy.Verified) (*po
 	if err := g.config.checkBundle(candidate.Bundle); err != nil {
 		return nil, "", err
 	}
-	if inForce == nil {
-		return candidate, "policy.loaded", nil
+	floor, err := readFloor(g.home)
+	if err != nil {
+		return nil, "", fmt.Errorf("cannot read policy version floor (%s): %w", floorFile, err)
 	}
-	have, got := inForce.Bundle, candidate.Bundle
-	switch {
-	case got.ProjectID != have.ProjectID:
-		return nil, "", errors.New("the bundle project_id must match the policy in force")
-	case got.Version < have.Version:
-		return nil, "", fmt.Errorf("the bundle has version %d, which is older than version %d in force", got.Version, have.Version)
-	case got.Version > have.Version:
-		return candidate, "policy.loaded", nil
-	case !samePayload(candidate, inForce):
-		return nil, "", fmt.Errorf("the bundle has version %d, as the policy in force has, with another content", got.Version)
+	if floor == nil {
+		floor = make(map[string]floorEntry)
+		if err := g.seedFloor(floor, inForce); err != nil {
+			return nil, "", err
+		}
 	}
-	return candidate, "policy.confirmed", nil
+
+	got := candidate.Bundle
+	entry, err := floorEntryFor(got.Version, candidate.Payload)
+	if err != nil {
+		return nil, "", err
+	}
+	minimum, known := floor[got.ProjectID]
+	if known {
+		switch {
+		case entry.Version < minimum.Version:
+			return nil, "", fmt.Errorf("the bundle has version %d, older than version floor %d for project %q", entry.Version, minimum.Version, got.ProjectID)
+		case entry.Version == minimum.Version && entry.SHA256 != minimum.SHA256:
+			return nil, "", fmt.Errorf("the bundle matches version floor %d with different content for project %q", minimum.Version, got.ProjectID)
+		}
+	}
+
+	action := "policy.loaded"
+	if inForce != nil {
+		have := inForce.Bundle
+		switch {
+		case got.ProjectID != have.ProjectID:
+			return nil, "", errors.New("the bundle project_id must match the policy in force")
+		case got.Version < have.Version:
+			return nil, "", fmt.Errorf("the bundle has version %d, which is older than version %d in force", got.Version, have.Version)
+		case got.Version == have.Version:
+			if !samePayload(candidate, inForce) {
+				return nil, "", fmt.Errorf("the bundle has version %d, as the policy in force has, with another content", got.Version)
+			}
+			action = "policy.confirmed"
+		}
+	}
+	if !known || entry.Version > minimum.Version {
+		floor[got.ProjectID] = entry
+		// Publish the floor before policy.json so an interrupted load cannot
+		// leave an enforced version ahead of its floor.
+		if err := writeFloor(g.home, floor); err != nil {
+			return nil, "", err
+		}
+	}
+	return candidate, action, nil
 }
 
 func samePayload(a, b *policy.Verified) bool {
