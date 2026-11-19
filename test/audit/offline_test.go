@@ -27,9 +27,6 @@ func TestOfflineAudit(t *testing.T) {
 	bin := buildBinaries(t, "openplexer-hub", "openplexer-verify")
 	host, reviewer := t.TempDir(), t.TempDir()
 	hostHome, reviewHome := t.TempDir(), t.TempDir()
-	if err := os.Symlink(bin, filepath.Join(host, "bin")); err != nil {
-		t.Fatal(err)
-	}
 	hubPath := filepath.Join(bin, "openplexer-hub")
 	verifyPath := filepath.Join(bin, "openplexer-verify")
 	admin := func(args ...string) {

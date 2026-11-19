@@ -2,11 +2,13 @@
 
 ## Export from the hub
 
-Run this command on the hub host from the directory that contains `bin/` and your hub data. Set `--data-dir` to the directory you used to initialize the hub. The command works while the server is running or stopped. [Hub setup](hub.md#start-the-server).
+Run this command on the hub host with `openplexer-hub` on `PATH`. Set `--data-dir` to the hub's current data directory. For the service in the self-host guide, use `/var/lib/openplexer` and run as the service account. Set `--out` to a path that account can write. The command works while the server is running or stopped. [Install OpenPlexer](install.md) and [self-host the hub](self-host.md)
 
 ```sh
-bin/openplexer-hub export-audit --data-dir ./hub-data --out ./audit-export
+openplexer-hub export-audit --data-dir ./hub-data --out ./audit-export
 ```
+
+If you built with `make build`, you can run `bin/openplexer-hub` from the source checkout.
 
 The command writes `export.json`, `checkpoint.jws`, and `jwks.json` from one snapshot. It leaves existing files in place if any of those names are taken. Use a new output directory for each snapshot you want to keep.
 
