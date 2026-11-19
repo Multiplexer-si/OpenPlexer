@@ -66,7 +66,7 @@ A log with no records is valid, with `entries` equal to 0.
 
 ## The export
 
-**A6. Export shape and order.** The JSON export is one UTF-8 JSON object with an `entries` array and a null `next_cursor`. Read its values under the [canonical JSON input rules](../canonical-json/README.md#the-input), with a stricter rule for object member names. Compare decoded member names case-sensitively without Unicode normalization. Reject repeated member names at any depth. Report A6 for a repeat outside the entries, and apply A1 within each entry.
+**A6. Export shape and order.** The JSON export is one UTF-8 JSON object with an `entries` array and a null `next_cursor`. Read its values under the [canonical JSON input rules](../canonical-json/README.md#the-input), with a stricter rule for object member names. Compare decoded member names case-sensitively without Unicode normalization. Reject repeated member names at any depth. Report A6 for a repeat outside the entries, and apply A1 within each entry. An export nested deeper than 10,000 levels of arrays and objects is rejected as malformed under A6, before any entry is read.
 
 Rejecting repeats prevents a reader from displaying one value while the verifier hashes another. The reference writes exports with `JSON.stringify`, which emits each member name once per object. A2 and A3 define the hash computation.
 
