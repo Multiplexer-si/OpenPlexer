@@ -32,6 +32,7 @@ type Budget struct {
 	left      int
 	lowercase map[string]string
 	path      filePath
+	matches   []match
 }
 
 // NewBudget returns the budget of one call.
@@ -259,7 +260,7 @@ func (b *Bundle) matchAreas(repo string, budget *Budget) ([]match, error) {
 	repoLower := budget.lower(repo)
 	path := budget.path
 	var scratch globScratch
-	var matched []match
+	matched := budget.matches[:0]
 	for i := range b.Areas {
 		area := &b.Areas[i]
 		if err := budget.spend(1); err != nil {
@@ -299,6 +300,7 @@ func (b *Bundle) matchAreas(repo string, budget *Budget) ([]match, error) {
 			matched = append(matched, match{area: area, specificity: *best})
 		}
 	}
+	budget.matches = matched
 	return matched, nil
 }
 

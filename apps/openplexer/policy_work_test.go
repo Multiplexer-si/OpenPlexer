@@ -58,27 +58,32 @@ func policyWorkCases(t testing.TB) []policyWorkCase {
 	alternation := "[]|" + strings.Repeat("aZ|", 425) + "aZ]"
 	lookbehind := "[]|(?<=(?:.*){2972})]"
 	// Exercise both applicable and non-applicable patterns across repositories.
-	repos := make([]string, 211)
+	repos := make([]string, 337)
 	for i := range repos {
 		repos[i] = fmt.Sprintf("repo%03d", i)
 	}
-	areas := make([]map[string]any, 25_400)
-	for i := range areas {
-		areas[i] = map[string]any{"name": "many", "patterns": []string{repos[i%len(repos)] + ":*"}}
+	scopedRepos := repos[:211]
+	scopedAreas := make([]map[string]any, 25_400)
+	sharedAreas := make([]map[string]any, len(scopedAreas))
+	for i := range scopedAreas {
+		scopedAreas[i] = map[string]any{"name": "many", "patterns": []string{scopedRepos[i%len(scopedRepos)] + ":*"}}
+		sharedAreas[i] = map[string]any{"name": "many", "patterns": []string{"a/**"}}
 	}
-	scope := strings.Repeat("Σ\u0301", 127) + ":*"
+	dir := strings.Repeat("Σ\u0301", 127)
+	scope := dir + ":*"
 	nested := "[]|" + strings.Repeat("(?:", 200) + strings.Repeat("a", 700) + strings.Repeat(")?", 200) + "]"
-	dir := strings.TrimSuffix(scope, ":*")
 	return []policyWorkCase{
 		{name: "150-classes", path: long, bundle: makeBundle(oneRepo, area(repeated(largeClass, 150))), overBudget: true},
 		{name: "300-classes", path: long, bundle: makeBundle(oneRepo, area(repeated(largeClass, 300))), overBudget: true},
 		{name: "case-variants", path: strings.Repeat("Ι", policy.MaxGlobPath), bundle: full([]string{"[]|" + largeClass, "[]|[" + strings.Repeat("x", 590) + "]"})},
 		{name: "long-alternations", path: long, bundle: full(repeated(alternation, 3))},
 		{name: "long-lookbehind", path: long[:len(long)-1] + "]", bundle: full([]string{lookbehind, "[]|(?<=(?:.*){600})]"}), wantArea: true},
-		{name: "many-areas-and-repos", path: "a", bundle: makeBundle(repos, areas), wantArea: true},
+		{name: "many-areas-and-repos", path: "a", bundle: makeBundle(scopedRepos, scopedAreas), wantArea: true},
 		{name: "many-short-globs", path: "a", bundle: makeBundle(oneRepo, area(repeated("*", 250_000))), wantArea: true},
 		{name: "unicode-repo-scans", path: "a", bundle: makeBundle(repos[:50], area(repeated(scope, 2000)))},
 		{name: "unicode-directory-roots", path: dir, bundle: makeBundle(repos[:50], area(repeated(dir+"/**", 2000))), wantArea: true},
+		{name: "shared-directory-areas", path: "a", bundle: makeBundle(repos, sharedAreas), wantArea: true},
+		{name: "many-empty-globs-across-repos", path: "", bundle: makeBundle(repos[:12], area(repeated("", 250_000))), wantArea: true},
 		{name: "nested-count-compilation", path: "a", bundle: full(repeated(nested, 60))},
 	}
 }

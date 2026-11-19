@@ -230,27 +230,29 @@ The reference is at commit `7d80045a`.
 | The contract has no operation that tells whether a path is generated. The reference has one, `isGenerated`. | That operation serves the server-side check, which is outside the open-source foundation. The `generated` flag stays in the bundle and never changes a result. |
 | The Go implementation refuses a glob whose size is more than 3000, and it denies every `read` and `write` in a repository that the pattern applies to, as for a pattern that makes the reference throw. The size is the number of characters of the normalized glob plus the number of states of the automaton that matches it against a path of 4,096 characters. A literal character, `?`, `*`, `**`, a class, `.`, `^`, `$`, and a single character with `*` after it are one state each. `**/` is three states. Each alternative after the first adds two states. A group with `*` or `+` after it adds two states for its loop. A count of a body that reads no character, such as `(?=a){3000}`, is no state if its minimum is 0, and one copy of its body otherwise. Any other count is one copy of its body for each time of its minimum, and then a loop if it has no maximum, or one copy and one more state for each further time. The body fits in the path a number of times: the length of the path divided by the fewest characters that the body matches, or the length of the path plus one for a body that can match the empty string. A maximum above that number counts as no maximum, so `(?:a?){0,5000}` is a loop of four states. For a body that matches at least one character, a minimum above that number makes the count one state. A lookaround is one state plus the states of its body. So the limit refuses a plain glob of more than about 1,500 characters, and a count whose times multiplied by the size of its body is more than about 3,000, such as `(?:ab|c){1000}` or `(?:a?){4000000000}`. The reference has no limit. | The schema has no pattern length limit. The size limit bounds compilation and the number of states a match can visit. The work limit below also accounts for the cost of each state. The size limit refuses counts that would exhaust the reference's stack. |
 | The Go implementation denies every `read` and `write` whose path, after step 1 of [`read` and `write`](#read-and-write), is longer than 4,096 characters, with no area. The reference has no limit. | The time of a match grows with the length of the path, and the agent chooses the path. Without the limit, one glob within the size limit takes about 8 s on a path of 1,048,576 characters. |
-| The Go implementation gives each call 60,000,000 work units across all file queries and repositories. One unit covers one scan step, one emitted instruction, one matcher loop iteration, or one predicate check. A class reserves a comparison for each span against each possible case variant. A range is one span. The evaluator reserves the work for each glob before it starts matching. If a call exceeds the budget, it is denied with no area. The reference has no limit. | The slowest accepted `openplexer policy check` in the stress benchmark took 135 ms on an Apple M5 Pro MacBook Pro. The case used 25,400 areas and 211 repositories. The Codex hook stops itself after 4 seconds. The installer sets a 5-second Codex timeout. [Measurements](#policy-budget-measurements). |
+| The Go implementation gives each call 60,000,000 work units across all file queries and repositories. One unit covers one scan step, one emitted instruction, one matcher loop iteration, or one predicate check. A class reserves a comparison for each span against each possible case variant. A range is one span. The evaluator reserves the work for each glob before it starts matching. If a call exceeds the budget, it is denied with no area. The reference has no limit. | The slowest accepted `openplexer policy check` in the stress benchmark took 464 ms on an Apple M5 Pro MacBook Pro. The case matched 25,400 directory areas in each of 337 repositories. The Codex hook stops itself after 4 seconds. The installer sets a 5-second Codex timeout. [Measurements](#policy-budget-measurements). |
 | The `rule` text is not part of the contract. | It is wording for a person. |
 
 No fixture case depends on one of these differences. Every expected value is the value that the reference returns.
 
 ### Policy budget measurements
 
-Each case ran five times on an Apple M5 Pro MacBook Pro with 48 GB of memory and Go 1.27.2. Times include starting the built CLI, verifying the saved signature, deciding the query, and recording the audit entry. The largest test payloads were 1 MiB. The longest paths were 4,096 UTF-16 code units. The many-repository case used 59,945,899 work units.
+Each case ran five times on an Apple M5 Pro MacBook Pro with 48 GB of memory and Go 1.27.2. Times include starting the built CLI, verifying the saved signature, deciding the query, and recording the audit entry. The largest test payloads were 1 MiB. The longest paths were 4,096 UTF-16 code units. The shared directory case used 59,921,633 work units.
 
 | Bundle | Result | Wall time range |
 |---|---|---:|
-| 150 classes of 2,989 members | Denied by the budget | 11.5 to 13.1 ms |
-| 300 classes of 2,989 members | Denied by the budget | 16.5 to 17.3 ms |
-| Large classes against all case variants | Allowed | 37.7 to 46.1 ms |
-| Long alternations | Allowed | 76.9 to 78.9 ms |
-| Counted lookbehinds on a long path | Allowed | 85.3 to 85.9 ms |
-| 25,400 areas across 211 repositories | Allowed | 131.3 to 134.6 ms |
-| 250,000 short globs | Allowed | 65.7 to 67.9 ms |
-| Unicode repository scopes | Allowed | 22.8 to 23.9 ms |
-| Unicode directory roots | Allowed | 72.6 to 76.8 ms |
-| Nested counts on a short path | Allowed | 92.7 to 95.2 ms |
+| 150 classes of 2,989 members | Denied by the budget | 12.6 to 15.1 ms |
+| 300 classes of 2,989 members | Denied by the budget | 16.7 to 17.2 ms |
+| Large classes against all case variants | Allowed | 39.1 to 48.4 ms |
+| Long alternations | Allowed | 76.9 to 78.1 ms |
+| Counted lookbehinds on a long path | Allowed | 85.4 to 86.0 ms |
+| 25,400 scoped areas across 211 repositories | Allowed | 131.2 to 134.2 ms |
+| 25,400 directory areas shared by 337 repositories | Allowed | 446.5 to 463.7 ms |
+| 250,000 short globs | Allowed | 65.4 to 67.0 ms |
+| 250,000 empty globs in each of 12 repositories | Allowed | 174.6 to 177.0 ms |
+| Unicode repository scopes | Allowed | 22.6 to 23.5 ms |
+| Unicode directory roots | Allowed | 74.7 to 78.2 ms |
+| Nested counts on a short path | Allowed | 90.3 to 94.9 ms |
 
 Run `make build`, then run the benchmark with the built CLI.
 
@@ -262,8 +264,8 @@ OPENPLEXER_BIN_DIR="$PWD/bin" go test ./apps/openplexer -run '^$' -bench '^Bench
 
 | Corpus | Before #55, `f96ea3cd^1` | With the new budget |
 |---|---:|---:|
-| Ignore files | 173.2 µs (172.4 to 173.6 µs) | 90.6 µs (89.9 to 90.8 µs) |
-| Policy fixtures | 777.6 µs (776.9 to 782.5 µs) | 607.6 µs (604.6 to 609.8 µs) |
+| Ignore files | 174.0 µs (171.6 to 174.4 µs) | 90.2 µs (89.2 to 90.5 µs) |
+| Policy fixtures | 781.0 µs (771.2 to 783.4 µs) | 608.1 µs (602.8 to 609.0 µs) |
 
 ## Open questions
 
