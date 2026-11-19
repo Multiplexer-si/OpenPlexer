@@ -1,0 +1,208 @@
+{
+  "$id": "urn:openplexer:spec:audit:v1:checkpoint-verify-result",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Audit export verification result",
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": true
+        },
+        "entries": {
+          "$ref": "#/$defs/count"
+        },
+        "checkpoint_entries": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "minimum": 0,
+          "maximum": 9007199254740991
+        },
+        "completeness": {
+          "enum": [
+            "not_proven",
+            "through_checkpoint"
+          ]
+        }
+      },
+      "required": [
+        "ok",
+        "entries",
+        "checkpoint_entries",
+        "completeness"
+      ],
+      "if": {
+        "properties": {
+          "checkpoint_entries": {
+            "type": "null"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "completeness": {
+            "const": "not_proven"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "completeness": {
+            "const": "through_checkpoint"
+          }
+        }
+      }
+    },
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ok": {
+          "const": false
+        },
+        "rule": {
+          "enum": [
+            "A1",
+            "A3",
+            "A4",
+            "A5",
+            "A6",
+            "K1",
+            "K2",
+            "K3",
+            "K4",
+            "K5",
+            "K6",
+            "K7",
+            "K8",
+            "K9",
+            "K10"
+          ]
+        },
+        "record_number": {
+          "$ref": "#/$defs/position",
+          "description": "The 1-based record number in chain order."
+        },
+        "broken_at": {
+          "type": "string",
+          "description": "The record ID as written in the export."
+        },
+        "checkpoint": {
+          "$ref": "#/$defs/position",
+          "description": "The 1-based checkpoint number in input order."
+        }
+      },
+      "required": [
+        "ok",
+        "rule"
+      ],
+      "dependentRequired": {
+        "broken_at": [
+          "record_number"
+        ]
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "rule": {
+                "enum": [
+                  "K1",
+                  "K2",
+                  "K3",
+                  "K4",
+                  "K5",
+                  "K6",
+                  "K7",
+                  "K8",
+                  "K9",
+                  "K10"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "checkpoint"
+            ]
+          },
+          "else": {
+            "properties": {
+              "checkpoint": false
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "rule": {
+                "enum": [
+                  "A1",
+                  "A3",
+                  "A4",
+                  "A5",
+                  "K7"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "record_number"
+            ]
+          },
+          "else": {
+            "if": {
+              "properties": {
+                "rule": {
+                  "enum": [
+                    "K10"
+                  ]
+                }
+              }
+            },
+            "else": {
+              "properties": {
+                "record_number": false
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "rule": {
+                "enum": [
+                  "A3",
+                  "A4",
+                  "A5",
+                  "K7"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "broken_at"
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "$defs": {
+    "count": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "position": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    }
+  }
+}

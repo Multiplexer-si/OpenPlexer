@@ -9,7 +9,7 @@
 | [`canonical-json/`](canonical-json/README.md) | Canonical JSON, the byte form that the bundle signature and the audit hash are computed over | 1 |
 | [`policy/`](policy/README.md) | The policy bundle, overrides, policy evaluation, and the signed bundle | 1 |
 | [`room/`](room/README.md) | Room events, which include claims and decisions, the transport envelope, the overlap rules for claims, and the rules for order, expiry, reconnection, and errors | 1 |
-| [`audit/`](audit/README.md) | The audit record, its hash, chain verification, and the JSON export | 1 |
+| [`audit/`](audit/README.md) | Audit records, hash chains, JSON exports, and signed checkpoints | 1 |
 | [`adapter/`](adapter/README.md) | How an adapter reads the hook input of a coding agent into policy queries, and answers the hook | 1 |
 
 Each README states what the contract covers, its rules, and what is still open.
@@ -201,7 +201,7 @@ Version 1 is not released yet. Until the first release that implements it, the o
 
 ## What comes from the reference
 
-The existing TypeScript implementation is the reference. Every file under `spec/` except the README pages is written by the extractor in [`tools/extract/`](../tools/extract), which runs the reference at commit `7d80045a`.
+The existing TypeScript implementation is the reference. The extractor writes the reference-compatible artifacts under `spec/`. It runs the reference at commit `7d80045a`. The checkpoint schemas and examples are authored for OpenPlexer. [Extractor](../tools/extract), [audit contract](audit/README.md#generated-and-authored-parts).
 
 - A generated schema is the output of the JSON Schema export of Zod, the validation library that the reference uses. The descriptions in it are authored. The extractor writes `[0-9]` where Zod writes `\d` in a pattern, and `0-9` where Zod writes `\d` inside a class, to keep the pattern inside [the portable subset](#patterns).
 - An authored schema covers a shape that the reference defines only as a TypeScript type or in code. Each contract README lists the authored parts.

@@ -73,12 +73,12 @@ Each directory under `spec/` holds one contract: a README with the rules, and a 
 | `spec/canonical-json` | Canonical JSON, the byte form that the bundle signature and the audit hash are computed over |
 | `spec/policy` | The policy bundle, overrides, policy evaluation, and the signed bundle |
 | `spec/room` | Room events, which include claims and decisions, the transport envelope, and the overlap rules for claims |
-| `spec/audit` | The audit record, its hash, chain verification, and the JSON export |
+| `spec/audit` | Audit records, hash chains, JSON exports, and signed checkpoints |
 | `spec/adapter` | How an adapter reads the hook input of a coding agent into policy queries, and answers the hook. It has fixtures and no schema. |
 
 ## Tools
 
-`tools/extract` is the TypeScript program that writes every schema, every example, and every fixture under `spec/`. It runs the existing TypeScript implementation, so it needs a checkout of that implementation and Node. It is not part of the Go module, and neither `make check` nor CI runs it. [Regenerate the contracts and fixtures](../CONTRIBUTING.md#regenerate-the-contracts-and-fixtures) gives the commands.
+`tools/extract` writes the reference-compatible schemas, examples, and fixtures under `spec/`. It needs a checkout of the existing TypeScript implementation and Node. It runs outside the Go module and outside CI. [Regenerate the contracts and fixtures](../CONTRIBUTING.md#regenerate-the-contracts-and-fixtures).
 
 ## Make targets
 

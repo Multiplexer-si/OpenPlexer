@@ -99,10 +99,21 @@ export function remove(root: string, path: string): void {
   rmSync(join(root, path));
 }
 
-/** Every file under `spec/` except the README pages. The extractor owns all of them. */
+const checkpointFiles = new Set([
+  "spec/audit/v1/checkpoint-payload.schema.json",
+  "spec/audit/v1/checkpoint-protected-header.schema.json",
+  "spec/audit/v1/checkpoint-verify-result.schema.json",
+  "spec/audit/v1/examples/checkpoint-payload/tip.json",
+  "spec/audit/v1/examples/checkpoint-protected-header/header.json",
+  "spec/audit/v1/examples/checkpoint-verify-result/valid.json",
+  "spec/audit/v1/fixtures/checkpoint.json",
+]);
+
+/** Files under `spec/` that the extractor may generate or remove. */
 export function ownedFiles(root: string): string[] {
   return (readdirSync(join(root, "spec"), { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[])
     .filter((entry) => entry.isFile() && entry.name !== "README.md")
     .map((entry) => join(entry.parentPath, entry.name).slice(root.length + 1).replaceAll("\\", "/"))
+    .filter((path) => !checkpointFiles.has(path))
     .sort();
 }
