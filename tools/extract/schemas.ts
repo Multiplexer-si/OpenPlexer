@@ -394,8 +394,8 @@ function roomSchemas(reference: Reference): Document[] {
   describe(bodies.human!, { text: "A message that a person wrote.", mentions: "The members that the message mentions.", ...threading });
   describe(bodies["policy.denied"]!, {
     action: "The action that the gate denied.",
-    path: "The path that the gate denied. For `exec` it is the command.",
-    rule: "The `rule` text of the evaluation result.",
+    path: "The denied path or an omission marker. OpenPlexer omits command text and absolute local paths.",
+    rule: "The evaluation rule or a fixed public denial reason.",
     detected: "`after` marks a write that the daemon found after it had happened.",
     ...threading,
   });
