@@ -21,10 +21,7 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/hub"
 )
 
-const (
-	checkedThree = "Chain is consistent from genesis (3 records). Completeness is proven through checkpoint count 3.\n"
-	checkedFive  = "Chain is consistent from genesis (5 records). Completeness is proven through checkpoint count 5.\n"
-)
+const checkedFive = "Chain is consistent from genesis (5 records). Completeness is proven through checkpoint count 5.\n"
 
 func TestOfflineAudit(t *testing.T) {
 	bin := buildBinaries(t, "openplexer-hub", "openplexer-verify")
@@ -53,6 +50,7 @@ func TestOfflineAudit(t *testing.T) {
 	admin("init")
 	admin("add-member", "--id", "mem-lee", "--role", "lead")
 	admin("add-project", "--id", "prj-shop", "--repo", "api")
+	admin("export-audit", "--out", "earlier-export")
 	var bundle map[string]json.RawMessage
 	decode(t, read(t, root+"/spec/policy/v1/examples/bundle/minimal.json"), &bundle)
 	bundle["repos"] = json.RawMessage(`["api"]`)
@@ -63,7 +61,7 @@ func TestOfflineAudit(t *testing.T) {
 	if !ok {
 		t.Fatal("docs/audit.md is missing its reviewer marker")
 	}
-	runExamples(t, host, hostHome, bin, hostExamples, "")
+	runExamples(t, host, hostHome, bin, hostExamples)
 	initial := filepath.Join(host, "audit-export")
 	reviewExport := filepath.Join(reviewer, "audit-export")
 	if err := os.Mkdir(reviewExport, 0700); err != nil {
@@ -76,7 +74,9 @@ func TestOfflineAudit(t *testing.T) {
 	// The test operator takes its trusted copy directly from the local hub.
 	jwksData := read(t, filepath.Join(initial, "jwks.json"))
 	keys := write(t, reviewer, "trusted-jwks.json", jwksData)
-	runExamples(t, reviewer, reviewHome, bin, reviewExamples, checkedThree)
+	write(t, reviewer, "earlier-checkpoint.jws", read(t, filepath.Join(host, "earlier-export", "checkpoint.jws")))
+	writeCheckpointFixtures(t, filepath.Join(reviewer, "checkpoint-fixtures"))
+	runExamples(t, reviewer, reviewHome, bin, reviewExamples)
 
 	admin("add-member", "--id", "mem-ana")
 	admin("remove-member", "--id", "mem-ana")
@@ -211,20 +211,57 @@ func verifyArgs(path, keys string, checkpoints ...string) []string {
 	return args
 }
 
-var shellBlock = regexp.MustCompile("(?m)^```(?:sh|shell|bash|zsh)\\n([\\s\\S]*?)^```$")
+var exampleBlock = regexp.MustCompile("(?m)^```(sh|shell|bash|zsh|text)\\n([\\s\\S]*?)^```$")
 
-func runExamples(t *testing.T, dir, home, bin, text, wantOut string) {
+func runExamples(t *testing.T, dir, home, bin, guide string) {
 	t.Helper()
-	var script strings.Builder
-	for _, block := range shellBlock.FindAllStringSubmatch(text, -1) {
-		script.WriteString(block[1])
-	}
-	if script.Len() == 0 {
+	blocks := exampleBlock.FindAllStringSubmatch(guide, -1)
+	if len(blocks) == 0 {
 		t.Fatal("docs/audit.md has no shell example for this directory")
 	}
-	exit, stdout, stderr := run(t, dir, home, bin, "/bin/sh", "-eu", "-c", script.String())
-	if exit != 0 || stdout != wantOut || stderr != "" {
-		t.Fatalf("docs/audit.md command %q: exit %d, stdout %q, stderr %q, want exit 0 and stdout %q", script.String(), exit, stdout, stderr, wantOut)
+	normalize := strings.NewReplacer(dir, "<workdir>", home, "<home>", bin, "<bin>")
+	for i := 0; i < len(blocks); i++ {
+		if blocks[i][1] == "text" {
+			t.Fatalf("docs/audit.md output has no preceding shell example: %q", blocks[i][2])
+		}
+		script, wantOut := blocks[i][2], ""
+		if i+1 < len(blocks) && blocks[i+1][1] == "text" {
+			i++
+			wantOut = blocks[i][2]
+		}
+		exit, stdout, stderr := run(t, dir, home, bin, "/bin/sh", "-eu", "-c", script)
+		if exit != 0 || normalize.Replace(stdout) != wantOut || stderr != "" {
+			t.Fatalf("docs/audit.md command %q: exit %d, stdout %q, stderr %q, want exit 0 and stdout %q", script, exit, stdout, stderr, wantOut)
+		}
+	}
+}
+
+func writeCheckpointFixtures(t *testing.T, dir string) {
+	t.Helper()
+	var fixtures struct {
+		Shared struct{ JWKS json.RawMessage }
+		Cases  []struct {
+			Name  string
+			Input struct {
+				Export      json.RawMessage
+				Checkpoints []string
+			}
+		}
+	}
+	decode(t, read(t, auditSpec+"/fixtures/checkpoint.json"), &fixtures)
+	if err := os.Mkdir(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	write(t, dir, "jwks.json", fixtures.Shared.JWKS)
+	for _, tc := range fixtures.Cases {
+		caseDir := filepath.Join(dir, tc.Name)
+		if err := os.Mkdir(caseDir, 0700); err != nil {
+			t.Fatal(err)
+		}
+		write(t, caseDir, "export.json", tc.Input.Export)
+		for i, token := range tc.Input.Checkpoints {
+			write(t, caseDir, fmt.Sprintf("checkpoint-%d.jws", i+1), []byte(token))
+		}
 	}
 }
 
