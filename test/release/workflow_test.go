@@ -73,9 +73,22 @@ func TestWorkflowPublishesExactlyVerifiedArchives(t *testing.T) {
 		"openplexer_" + version + "_linux_arm64.tar.gz",
 		"openplexer_" + version + "_windows_amd64.zip",
 	}
-	for _, scenario := range []string{"complete", "unlisted archive", "missing archive and entry", "unexpected file", "duplicate entry", "corrupted archive"} {
+	for _, scenario := range []string{"complete", "tag notes", "unlisted archive", "missing archive and entry", "unexpected file", "duplicate entry", "corrupted archive"} {
 		t.Run(scenario, func(t *testing.T) {
-			dir := t.TempDir()
+			workspace := t.TempDir()
+			dir := filepath.Join(workspace, "dist", "release")
+			if err := os.MkdirAll(dir, 0755); err != nil {
+				t.Fatal(err)
+			}
+			notesFile := filepath.Join(workspace, ".github", "release-notes", version+".md")
+			if scenario == "tag notes" {
+				if err := os.MkdirAll(filepath.Dir(notesFile), 0755); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(notesFile, []byte("Notes for "+version+"\n"), 0644); err != nil {
+					t.Fatal(err)
+				}
+			}
 			call := filepath.Join(t.TempDir(), "publish")
 			var manifest strings.Builder
 			for i, name := range archives {
@@ -106,9 +119,10 @@ func TestWorkflowPublishesExactlyVerifiedArchives(t *testing.T) {
 			}
 			cmd := exec.CommandContext(t.Context(), bash, "-eo", "pipefail", "-c", script)
 			cmd.Dir = dir
-			cmd.Env = append(cmd.Environ(), "GITHUB_REF_NAME="+version, "GITHUB_REPOSITORY=example/project", "RELEASE_CALL="+call)
+			cmd.Env = append(cmd.Environ(), "GITHUB_REF_NAME="+version, "GITHUB_REPOSITORY=example/project",
+				"GITHUB_WORKSPACE="+workspace, "RELEASE_CALL="+call)
 			output, err := cmd.CombinedOutput()
-			if scenario != "complete" {
+			if scenario != "complete" && scenario != "tag notes" {
 				if err == nil {
 					t.Errorf("publish succeeded with %s:\n%s", scenario, output)
 				}
@@ -125,7 +139,13 @@ func TestWorkflowPublishesExactlyVerifiedArchives(t *testing.T) {
 				args[i] = strings.TrimPrefix(arg, "./")
 			}
 			want := append([]string{"release", "create", version}, archives...)
-			want = append(want, "SHA256SUMS", "--repo", "example/project", "--verify-tag", "--generate-notes", "--prerelease")
+			want = append(want, "SHA256SUMS", "--repo", "example/project", "--verify-tag")
+			if scenario == "tag notes" {
+				want = append(want, "--notes-file", notesFile)
+			} else {
+				want = append(want, "--generate-notes")
+			}
+			want = append(want, "--prerelease")
 			if !slices.Equal(args, want) {
 				t.Errorf("gh args = %q, want %q", args, want)
 			}
