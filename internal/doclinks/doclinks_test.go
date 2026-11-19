@@ -13,8 +13,9 @@ const moduleRoot = "../.."
 
 var link = regexp.MustCompile(`\]\(([^)\s]+)\)`)
 
-var heading = regexp.MustCompile(`(?m)^#{1,6} (.+)$`)
+var heading = regexp.MustCompile(`^#{1,6} (.+)$`)
 var headingPunctuation = regexp.MustCompile(`[^\p{L}\p{M}\p{N} _-]`)
+var codeFence = regexp.MustCompile("^ {0,3}(`{3,}|~{3,})(.*)$")
 
 func external(target string) bool {
 	return strings.Contains(target, "://") || strings.HasPrefix(target, "mailto:")
@@ -81,12 +82,7 @@ func TestPrivacyGuideTrustModelAnchors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The trust model uses Markdown headings with unique slugs.
-	anchors := make(map[string]bool)
-	for _, match := range heading.FindAllStringSubmatch(string(trust), -1) {
-		title := headingPunctuation.ReplaceAllString(strings.ToLower(match[1]), "")
-		anchors[strings.ReplaceAll(strings.TrimSpace(title), " ", "-")] = true
-	}
+	anchors := headingAnchors(string(trust))
 	checked := 0
 	for _, match := range link.FindAllStringSubmatch(string(guide), -1) {
 		file, anchor, hasAnchor := strings.Cut(match[1], "#")
@@ -100,5 +96,42 @@ func TestPrivacyGuideTrustModelAnchors(t *testing.T) {
 	}
 	if checked == 0 {
 		t.Errorf("%s links to no trust model anchors", guidePath)
+	}
+}
+
+func headingAnchors(markdown string) map[string]bool {
+	// The trust model uses Markdown headings with unique slugs.
+	anchors := make(map[string]bool)
+	var fence string
+	for line := range strings.SplitSeq(markdown, "\n") {
+		marker := codeFence.FindStringSubmatch(line)
+		if fence != "" {
+			if marker != nil && strings.HasPrefix(marker[1], fence) && strings.Trim(marker[2], " \t\r") == "" {
+				fence = ""
+			}
+			continue
+		}
+		if marker != nil && (marker[1][0] == '~' || !strings.ContainsRune(marker[2], '`')) {
+			fence = marker[1]
+			continue
+		}
+		if match := heading.FindStringSubmatch(line); match != nil {
+			title := headingPunctuation.ReplaceAllString(strings.ToLower(match[1]), "")
+			anchors[strings.ReplaceAll(strings.TrimSpace(title), " ", "-")] = true
+		}
+	}
+	return anchors
+}
+
+func TestHeadingAnchorsIgnoreFencedCode(t *testing.T) {
+	markdown := "## Before\n" +
+		"````md\n### Fenced heading\n```\n### After shorter fence\n" +
+		"````md\n### After fence with info\n````\n" +
+		"  ~~~\n### Tilde fenced heading\n```\n### After different fence\n  ~~~~ \n" +
+		"## After\n" +
+		"```\n### Unclosed fence\n"
+	anchors := headingAnchors(markdown)
+	if len(anchors) != 2 || !anchors["before"] || !anchors["after"] {
+		t.Errorf("heading anchors = %v, want only before and after", anchors)
 	}
 }
