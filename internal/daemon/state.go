@@ -106,12 +106,5 @@ func verifyPolicyBundle(token string, keys policy.KeySet) (*policy.Verified, err
 	if len(token) > 2*policy.MaxBundleBytes {
 		return nil, fmt.Errorf("the signed policy is longer than %d bytes", 2*policy.MaxBundleBytes)
 	}
-	verified, err := policy.VerifySignedBundle(token, keys)
-	if err != nil {
-		return nil, err
-	}
-	if len(verified.Payload) > policy.MaxBundleBytes {
-		return nil, fmt.Errorf("the policy payload is longer than %d bytes", policy.MaxBundleBytes)
-	}
-	return verified, nil
+	return policy.VerifySignedBundle(token, keys)
 }

@@ -156,7 +156,8 @@ func (h hubSource) Fetch(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if _, err := policy.VerifySignedBundle(token, keys); err != nil {
+	// Let admission reject and record an oversized payload whose advertised signature verified.
+	if _, err := policy.VerifySignedBundle(token, keys); err != nil && !errors.Is(err, policy.ErrBundlePayloadTooLarge) {
 		return "", fmt.Errorf("bundle does not verify with the advertised key set: %w", err)
 	}
 	return token, nil

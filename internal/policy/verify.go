@@ -54,10 +54,13 @@ func ParseKeySet(text []byte) (KeySet, error) {
 // Verified is a bundle whose signature verified.
 type Verified struct {
 	Bundle *Bundle
-	// Payload is the signed JSON text of the bundle. It holds the fields
-	// that Bundle does not model.
+	// Payload is the JSON text decoded from the signed payload. It holds
+	// the fields that Bundle does not model.
 	Payload []byte
 }
+
+// ErrBundlePayloadTooLarge means the authenticated payload exceeds MaxBundleBytes.
+var ErrBundlePayloadTooLarge = fmt.Errorf("the policy payload is longer than %d bytes", MaxBundleBytes)
 
 // VerifySignedBundle verifies a compact JWS against a key set, under the
 // steps of spec/policy/README.md, and returns the bundle that the token
@@ -90,6 +93,10 @@ func VerifySignedBundle(token string, keys KeySet) (*Verified, error) {
 	if err != nil {
 		return nil, err
 	}
+	if len(payload) > MaxBundleBytes {
+		return nil, ErrBundlePayloadTooLarge
+	}
+	payload = decodeUTF8(payload)
 	bundle, err := ParseBundle(payload)
 	if err != nil {
 		return nil, fmt.Errorf("the signed payload is not a bundle: %w", err)
@@ -252,7 +259,7 @@ func readPayload(segment string, unencoded bool) ([]byte, error) {
 		if !ok {
 			return nil, errors.New("the payload segment is not base64url")
 		}
-		return decodeUTF8(raw), nil
+		return raw, nil
 	}
 	if strings.ContainsFunc(segment, func(r rune) bool { return r > 0x7f }) {
 		return nil, errors.New("the unencoded payload is not ASCII")

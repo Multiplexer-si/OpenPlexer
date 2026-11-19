@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -604,31 +605,82 @@ func TestTheEvaluationsOfOneCallShareOneBudget(t *testing.T) {
 	}
 }
 
-func TestGateRejectsSignedPayloadOverTheHubLimit(t *testing.T) {
-	keys := newSigner(t)
-	home := t.TempDir()
-	configure(t, home, Settings{KeySet: keys.keySet(t)})
-	gate := open(t, home, loadedAt)
-	prefix := `{"version":1,"project_id":"p","repos":[],"areas":[],"roles":{},"members":{},"pad":"`
-	suffix := `"}`
-	for _, length := range []int{policy.MaxBundleBytes, policy.MaxBundleBytes + 1} {
-		payload := prefix + strings.Repeat("x", length-len(prefix)-len(suffix)) + suffix
-		token := keys.sign(t, []byte(payload))
-		state, err := gate.Load(t.Context(), token)
-		if length == policy.MaxBundleBytes {
-			if err != nil || state.State != Verified || open(t, home, loadedAt).Status().State != Verified {
-				t.Fatalf("bundle at the limit: %v, %v", state, err)
-			}
-			continue
-		}
-		if !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "payload is longer") {
-			t.Fatalf("bundle over the limit: %v, %v", state, err)
-		}
-		if err := writeJSON(home, policyFile, storedPolicy{Token: string(token), ConfirmedAt: loadedAt}); err != nil {
-			t.Fatal(err)
-		}
-		if status := open(t, home, loadedAt).Status(); status.State != Rejected || !strings.Contains(status.Detail, "payload is longer") {
-			t.Fatalf("stored bundle over the limit: %v", status)
+func TestGateLimitsAuthenticatedPayloadBytes(t *testing.T) {
+	signer := newSigner(t)
+	keys := signer.keySet(t)
+	previous := signer.sign(t, bundleText("p", 1))
+	const prefix = `{"version":2,"project_id":"p","repos":["api"],"areas":[],"roles":{},"members":{},"pad":"`
+	const suffix = `"}`
+	for _, c := range []struct {
+		name, bom, pad string
+		size           int
+		rejected       bool
+	}{
+		{name: "at the limit", size: policy.MaxBundleBytes},
+		{name: "one byte over", size: policy.MaxBundleBytes + 1, rejected: true},
+		{name: "BOM shrinks text below the limit", bom: "\uFEFF", size: policy.MaxBundleBytes + 1, rejected: true},
+		{name: "UTF-8 replacement grows text over the limit", pad: "\x80", size: policy.MaxBundleBytes - 1},
+	} {
+		start := c.bom + prefix + c.pad
+		payload := start + strings.Repeat("x", c.size-len(start)-len(suffix)) + suffix
+		token := signer.sign(t, []byte(payload))
+		message := fmt.Appendf(nil, `{"version":2,"bundle":{},"signature":%q}`, token)
+		for _, path := range []string{"load", "sync", "reopen"} {
+			t.Run(c.name+"/"+path, func(t *testing.T) {
+				home := t.TempDir()
+				configure(t, home, Settings{
+					KeySet: keys, HubURL: "https://hub.example", ProjectID: "p", MemberID: "mem-ana",
+					Token: base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
+				})
+				if path == "reopen" {
+					if err := writeJSON(home, policyFile, storedPolicy{Token: string(token), ConfirmedAt: loadedAt}); err != nil {
+						t.Fatal(err)
+					}
+					status := open(t, home, loadedAt).Status()
+					if c.rejected {
+						if status.State != Rejected || !strings.Contains(status.Detail, "payload is longer") {
+							t.Fatalf("reopen = %+v, want rejection for payload size", status)
+						}
+					} else if status.State != Verified || status.Version != 2 {
+						t.Fatalf("reopen = %+v, want verified version 2", status)
+					}
+					return
+				}
+
+				gate := open(t, home, loadedAt)
+				before := load(t, gate, previous)
+				var status Status
+				var err error
+				if path == "load" {
+					file := filepath.Join(home, "incoming.json")
+					if err := os.WriteFile(file, message, 0o600); err != nil {
+						t.Fatal(err)
+					}
+					status, err = gate.Load(t.Context(), FileSource(file))
+				} else {
+					useHubTransport(t, handlerTransport(func(w http.ResponseWriter, r *http.Request) {
+						switch r.URL.Path {
+						case "/.well-known/jwks.json":
+							w.Write(keys)
+						case "/api/v1/projects/p/policy.bundle":
+							w.Write(message)
+						default:
+							http.NotFound(w, r)
+						}
+					}))
+					status, err = gate.Sync(t.Context())
+				}
+				if c.rejected {
+					if !errors.Is(err, ErrRejected) || !strings.Contains(err.Error(), "payload is longer") {
+						t.Errorf("incoming bundle error = %v, want rejection for payload size", err)
+					}
+					if status != before || open(t, home, loadedAt).Status() != before {
+						t.Errorf("rejected bundle changed the policy in force: %+v", status)
+					}
+				} else if err != nil || status.State != Verified || status.Version != 2 {
+					t.Errorf("incoming bundle = %+v, %v, want verified version 2", status, err)
+				}
+			})
 		}
 	}
 }
