@@ -1,0 +1,25 @@
+{
+  "$id": "urn:openplexer:spec:audit:v1:checkpoint-protected-header",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Protected header of an audit checkpoint",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "alg": {
+      "const": "ES256"
+    },
+    "kid": {
+      "type": "string",
+      "minLength": 1,
+      "description": "The ID of the checkpoint signing key."
+    },
+    "typ": {
+      "const": "openplexer-audit-checkpoint+jws"
+    }
+  },
+  "required": [
+    "alg",
+    "kid",
+    "typ"
+  ]
+}

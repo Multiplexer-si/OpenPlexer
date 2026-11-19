@@ -1,0 +1,1599 @@
+{
+  "cases": [
+    {
+      "name": "no checkpoint",
+      "why": "The chain is consistent from genesis and completeness is not proven.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint_entries": null,
+        "completeness": "not_proven",
+        "entries": 3,
+        "ok": true
+      }
+    },
+    {
+      "name": "checkpoint at the tip",
+      "why": "The checkpoint covers all three exported records.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.1DLbqabTYsLNqWEnp_SA4jRaBdwq22UU_YAxiPC3lHoj_sHWtwTp2bpBxAEhXWaxa-a1gqU_BsOAgnT7IBjzGA"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint_entries": 3,
+        "completeness": "through_checkpoint",
+        "entries": 3,
+        "ok": true
+      }
+    },
+    {
+      "name": "checkpoint in the middle",
+      "why": "The checkpoint covers only the first two records.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjoyLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjU0NGZlMDFhNDY4ZGNhZGY3ZGViMjM1OTE1NTVkYTExNmZmYmYyNmMwNzBjNjU3ZTRjYzVmMDhkMzMzYjlkY2UiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.UimQDEd3QhbT3SZNki48gMRv6wB7zudenh8O3lep-WVeZVOuIY6glhk7HdvDDdjQtObcKlLt09yAKQHPF5QANA"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint_entries": 2,
+        "completeness": "through_checkpoint",
+        "entries": 3,
+        "ok": true
+      }
+    },
+    {
+      "name": "checkpoint at count zero",
+      "why": "A zero-count checkpoint authenticates the genesis hash of an empty log.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjowLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.WOoYtvz59zxJDY32ypkNSK_g_2wPe6VfJX_h2czU3-POjZph6WBCWOELWfNhRYQsj9aRzdMj_lfcbLRDH5BUHA"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint_entries": 0,
+        "completeness": "through_checkpoint",
+        "entries": 0,
+        "ok": true
+      }
+    },
+    {
+      "name": "checkpoints across key rotation",
+      "why": "Both published keys verify and coverage uses the greatest count.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.1DLbqabTYsLNqWEnp_SA4jRaBdwq22UU_YAxiPC3lHoj_sHWtwTp2bpBxAEhXWaxa-a1gqU_BsOAgnT7IBjzGA",
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjoyLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjU0NGZlMDFhNDY4ZGNhZGY3ZGViMjM1OTE1NTVkYTExNmZmYmYyNmMwNzBjNjU3ZTRjYzVmMDhkMzMzYjlkY2UiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.UimQDEd3QhbT3SZNki48gMRv6wB7zudenh8O3lep-WVeZVOuIY6glhk7HdvDDdjQtObcKlLt09yAKQHPF5QANA"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint_entries": 3,
+        "completeness": "through_checkpoint",
+        "entries": 3,
+        "ok": true
+      }
+    },
+    {
+      "name": "altered record",
+      "why": "The second record has a changed target and its original hash.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-altered",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "broken_at": "18",
+        "ok": false,
+        "record_number": 2,
+        "rule": "A3"
+      }
+    },
+    {
+      "name": "reordered records",
+      "why": "Swapping the two newest entries breaks the third record's previous link.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "broken_at": "25",
+        "ok": false,
+        "record_number": 2,
+        "rule": "A5"
+      }
+    },
+    {
+      "name": "missing middle record",
+      "why": "The third record still links to the omitted second record.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "broken_at": "25",
+        "ok": false,
+        "record_number": 2,
+        "rule": "A5"
+      }
+    },
+    {
+      "name": "truncated chain",
+      "why": "The export is a valid prefix, but the retained checkpoint requires its last record.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.1DLbqabTYsLNqWEnp_SA4jRaBdwq22UU_YAxiPC3lHoj_sHWtwTp2bpBxAEhXWaxa-a1gqU_BsOAgnT7IBjzGA"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K9"
+      }
+    },
+    {
+      "name": "malformed record",
+      "why": "The flagged field is a string instead of a boolean.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated",
+              "flagged": "false"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "broken_at": "18",
+        "ok": false,
+        "record_number": 2,
+        "rule": "A1"
+      }
+    },
+    {
+      "name": "unsupported checkpoint version",
+      "why": "The signature verifies and the signed version is 2.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoyLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.Q9Wy3PxtkeCFAfZwN4mTxk0ifJvdlbBPIQ83F1ur-bWeiAA69OgaloRvFBHJSIKjYr2uocEDiHhjwLrmCkl5aw"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K5"
+      }
+    },
+    {
+      "name": "bad signature",
+      "why": "The signature has a changed byte and the original header and payload.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.1TLbqabTYsLNqWEnp_SA4jRaBdwq22UU_YAxiPC3lHoj_sHWtwTp2bpBxAEhXWaxa-a1gqU_BsOAgnT7IBjzGA"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K4"
+      }
+    },
+    {
+      "name": "policy-typed JWS",
+      "why": "A token signed with a known test key has the policy bundle type.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W10sIm1lbWJlcnMiOnt9LCJwcm9qZWN0X2lkIjoicHJqLWNoZWNrcG9pbnQtdGVzdCIsInJlcG9zIjpbXSwicm9sZXMiOnt9LCJ2ZXJzaW9uIjoxfQ.hKfQCubl17F7zmhg6TE5wF2tNfblPa8W693dqUx0_FGGegCw4UDIIjz-klgVyS2zznzj7aNFfUpk-EVi8-wCKQ"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K2"
+      }
+    },
+    {
+      "name": "unknown kid",
+      "why": "The header names a key absent from the checkpoint JWKS.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1hYnNlbnQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.YD7BPnVnTinLYXtGHSMkMb82WQoilnmOKGpv5BlgXxc761PahTUF50OfKcFczpB77oFWYgjVOAeM3S6sOQQNeQ"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K3"
+      }
+    },
+    {
+      "name": "workspace mismatch",
+      "why": "The signed workspace differs from the workspace of the records.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3Atb3RoZXItdGVzdCJ9.ZWs8JQI2S9fR76idL4CiiHUeiEo4kt6w47qo09kox9kB8yNQu6VuWUVSts4vjD5SxlcxEMK9kNqDqJtz6ffysA"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "broken_at": "11",
+        "checkpoint": 1,
+        "ok": false,
+        "record_number": 1,
+        "rule": "K7"
+      }
+    },
+    {
+      "name": "checkpoint beyond the chain",
+      "why": "The checkpoint claims a fourth record and the export has three.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjo0LCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6ImI2YzExNDVmMGY3ZWVlOWViZmI3YWVjYjQ2OWI0YTJiNjIzZGIxZTcyNjc5ZDhlY2U2OWY0YTg0MzVjZTkyZDQiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.yvxxw9UzU_W06ItEX_4FqcImkG-AMQxk_h3FyDCVflkWIqXBNRgaI9OhASfUloymE1mWmnIYb0xMTKKV3pnvBg"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K9"
+      }
+    },
+    {
+      "name": "contradicting checkpoints",
+      "why": "Both signatures verify and the two tips differ at the same count.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.1DLbqabTYsLNqWEnp_SA4jRaBdwq22UU_YAxiPC3lHoj_sHWtwTp2bpBxAEhXWaxa-a1gqU_BsOAgnT7IBjzGA",
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6ImUzNjUzZTFhMGUwZWY3M2RkZjkwZjZjNjhjNjgxZmEyN2Y2ZjIxNDgxNmYyMGZjM2JiNTY5ODA3M2VmOGU4YTYiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.VazPPe3U6b5wayWAgjAHqJZAUEWmRx-xuL_uI5v_YTmJPl_WXHreSUK6Yywv5De2covdooZxkYq-aazfN21sXg"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 2,
+        "ok": false,
+        "rule": "K8"
+      }
+    },
+    {
+      "name": "filtered export",
+      "why": "The export starts at the second record, whose previous hash is not genesis.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "broken_at": "18",
+        "ok": false,
+        "record_number": 1,
+        "rule": "A4"
+      }
+    },
+    {
+      "name": "empty filtered export",
+      "why": "Filtering out every record leaves a valid empty export whose completeness is not proven.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint_entries": null,
+        "completeness": "not_proven",
+        "entries": 0,
+        "ok": true
+      }
+    },
+    {
+      "name": "empty filtered export with a later checkpoint",
+      "why": "The empty export passes chain checks, but the checkpoint requires three records.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.1DLbqabTYsLNqWEnp_SA4jRaBdwq22UU_YAxiPC3lHoj_sHWtwTp2bpBxAEhXWaxa-a1gqU_BsOAgnT7IBjzGA"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K9"
+      }
+    },
+    {
+      "name": "padded compact JWS",
+      "why": "The signature segment ends in a padding character.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.1DLbqabTYsLNqWEnp_SA4jRaBdwq22UU_YAxiPC3lHoj_sHWtwTp2bpBxAEhXWaxa-a1gqU_BsOAgnT7IBjzGA="
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K1"
+      }
+    },
+    {
+      "name": "impossible issue date",
+      "why": "The signed date is February 30.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTAyLTMwVDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.Qx9f4o-FFwA7zWZPOjej0zZEJYrlnXcZtDkP4wMGtKIpdc7UIul-F22NqKT8VAYt7IyDdVfyMjAYsWRwGjvlOw"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K6"
+      }
+    },
+    {
+      "name": "issue date in year zero",
+      "why": "A checkpoint issue date cannot use year 0000.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjowLCJpc3N1ZWRfYXQiOiIwMDAwLTAxLTAxVDAwOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.YrN_ELp8OHGbY_9CWeQpKy7qIUTlAG-N2pTtrSOstvV-1v6CTDnl1xHctHYdTkDqIIkIiImEh6Eb8fKgkPUs3A"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K6"
+      }
+    },
+    {
+      "name": "rewritten tip",
+      "why": "The chain verifies and reaches the signed count with a different hash.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjozLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6Ijg1NzlhMTQ3MTA1ZmJlOTE4MTVlOGFhNjU5ZGY5MjI1ZDM2MzEwZGMxMWFhNTg2NDVlODM5OGUxMzE1ZTNhNmUiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.1DLbqabTYsLNqWEnp_SA4jRaBdwq22UU_YAxiPC3lHoj_sHWtwTp2bpBxAEhXWaxa-a1gqU_BsOAgnT7IBjzGA"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-rewritten",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "e3653e1a0e0ef73ddf90f6c68c681fa27f6f214816f20fc3bb5698073ef8e8a6",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "broken_at": "25",
+        "checkpoint": 1,
+        "ok": false,
+        "record_number": 3,
+        "rule": "K10"
+      }
+    },
+    {
+      "name": "paged export",
+      "why": "The cursor is a string. The audit export requires null.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [
+            {
+              "id": "25",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 3
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "hash": "8579a147105fbe91815e8aa659df9225d36310dc11aa58645e8398e1315e3a6e",
+              "result": "updated"
+            },
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": "11"
+        }
+      },
+      "expected": {
+        "ok": false,
+        "rule": "A6"
+      }
+    },
+    {
+      "name": "out-of-range number in an unknown export field",
+      "why": "The export allows any value for this field, including an out-of-range number read as infinity.",
+      "input": {
+        "checkpoints": [],
+        "export": {
+          "entries": [],
+          "extra": 1e400,
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint_entries": null,
+        "completeness": "not_proven",
+        "entries": 0,
+        "ok": true
+      }
+    },
+    {
+      "name": "duplicate keys member in the JWKS",
+      "why": "The trusted JWKS repeats the keys member, even though its last value contains the signer.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjowLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.WOoYtvz59zxJDY32ypkNSK_g_2wPe6VfJX_h2czU3-POjZph6WBCWOELWfNhRYQsj9aRzdMj_lfcbLRDH5BUHA"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        },
+        "jwks_json": "{\"keys\":[],\"keys\":[{\"alg\":\"ES256\",\"crv\":\"P-256\",\"kid\":\"checkpoint-test-old\",\"kty\":\"EC\",\"use\":\"sig\",\"x\":\"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\",\"y\":\"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}]}"
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K3"
+      }
+    },
+    {
+      "name": "duplicate member inside JWKS metadata",
+      "why": "Member names are compared after decoding escapes, even inside ignored arrays and objects.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjowLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.WOoYtvz59zxJDY32ypkNSK_g_2wPe6VfJX_h2czU3-POjZph6WBCWOELWfNhRYQsj9aRzdMj_lfcbLRDH5BUHA"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        },
+        "jwks_json": "{\"keys\":[{\"alg\":\"ES256\",\"crv\":\"P-256\",\"kid\":\"checkpoint-test-old\",\"kty\":\"EC\",\"use\":\"sig\",\"x\":\"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\",\"y\":\"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}],\"metadata\":[{\"a\":1,\"\\u0061\":2}]}"
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K3"
+      }
+    },
+    {
+      "name": "JWKS members that differ in case",
+      "why": "The unrecognized uppercase KEYS member is distinct from keys.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjowLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.WOoYtvz59zxJDY32ypkNSK_g_2wPe6VfJX_h2czU3-POjZph6WBCWOELWfNhRYQsj9aRzdMj_lfcbLRDH5BUHA"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        },
+        "jwks_json": "{\"keys\":[{\"alg\":\"ES256\",\"crv\":\"P-256\",\"kid\":\"checkpoint-test-old\",\"kty\":\"EC\",\"use\":\"sig\",\"x\":\"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\",\"y\":\"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}],\"KEYS\":[]}"
+      },
+      "expected": {
+        "checkpoint_entries": 0,
+        "completeness": "through_checkpoint",
+        "entries": 0,
+        "ok": true
+      }
+    }
+  ],
+  "contract": "audit",
+  "description": "OpenPlexer audit exports and checkpoints. The signing keys are public test keys only.",
+  "operation": "verify-checkpoints",
+  "shared": {
+    "jwks": {
+      "keys": [
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "kid": "checkpoint-test-old",
+          "kty": "EC",
+          "use": "sig",
+          "x": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY",
+          "y": "T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU"
+        },
+        {
+          "alg": "ES256",
+          "crv": "P-256",
+          "kid": "checkpoint-test-new",
+          "kty": "EC",
+          "use": "sig",
+          "x": "fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg",
+          "y": "B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E"
+        }
+      ]
+    }
+  },
+  "version": 1
+}

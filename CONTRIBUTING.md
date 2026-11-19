@@ -90,7 +90,9 @@ The dependency can be indirect. In this example `internal/policy` imports a pack
 
 ## Regenerate the contracts and fixtures
 
-The extractor in `tools/extract` writes every file under `spec/` except the README pages: the schemas, the examples, and the fixtures. Do not edit those files by hand. Change the extractor, and run it.
+The extractor in `tools/extract` writes the reference-compatible schemas, examples, and fixtures under `spec/`. To change one of those files, change the extractor and run it. The audit checkpoint schemas and examples are authored for OpenPlexer. [Audit contract](spec/audit/README.md#generated-and-authored-parts).
+
+To regenerate the OpenPlexer checkpoint fixtures, run `go run ./tools/auditvectors` from the repository root. `make check` verifies each case and checks for drift.
 
 The extractor runs the code of the existing TypeScript implementation, so you need these things.
 

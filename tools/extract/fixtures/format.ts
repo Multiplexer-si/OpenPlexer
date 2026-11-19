@@ -141,6 +141,13 @@ const OPERATIONS: Record<string, Operation> = {
     expected: { $ref: schemaId("audit", "verify-result") },
     informational: strict({ hash_inputs: { type: "array", items: { type: "string" } } }),
   },
+  "verify-checkpoints": {
+    contract: ["audit"],
+    description: "Verify the export in `input.export` using `input.checkpoints` and the checkpoint key set in `shared.jwks`. The export can be malformed on purpose.",
+    shared: strict({ jwks: { $ref: schemaId("policy", "jwks") } }),
+    input: strict({ export: {}, checkpoints: { type: "array", items: { type: "string" } } }),
+    expected: { $ref: schemaId("audit", "checkpoint-verify-result") },
+  },
   "bash-targets": {
     contract: ["adapter"],
     description: "List the paths that the shell command in `input.command` writes, in the order that the command names them.",
@@ -207,7 +214,7 @@ export function fixtureFileSchema(): Json {
     $schema: "https://json-schema.org/draft/2020-12/schema",
     $id: FIXTURE_FILE_ID,
     title: "Fixture file",
-    description: "A list of cases for one operation of one contract. Each case pairs an input with the result that the reference gives.",
+    description: "A list of cases for one operation of one contract. Each case pairs an input with its expected result.",
     type: "object",
     properties: {
       contract: { enum: ["policy", "room", "audit", "canonical-json", "adapter"], description: "The contract directory that the file belongs to." },
@@ -224,9 +231,16 @@ export function fixtureFileSchema(): Json {
       shared: { type: "object", description: "Input that every case of the file shares." },
       cases: { type: "array", minItems: 1, items: { $ref: "#/$defs/case" } },
     },
-    required: ["contract", "version", "operation", "description", "reference", "cases"],
+    required: ["contract", "version", "operation", "description", "cases"],
     additionalProperties: false,
-    allOf: Object.entries(OPERATIONS).map(([name, op]) => rule(name, op)),
+    allOf: [
+      ...Object.entries(OPERATIONS).map(([name, op]) => rule(name, op)),
+      {
+        if: { properties: { operation: { const: "verify-checkpoints" } } },
+        then: { properties: { reference: false } },
+        else: { required: ["reference"] },
+      },
+    ],
     $defs: {
       case: {
         type: "object",
