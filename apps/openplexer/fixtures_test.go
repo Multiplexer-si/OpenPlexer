@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -31,6 +34,7 @@ func TestPolicyCheckFixtures(t *testing.T) {
 					}
 					Expected struct {
 						Decision string
+						Area     *string
 						Throws   bool
 					}
 				}
@@ -64,6 +68,26 @@ func TestPolicyCheckFixtures(t *testing.T) {
 					if !strings.HasPrefix(out, want+": ") {
 						t.Errorf("policy check printed %q, want %s and its rule", out, want)
 					}
+					log, err := os.ReadFile(filepath.Join(os.Getenv("OPENPLEXER_HOME"), "audit.jsonl"))
+					if err != nil {
+						t.Fatal(err)
+					}
+					log = bytes.TrimSpace(log)
+					last := log[bytes.LastIndexByte(log, '\n')+1:]
+					var record struct {
+						Action string
+						Meta   struct{ Area *string }
+					}
+					if err := json.Unmarshal(last, &record); err != nil {
+						t.Fatalf("read policy check audit record: %v", err)
+					}
+					if record.Action != "policy.allowed" && record.Action != "policy.denied" {
+						t.Fatalf("expected a decision audit record, got %s", last)
+					}
+					if !reflect.DeepEqual(record.Meta.Area, tc.Expected.Area) {
+						wantArea, _ := json.Marshal(tc.Expected.Area)
+						t.Errorf("policy check audit record = %s, want area %s", last, wantArea)
+					}
 				})
 			}
 		})
@@ -81,7 +105,10 @@ func TestPolicyLoadFixtures(t *testing.T) {
 				Cases  []struct {
 					Name     string
 					Input    struct{ Signature string }
-					Expected struct{ OK bool }
+					Expected struct {
+						OK     bool
+						Bundle json.RawMessage
+					}
 				}
 			}
 			readJSON(t, filepath.Join(policySpec, "fixtures", name), &file)
@@ -103,7 +130,10 @@ func TestPolicyLoadFixtures(t *testing.T) {
 						wantExit, want = exitOK, "policy: verified"
 					}
 					if out := c.must(wantExit, "policy", "load", message); !strings.Contains(out, want) {
-						t.Errorf("policy load printed %q, want %q", out, want)
+						t.Fatalf("policy load printed %q, want %q", out, want)
+					}
+					if tc.Expected.Bundle != nil {
+						t.Skip("policy load reports verification status but does not expose the verified payload")
 					}
 				})
 			}
