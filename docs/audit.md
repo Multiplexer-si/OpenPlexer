@@ -2,7 +2,7 @@
 
 ## Export from the hub
 
-Run this command on the hub host. It reads the data directory while the server is running or stopped.
+Run this command on the hub host from the directory that contains `bin/` and your hub data. Set `--data-dir` to the directory you used to initialize the hub. The command works while the server is running or stopped. [Hub setup](hub.md#start-the-server).
 
 ```sh
 bin/openplexer-hub export-audit --data-dir ./hub-data --out ./audit-export
@@ -14,14 +14,22 @@ A lead can also call `GET /api/v1/audit/export` with a bearer token. Save the JS
 
 ## Verify offline
 
-Copy the files and the `openplexer-verify` binary to the machine that checks the log. Use a trusted checkpoint JWKS from the hub over authenticated HTTPS or from a trusted operator. If the JWKS came with the export, authenticate it independently. Keep earlier checkpoints and their trusted keys for future comparisons. [Trust model](trust-model.md#how-a-verifier-obtains-a-trusted-checkpoint).
+<!-- audit-example: reviewer -->
+
+On the review machine, put `openplexer-verify` on `PATH`. Copy `export.json` and `checkpoint.jws` into `audit-export/` in your working directory. Save a trusted checkpoint JWKS as `trusted-jwks.json` in the working directory. Get it from the hub over authenticated HTTPS or from a trusted operator. If the JWKS came with the export, authenticate it independently. Keep earlier checkpoints and their trusted keys for future comparisons. [Trust model](trust-model.md#how-a-verifier-obtains-a-trusted-checkpoint).
+
+This example uses a three-record export and its checkpoint at count 3.
 
 ```sh
 openplexer-verify --export audit-export/export.json --jwks trusted-jwks.json \
   --checkpoint audit-export/checkpoint.jws
 ```
 
-Repeat `--checkpoint` for other kept tokens. Each file holds one compact token with no whitespace. For a chain-only check, omit `--checkpoint`. The command still reads the file named by `--jwks`, but it needs no keys for that check. Use `--json` to print the [v1 verify result](../spec/audit/v1/checkpoint-verify-result.schema.json) to standard output.
+```text
+Chain is consistent from genesis (3 records). Completeness is proven through checkpoint count 3.
+```
+
+Repeat `--checkpoint` for other kept tokens. Each file holds one compact token with no whitespace. Use `--json` to print the [v1 verify result](../spec/audit/v1/checkpoint-verify-result.schema.json) to standard output.
 
 The verifier exits with `0` for a valid export, `1` for a failed verification, and `2` for a usage or file error.
 
@@ -34,11 +42,24 @@ The verifier exits with `0` for a valid export, `1` for a failed verification, a
 
 ## Read the output
 
-These successful checks cover a chain alone, a checkpoint at the tip, and a checkpoint before the tip.
+To check the same export without a checkpoint, run the verifier with just the export and JWKS. The verifier still reads the file named by `--jwks`. The key set can be empty for this check.
+
+```sh
+openplexer-verify --export audit-export/export.json --jwks trusted-jwks.json
+```
 
 ```text
 Chain is consistent from genesis (3 records). Completeness is not proven.
-Chain is consistent from genesis (3 records). Completeness is proven through checkpoint count 3.
+```
+
+If you kept a checkpoint from when the chain had two records, save it as `earlier-checkpoint.jws` in your working directory. Use a trusted JWKS that includes its signing key.
+
+```sh
+openplexer-verify --export audit-export/export.json --jwks trusted-jwks.json \
+  --checkpoint earlier-checkpoint.jws
+```
+
+```text
 Chain is consistent from genesis (3 records). Completeness is proven through checkpoint count 2.
 Records after position 2 are unanchored.
 ```
@@ -46,6 +67,31 @@ Records after position 2 are unanchored.
 In the default text mode, a failed check prints one diagnostic to standard error. Positions count from genesis, starting at 1. The verifier reports the first failure in the order set by the contract. `<none>` at position 0 means the rule has no record location. `<unknown>` means the record lacks a string ID. Checkpoint numbers follow the order of the flags. [Audit verification rules](../spec/audit/README.md#verification-and-result).
 
 A change to a hashed value with the original hash fails A3. A broken link after genesis fails A5. A nonempty export that starts after genesis fails A4. A page with a cursor fails A6. A contiguous prefix or an empty export fails K9 when a trusted checkpoint covers the missing suffix.
+
+To reproduce the diagnostics, use the [checkpoint fixtures](../spec/audit/v1/fixtures/checkpoint.json). Save `shared.jwks` as `checkpoint-fixtures/jwks.json`. For each case named below, create a directory with that name under `checkpoint-fixtures/` and save `input.export` there as `export.json`. Save each string in `input.checkpoints` without quotes or a trailing newline as `checkpoint-1.jws`, `checkpoint-2.jws`, and so on, in array order.
+
+```sh
+(
+  set -e
+  for name in 'malformed record' 'altered record' 'filtered export' \
+    'missing middle record' 'paged export' 'padded compact JWS' \
+    'policy-typed JWS' 'unknown kid' 'bad signature' \
+    'unsupported checkpoint version' 'impossible issue date' 'workspace mismatch' \
+    'contradicting checkpoints' 'truncated chain' 'rewritten tip'
+  do
+    dir="checkpoint-fixtures/$name"
+    set -- --export "$dir/export.json" --jwks checkpoint-fixtures/jwks.json
+    i=1
+    while [ -f "$dir/checkpoint-$i.jws" ]; do
+      set -- "$@" --checkpoint "$dir/checkpoint-$i.jws"
+      i=$((i + 1))
+    done
+    exit_code=0
+    openplexer-verify "$@" 2>&1 || exit_code=$?
+    [ "$exit_code" -eq 1 ]
+  done
+)
+```
 
 ```text
 record 18 (position 2): rule A1: expected flagged to be a boolean, found a string. Export the log again
@@ -68,3 +114,5 @@ record 25 (position 3): rule K10: checkpoint 1: expected signed tip 8579a147105f
 Version 1 records and exports have no version field. The contract allows unknown fields and action strings. A checkpoint with an unsupported version fails K5.
 
 Checkpoint delivery to connected daemons and daemon storage of received checkpoints are later work. CSV export and audit retention are also later work.
+
+For logs from the TypeScript hub, see [audit compatibility](audit-compatibility.md).
