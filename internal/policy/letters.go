@@ -1,7 +1,6 @@
 package policy
 
 import (
-	"maps"
 	"strings"
 	"sync"
 	"unicode"
@@ -37,25 +36,29 @@ func canonical(unit uint16) uint16 {
 	return uint16(upper)
 }
 
-// lettersByCanonical lists, for each canonical form that more than one unit
-// has, every unit with that form.
-var lettersByCanonical = sync.OnceValue(func() map[uint16][]uint16 {
-	groups := map[uint16][]uint16{}
+// caseGroups lists the equivalent units only for forms with case variants.
+var caseGroups = sync.OnceValue(func() classCaseGroups {
+	groups := classCaseGroups{byForm: map[uint16][]uint16{}, largest: 1}
 	for u := range 0x10000 {
-		form := canonical(uint16(u))
-		groups[form] = append(groups[form], uint16(u))
+		unit := uint16(u)
+		form := canonical(unit)
+		if unit == form {
+			continue
+		}
+		variants := groups.byForm[form]
+		if variants == nil {
+			variants = append(variants, form)
+		}
+		variants = append(variants, unit)
+		groups.byForm[form] = variants
+		groups.largest = max(groups.largest, len(variants))
 	}
-	maps.DeleteFunc(groups, func(_ uint16, units []uint16) bool { return len(units) == 1 })
 	return groups
 })
 
-// sameLetters returns the unit and every other unit that is the same letter
-// in a glob.
-func sameLetters(unit uint16) []uint16 {
-	if group, ok := lettersByCanonical()[canonical(unit)]; ok {
-		return group
-	}
-	return []uint16{unit}
+type classCaseGroups struct {
+	byForm  map[uint16][]uint16
+	largest int
 }
 
 // uppercaseIsLonger reports the letters for which unicode.ToUpper gives one

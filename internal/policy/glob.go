@@ -23,12 +23,17 @@ type node interface {
 }
 
 type (
-	one      func(l *letter) bool
+	one struct {
+		kind  predicateKind
+		unit  uint16
+		class *class
+	}
 	sequence []node
 	anyOf    []node
 	repeat   struct {
 		of        node
 		low, high int
+		least     int
 	}
 	look struct {
 		of              node
@@ -60,39 +65,54 @@ const (
 type instr struct {
 	op      op
 	offset  int32
-	holdsAt []bool
+	negated bool
+	one
 }
 
+type predicateKind uint8
+
 const (
-	maxCost     = 3000
-	longestPath = 4096
+	isLiteral predicateKind = iota
+	notSlash
+	notLineTerminator
+	inClass
+	never
 )
+
+type assertion struct {
+	code     []instr
+	backward bool
+}
+
+const maxCost = 3000
+
+// MaxGlobPath is the longest path a glob can match, in UTF-16 code units.
+const MaxGlobPath = 4096
+
+var errPathTooLong = fmt.Errorf("path is longer than %d characters", MaxGlobPath)
 
 var errTooLarge = fmt.Errorf("the glob is too large: its length plus the states of its automaton is more than %d", maxCost)
 
 type builder struct {
-	path     []letter
-	n        int
-	limit    int
-	backward bool
+	n          int
+	limit      int
+	backward   bool
+	assertions []assertion
+	budget     *Budget
 }
 
 func (b *builder) add(code []instr, more ...instr) ([]instr, error) {
 	if b.limit -= len(more); b.limit < 0 {
 		return nil, errTooLarge
 	}
+	if err := b.budget.spend(len(more)); err != nil {
+		return nil, err
+	}
 	return append(code, more...), nil
 }
 
 func (holds one) emit(b *builder, code []instr) ([]instr, error) {
-	unit := instr{op: opUnit}
-	if b.path != nil {
-		unit.holdsAt = make([]bool, len(b.path))
-		for at := range b.path {
-			unit.holdsAt[at] = holds(&b.path[at])
-		}
-	}
-	return b.add(code, unit)
+	return b.add(code, instr{op: opUnit, one: holds})
 }
 
 func (s sequence) emit(b *builder, code []instr) ([]instr, error) {
@@ -140,12 +160,17 @@ func (c anyOf) emit(b *builder, code []instr) ([]instr, error) {
 // refused, and it must be: the reference fails on it when it runs out of
 // stack.
 func (r repeat) emit(b *builder, code []instr) ([]instr, error) {
-	low, high, least := r.low, r.high, r.of.minUnits()
+	low, high, least := r.low, r.high, r.least
 	if high == 0 {
 		return code, nil
 	}
 	body, err := r.of.emit(b, nil)
 	if err != nil {
+		return nil, err
+	}
+	// Copies and passes over a temporary body still cost work even if its
+	// states are later refunded for the size limit.
+	if err := b.budget.spend(2 * len(body)); err != nil {
 		return nil, err
 	}
 	if !slices.ContainsFunc(body, consumes) {
@@ -158,7 +183,7 @@ func (r repeat) emit(b *builder, code []instr) ([]instr, error) {
 	most := b.n + 1
 	if least > 0 {
 		if most = b.n / least; low > most {
-			return one(never).emit(b, code)
+			return one{kind: never}.emit(b, code)
 		}
 	}
 	if high > most {
@@ -174,7 +199,10 @@ func (r repeat) emit(b *builder, code []instr) ([]instr, error) {
 	}
 	for left := high - low; left > 0; left-- {
 		skip := instr{op: opFork, offset: int32(left * (len(body) + 1))}
-		if code, err = b.add(code, append([]instr{skip}, body...)...); err != nil {
+		if code, err = b.add(code, skip); err == nil {
+			code, err = b.add(code, body...)
+		}
+		if err != nil {
 			return nil, err
 		}
 	}
@@ -183,10 +211,16 @@ func (r repeat) emit(b *builder, code []instr) ([]instr, error) {
 
 func (b *builder) star(code, body []instr) ([]instr, error) {
 	if len(body) == 1 && body[0].op == opUnit {
-		return b.add(code, instr{op: opRun, holdsAt: body[0].holdsAt})
+		return b.add(code, instr{op: opRun, one: body[0].one})
 	}
-	loop := append([]instr{{op: opFork, offset: int32(len(body) + 2)}}, body...)
-	return b.add(code, append(loop, instr{op: opJump, offset: -int32(len(body) + 1)})...)
+	var err error
+	if code, err = b.add(code, instr{op: opFork, offset: int32(len(body) + 2)}); err == nil {
+		code, err = b.add(code, body...)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return b.add(code, instr{op: opJump, offset: -int32(len(body) + 1)})
 }
 
 func (l look) emit(b *builder, code []instr) ([]instr, error) {
@@ -197,15 +231,8 @@ func (l look) emit(b *builder, code []instr) ([]instr, error) {
 	if err != nil {
 		return nil, err
 	}
-	test := instr{op: opTest}
-	if b.path != nil {
-		test.holdsAt = run(append(body, instr{op: opMatch}), len(b.path), !l.behind)
-		if l.negated {
-			for at, holds := range test.holdsAt {
-				test.holdsAt[at] = !holds
-			}
-		}
-	}
+	test := instr{op: opTest, offset: int32(len(b.assertions)), negated: l.negated}
+	b.assertions = append(b.assertions, assertion{append(body, instr{op: opMatch}), !l.behind})
 	return b.add(code, test)
 }
 
@@ -234,52 +261,122 @@ func (c anyOf) minUnits() int {
 	return fewest
 }
 
-func (r repeat) minUnits() int { return int(min(int64(r.low)*int64(r.of.minUnits()), math.MaxInt32)) }
+func (r repeat) minUnits() int { return int(min(int64(r.low)*int64(r.least), math.MaxInt32)) }
 
 func (look) minUnits() int { return 0 }
 
 func (edge) minUnits() int { return 0 }
 
-func never(*letter) bool { return false }
-
 func consumes(in instr) bool { return in.op == opUnit || in.op == opRun }
 
-func run(code []instr, n int, backward bool) []bool {
-	found := make([]bool, n+1)
-	now, next := live{seen: make([]uint32, len(code)), stamp: 1}, live{seen: make([]uint32, len(code)), stamp: 1}
-	var stack []int32
+// runWork bounds the loops in run, live.add, and one.holds. Each position
+// seeds at most once. Every state is added at most once at that position.
+// After a state is added, each of its outgoing epsilon edges can check a
+// state already seen, and each live state can be visited by the step loop.
+func runWork(code []instr, n int, fold bool) int64 {
+	work := int64(3) // step, case folding, and a seed that may already be seen
+	for _, in := range code {
+		switch in.op {
+		case opFork:
+			work += 3 // add and two epsilon edges
+		case opUnit:
+			work += int64(2 + in.one.work(fold)) // add, step, predicate
+		case opRun:
+			work += int64(3 + in.one.work(fold)) // also an epsilon edge
+		default:
+			work += 2 // add and an epsilon edge or step
+		}
+	}
+	return int64(n+1)*work + int64(2*len(code)) // initial marks for both live sets
+}
+
+type machine struct {
+	path  []uint16
+	tests [][]bool
+	fold  bool
+	count *int // enabled only by tests
+}
+
+// A file query can run many small programs against the same path. Reuse
+// their instruction and state buffers, including across lookarounds.
+type globScratch struct {
+	code   [64]instr
+	states []int32
+}
+
+func (m machine) run(code []instr, backward bool, found []bool, scratch *globScratch) bool {
+	n := len(m.path)
+	if m.count != nil {
+		*m.count += 2 * len(code)
+	}
+	size := len(code)
+	if len(scratch.states) < 5*size {
+		scratch.states = make([]int32, 5*max(64, size))
+	}
+	states := scratch.states
+	clear(states[:2*size])
+	now := live{seen: states[:size], states: states[2*size : 2*size : 3*size], stamp: 1}
+	next := live{seen: states[size : 2*size], states: states[3*size : 3*size : 4*size], stamp: 1}
+	stack := states[4*size : 4*size : 5*size]
+	// The main program only needs one match. With an initial anchor it
+	// cannot start again after position zero.
+	anchored := found == nil && code[0].op == opStart
 	for step := 0; step <= n; step++ {
+		if m.count != nil {
+			*m.count++
+		}
 		at, to := step, step+1
 		if backward {
 			at, to = n-step, n-step-1
 		}
-		stack = now.add(code, 0, at, n, stack)
+		if !anchored || step == 0 {
+			stack = now.add(code, 0, at, n, m.tests, stack, m.count)
+		}
+		if anchored && len(now.states) == 0 {
+			return false
+		}
 		next.clear()
-		unit := min(at, to)
+		var unit, form uint16
+		if step < n {
+			unit = m.path[min(at, to)]
+			form = unit
+			if m.fold {
+				if m.count != nil {
+					*m.count++
+				}
+				form = canonical(unit)
+			}
+		}
 		for _, pc := range now.states {
+			if m.count != nil {
+				*m.count++
+			}
 			in := &code[pc]
 			if in.op == opMatch {
+				if found == nil {
+					return true
+				}
 				found[at] = true
 				continue
 			}
-			if step == n || !in.holdsAt[unit] {
+			if step == n || !in.one.holds(unit, form, m.fold, m.count) {
 				continue
 			}
 			if in.op == opUnit {
 				pc++
 			}
 			if next.seen[pc] != next.stamp {
-				stack = next.add(code, pc, to, n, stack)
+				stack = next.add(code, pc, to, n, m.tests, stack, m.count)
 			}
 		}
 		now, next = next, now
 	}
-	return found
+	return false
 }
 
 type live struct {
-	seen   []uint32
-	stamp  uint32
+	seen   []int32
+	stamp  int32
 	states []int32
 }
 
@@ -288,9 +385,12 @@ func (s *live) clear() {
 	s.states = s.states[:0]
 }
 
-func (s *live) add(code []instr, pc int32, at, n int, stack []int32) []int32 {
+func (s *live) add(code []instr, pc int32, at, n int, tests [][]bool, stack []int32, count *int) []int32 {
 	stack = stack[:0]
 	for {
+		if count != nil {
+			*count++
+		}
 		if s.seen[pc] != s.stamp {
 			s.seen[pc] = s.stamp
 			in := &code[pc]
@@ -303,7 +403,7 @@ func (s *live) add(code []instr, pc int32, at, n int, stack []int32) []int32 {
 				pc += in.offset
 				continue
 			case opTest, opStart, opEnd:
-				if in.op == opTest && in.holdsAt[at] || in.op == opStart && at == 0 || in.op == opEnd && at == n {
+				if in.op == opTest && tests[in.offset][at] != in.negated || in.op == opStart && at == 0 || in.op == opEnd && at == n {
 					pc++
 					continue
 				}
@@ -322,33 +422,60 @@ func (s *live) add(code []instr, pc int32, at, n int, stack []int32) []int32 {
 	}
 }
 
-type letter struct {
-	unit, form uint16
-	same       []uint16
-}
-
-func letters(path []uint16) []letter {
-	all := make([]letter, len(path))
-	for i, unit := range path {
-		all[i] = letter{unit: unit, form: canonical(unit)}
+func literal(unit uint16, fold bool) one {
+	if fold {
+		unit = canonical(unit)
 	}
-	return all
+	return one{unit: unit}
 }
 
-func literal(unit uint16) one {
-	form := canonical(unit)
-	return func(l *letter) bool { return l.form == form }
+func (p one) work(fold bool) int {
+	if p.kind != inClass || len(p.class.spans) == 0 {
+		return 1
+	}
+	variants := 1
+	if fold {
+		variants = caseGroups().largest
+	}
+	return 1 + variants*(1+len(p.class.spans))
 }
 
-func notSlash(l *letter) bool { return l.unit != '/' }
-
-// `**`, and the `.` of a regular expression, match no line terminator of
-// ECMA-262.
-func notLineTerminator(l *letter) bool {
-	return l.unit != '\n' && l.unit != '\r' && l.unit != 0x2028 && l.unit != 0x2029
+func (p one) holds(unit, form uint16, fold bool, count *int) bool {
+	if count != nil {
+		*count++
+	}
+	switch p.kind {
+	case isLiteral:
+		return p.unit == form
+	case notSlash:
+		return unit != '/'
+	case notLineTerminator:
+		// ECMA-262 wildcards across directories exclude line terminators.
+		return unit != '\n' && unit != '\r' && unit != 0x2028 && unit != 0x2029
+	case inClass:
+		c := p.class
+		if len(c.spans) == 0 {
+			return c.negated
+		}
+		if fold {
+			if variants := caseGroups().byForm[form]; variants != nil {
+				for _, other := range variants {
+					if c.spansHold(other, count) {
+						return !c.negated
+					}
+				}
+				return c.negated
+			}
+		}
+		return c.negated != c.spansHold(unit, count)
+	default:
+		return false
+	}
 }
 
-func anyNumberOf(holds one) node { return repeat{of: holds, low: 0, high: unbounded} }
+func anyNumberOf(kind predicateKind) node {
+	return repeat{of: one{kind: kind}, high: unbounded, least: 1}
+}
 
 type class struct {
 	negated bool
@@ -358,11 +485,15 @@ type class struct {
 type span struct{ low, high uint16 }
 
 func readClass(text []uint16) (class, error) {
-	var c class
-	if len(text) > 0 && text[0] == '^' {
-		c.negated = true
+	negated := len(text) > 0 && text[0] == '^'
+	if negated {
 		text = text[1:]
 	}
+	return readClassMembers(text, negated)
+}
+
+func readClassMembers(text []uint16, negated bool) (class, error) {
+	c := class{negated: negated}
 	for i := 0; i < len(text); {
 		s := span{low: text[i], high: text[i]}
 		if i+2 < len(text) && text[i+1] == '-' {
@@ -378,29 +509,40 @@ func readClass(text []uint16) (class, error) {
 	return c, nil
 }
 
-func (c class) holds(l *letter) bool {
-	if len(c.spans) == 0 {
-		return c.negated
+func (c class) spansHold(unit uint16, count *int) bool {
+	if count != nil {
+		*count++
 	}
-	if l.same == nil {
-		l.same = sameLetters(l.unit)
+	for _, s := range c.spans {
+		if count != nil {
+			*count++
+		}
+		if s.low <= unit && unit <= s.high {
+			return true
+		}
 	}
-	return c.negated != slices.ContainsFunc(l.same, c.spansHold)
+	return false
 }
 
-func (c class) spansHold(unit uint16) bool {
-	return slices.ContainsFunc(c.spans, func(s span) bool { return s.low <= unit && unit <= s.high })
-}
-
-func normalizeGlob(glob string) string {
+// NormalizeGlob applies the path spelling rules shared by policy and claims.
+func NormalizeGlob(glob string) string {
 	glob = strings.ReplaceAll(glob, `\`, "/")
 	for strings.HasPrefix(glob, "./") {
 		glob = glob[2:]
 	}
-	for strings.Contains(glob, "//") {
-		glob = strings.ReplaceAll(glob, "//", "/")
+	if !strings.Contains(glob, "//") {
+		return glob
 	}
-	return glob
+	var out strings.Builder
+	out.Grow(len(glob))
+	var slash bool
+	for i := 0; i < len(glob); i++ {
+		if glob[i] != '/' || !slash {
+			out.WriteByte(glob[i])
+		}
+		slash = glob[i] == '/'
+	}
+	return out.String()
 }
 
 type part struct {
@@ -408,9 +550,9 @@ type part struct {
 	text uint16
 }
 
-func compileGlob(glob string) (node, error) {
-	units := utf16.Encode([]rune(glob))
+func parseGlob(units []uint16, fold bool) (node, error) {
 	parts := []part{{text: '^'}}
+	noCloser := false
 	for i := 0; i < len(units); {
 		switch unit := units[i]; unit {
 		case '*':
@@ -422,25 +564,26 @@ func compileGlob(glob string) (node, error) {
 			case end-i == 1:
 				parts = append(parts, part{node: anyNumberOf(notSlash)})
 			case (i == 0 || units[i-1] == '/') && end < len(units) && units[end] == '/':
-				directory := sequence{anyNumberOf(notLineTerminator), literal('/')}
-				parts = append(parts, part{node: repeat{of: directory, low: 0, high: 1}})
+				directory := sequence{anyNumberOf(notLineTerminator), literal('/', fold)}
+				parts = append(parts, part{node: repeat{of: directory, high: 1, least: 1}})
 				end++
 			default:
 				parts = append(parts, part{node: anyNumberOf(notLineTerminator)})
 			}
 			i = end
 		case '?':
-			parts = append(parts, part{node: one(notSlash)})
+			parts = append(parts, part{node: one{kind: notSlash}})
 			i++
 		case '[':
 			// A class has at least one character, so its `]` is not the
 			// character right after the `[`.
 			length := -1
-			if i+2 <= len(units) {
+			if !noCloser && i+2 <= len(units) {
 				length = slices.Index(units[i+2:], ']')
+				noCloser = length == -1
 			}
 			if length == -1 {
-				parts = append(parts, part{node: literal('[')})
+				parts = append(parts, part{node: literal('[', fold)})
 				i++
 				continue
 			}
@@ -455,43 +598,144 @@ func compileGlob(glob string) (node, error) {
 			parts = append(parts, part{text: ']'})
 			i = end + 1
 		default:
-			parts = append(parts, part{node: literal(unit)})
+			parts = append(parts, part{node: literal(unit, fold)})
 			i++
 		}
 	}
 	parts = append(parts, part{text: '$'})
 
-	s := syntax{parts: parts}
+	s := syntax{parts: parts, fold: fold}
 	root, err := s.alternatives()
 	if err == nil && s.at < len(parts) {
 		err = errGroupNotOpen
 	}
-	if err != nil {
-		return nil, err
-	}
-	b := builder{n: longestPath, limit: maxCost - len(units)}
-	if _, err := root.emit(&b, nil); err != nil {
-		return nil, err
-	}
-	return root, nil
+	return root, err
 }
 
-// globMatches charges the work of the match to budget before it does it.
-// The states are those of the automaton and of each lookaround in it.
-func globMatches(glob node, path []uint16, budget *Budget) (bool, error) {
-	count := builder{n: len(path), limit: maxCost}
-	if _, err := glob.emit(&count, nil); err != nil {
+// ordinaryCode reads the anchored dialect directly. A class that starts with
+// ] is the only way a glob can introduce regular expression syntax.
+func ordinaryCode(code []instr, units []uint16, fold bool) ([]instr, error) {
+	code = append(code, instr{op: opStart})
+	noCloser := false
+	for i := 0; i < len(units); i++ {
+		in := instr{op: opUnit, one: literal(units[i], fold)}
+		switch units[i] {
+		case '*':
+			end := i + 1
+			for end < len(units) && units[end] == '*' {
+				end++
+			}
+			in = instr{op: opRun, one: one{kind: notSlash}}
+			if end-i > 1 {
+				in.kind = notLineTerminator
+				if (i == 0 || units[i-1] == '/') && end < len(units) && units[end] == '/' {
+					code = append(code, instr{op: opFork, offset: 3}, in)
+					in = instr{op: opUnit, one: literal('/', fold)}
+					end++
+				}
+			}
+			i = end - 1
+		case '?':
+			in.kind = notSlash
+		case '[':
+			if !noCloser && i+2 <= len(units) {
+				if length := slices.Index(units[i+2:], ']'); length >= 0 {
+					end := i + 2 + length
+					members := units[i+1 : end]
+					negated := members[0] == '!' || members[0] == '^'
+					if negated {
+						members = members[1:]
+					}
+					c, err := readClassMembers(members, negated)
+					if err != nil {
+						return nil, err
+					}
+					in.one = one{kind: inClass, class: &c}
+					i = end
+				} else {
+					noCloser = true
+				}
+			}
+		}
+		code = append(code, in)
+	}
+	code = append(code, instr{op: opEnd})
+	if len(units)+len(code) > maxCost {
+		return nil, errTooLarge
+	}
+	return append(code, instr{op: opMatch}), nil
+}
+
+func (s *globScratch) matches(glob string, path []uint16, fold bool, budget *Budget, count *int) (bool, error) {
+	if len(glob) > maxCost && utf16Length(glob) > maxCost {
+		return false, errTooLarge
+	}
+	units := utf16.Encode([]rune(glob))
+	var code []instr
+	var assertions []assertion
+	if !strings.Contains(glob, "[]") {
+		var err error
+		code, err = ordinaryCode(s.code[:0], units, fold)
+		if err != nil {
+			return false, err
+		}
+		if err := budget.spend(len(code)); err != nil {
+			return false, err
+		}
+	} else {
+		root, err := parseGlob(units, fold)
+		if err != nil {
+			return false, err
+		}
+		b := builder{n: MaxGlobPath, limit: maxCost - len(units), budget: budget}
+		code, err = root.emit(&b, s.code[:0])
+		if err != nil {
+			return false, err
+		}
+		if len(path) != MaxGlobPath {
+			b = builder{n: len(path), limit: maxCost, budget: budget}
+			code, err = root.emit(&b, s.code[:0])
+			if err != nil {
+				return false, err
+			}
+		}
+		code, assertions = append(code, instr{op: opMatch}), b.assertions
+	}
+	work := runWork(code, len(path), fold)
+	for _, a := range assertions {
+		work += int64(len(path) + 1) // allocate and clear the assertion's positional results
+		work += runWork(a.code, len(path), fold)
+	}
+	if err := budget.spend(int(min(work, maxWork+1))); err != nil {
 		return false, err
 	}
-	if err := budget.spend((len(path) + 1) * (maxCost - count.limit)); err != nil {
+	m := machine{path: path, fold: fold, count: count}
+	if len(assertions) != 0 {
+		m.tests = make([][]bool, len(assertions))
+	}
+	for i, a := range assertions {
+		found := make([]bool, len(path)+1)
+		if count != nil {
+			*count += len(found)
+		}
+		m.run(a.code, a.backward, found, s)
+		m.tests[i] = found
+	}
+	return m.run(code, false, nil, s), nil
+}
+
+// MatchClaimGlob matches a normalized Room claim glob against a normalized
+// path. Room compares with case and treats a matcher error as an overlap.
+func MatchClaimGlob(glob, path string) (bool, error) {
+	if utf16Length(path) > MaxGlobPath {
+		return false, errPathTooLong
+	}
+	budget := NewBudget()
+	if err := budget.spend(len(glob)); err != nil {
 		return false, err
 	}
-	b := builder{path: letters(path), n: len(path), limit: math.MaxInt}
-	code, err := glob.emit(&b, nil)
-	if err != nil {
-		return false, err
-	}
-	return slices.Contains(run(append(code, instr{op: opMatch}), len(path), false), true), nil
+	var scratch globScratch
+	return scratch.matches(glob, utf16.Encode([]rune(path)), false, budget, nil)
 }
 
 var (
@@ -513,7 +757,8 @@ type syntax struct {
 	parts  []part
 	at     int
 	groups int
-	names  []string
+	names  map[string]struct{}
+	fold   bool
 }
 
 func (s *syntax) text() (unit uint16, ok bool) {
@@ -577,7 +822,7 @@ func (s *syntax) term() (node, error) {
 	case '$':
 		return pathEnd, nil
 	case '.':
-		return s.quantified(one(notLineTerminator))
+		return s.quantified(one{kind: notLineTerminator})
 	case '[':
 		var members []uint16
 		for {
@@ -593,11 +838,11 @@ func (s *syntax) term() (node, error) {
 		if err != nil {
 			return nil, err
 		}
-		return s.quantified(one(c.holds))
+		return s.quantified(one{kind: inClass, class: &c})
 	case '(':
 		return s.group()
 	}
-	return s.quantified(literal(unit))
+	return s.quantified(literal(unit, s.fold))
 }
 
 func (s *syntax) group() (node, error) {
@@ -657,10 +902,13 @@ func (s *syntax) name() error {
 	if len(name) == 0 {
 		return errGroupNotRead
 	}
-	if slices.Contains(s.names, string(name)) {
+	if _, exists := s.names[string(name)]; exists {
 		return errNameTwice
 	}
-	s.names = append(s.names, string(name))
+	if s.names == nil {
+		s.names = make(map[string]struct{})
+	}
+	s.names[string(name)] = struct{}{}
 	return nil
 }
 
@@ -673,7 +921,7 @@ func (s *syntax) quantified(of node) (node, error) {
 		return nil, errCountOutOfOrder
 	}
 	s.take('?')
-	return repeat{of: of, low: low, high: high}, nil
+	return repeat{of: of, low: low, high: high, least: of.minUnits()}, nil
 }
 
 // A `{` that starts no count is a literal character, and quantifier leaves it.
