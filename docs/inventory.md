@@ -1,7 +1,7 @@
 # Inventory of the existing implementation
 
 > [!NOTE]
-> This page records the existing TypeScript implementation at commit `7d80045a`. OpenPlexer implements none of it yet. The present tense on this page describes that implementation, not OpenPlexer.
+> This page records the existing TypeScript implementation at commit `7d80045a`. Notes identify OpenPlexer behavior where indicated. See [audit compatibility](audit-compatibility.md).
 
 OpenPlexer ports four parts of an existing TypeScript product to Go. This page lists what each of those parts does today, where the behavior is demonstrated, and whether the behavior belongs to the open-source foundation.
 
@@ -412,7 +412,7 @@ The existing implementation uses these terms. They are not OpenPlexer terms.
 | A per-workspace lock orders appends, so concurrent appends form one unbroken chain and workspaces chain apart. | `apps/hub/test/audit/audit.test.ts` "concurrent appends to one workspace produce an unbroken chain; workspaces chain independently" | in | |
 | The audit row commits in the transaction of the action, so a rolled-back action leaves no row. | `apps/hub/test/audit/audit.test.ts` "a rolled-back action leaves no audit row" | in | |
 | Database triggers reject `UPDATE`, `DELETE`, and `TRUNCATE` on the audit log. | `apps/hub/test/audit/audit.test.ts` "UPDATE, DELETE and TRUNCATE raise" | in | |
-| The verifier walks a chain in id order from the genesis hash and reports the first record whose `prev_hash` or `hash` is wrong. | `apps/hub/test/audit/audit.test.ts` "tampering with a row's reason breaks the chain at that row" "deleting a middle row breaks the chain at the next row" | in | |
+| The verifier walks a chain in id order from the genesis hash and reports the first record whose `prev_hash` or `hash` is wrong. | `apps/hub/test/audit/audit.test.ts` "tampering with a row's reason breaks the chain at that row" "deleting a middle row breaks the chain at the next row" | in | OpenPlexer checks the export in array order from genesis and reports the first broken record. It can also verify signed checkpoints offline. |
 | The verifier rebuilds `created_at` from the stored timestamp with `toISOString()`. | `apps/hub/src/audit/verify.ts` `toISOString` | in | A verifier must write the time in UTC with exactly three fraction digits and `Z`, as `appendAudit` did. |
 | The verifier has no checkpoint. | `apps/hub/src/audit/verify.ts` `verifyAuditChain` | in | It cannot detect a truncated chain or a replaced chain. |
 | The verifier reads the database, not an export. | `apps/hub/scripts/audit-verify.ts` | in | |
@@ -431,12 +431,12 @@ The existing implementation uses these terms. They are not OpenPlexer terms.
 
 | Behavior | Evidence | Scope | Notes |
 |---|---|---|---|
-| `GET /api/v1/workspaces/:id/audit/export` with `format` `json` or `csv` streams every matching record to a workspace admin. | `apps/hub/test/audit/audit-export.test.ts` "members and outsiders can't export" | in | |
-| The JSON export is `{"entries":[...],"next_cursor":null}` with the records newest first, each with `prev_hash` and `hash`, so the chain verifies after the order is reversed. | `apps/hub/test/audit/audit-export.test.ts` "the JSON export holds the whole chain" | in | |
-| Each exported record also carries `result` and `agent_member_id`, which are not inside the hash. | `apps/hub/src/api/audit.ts` `AGENT_MEMBER` | in | |
+| `GET /api/v1/workspaces/:id/audit/export` with `format` `json` or `csv` streams every matching record to a workspace admin. | `apps/hub/test/audit/audit-export.test.ts` "members and outsiders can't export" | in | OpenPlexer serves full JSON exports to leads and provides a local export command. It supports JSON only. |
+| The JSON export is `{"entries":[...],"next_cursor":null}` with the records newest first, each with `prev_hash` and `hash`, so the chain verifies after the order is reversed. | `apps/hub/test/audit/audit-export.test.ts` "the JSON export holds the whole chain" | in | OpenPlexer uses the same JSON shape and supplies a signed checkpoint. |
+| Each exported record also carries `result` and `agent_member_id`, which are not inside the hash. | `apps/hub/src/api/audit.ts` `AGENT_MEMBER` | in | OpenPlexer includes `result` and includes `agent_member_id` when it knows the session owner. |
 | The CSV export has the columns `id`, `created_at`, `actor_member_id`, `agent_session_id`, `action`, `target`, `result`, `reason`, `flagged`, `meta`, `prev_hash`, and `hash`, with CRLF line ends. | `apps/hub/test/audit/audit-export.test.ts` "the CSV export has every row" | in | The CSV has no `workspace_id`, which is an input of the hash. |
 | The CSV export puts `'` before a cell whose first character that is not whitespace or a control character is `=`, `+`, `@`, or `-`. | `packages/protocol/src/observability.ts` `csvCell` | in | Such a cell differs from the value inside the hash. The CSV also writes `null` as an empty cell, and writes `meta` with `JSON.stringify`, not as canonical JSON. |
-| Filters apply to the export. | `apps/hub/test/audit/audit-export.test.ts` "filters apply" | in | A filtered export cannot be verified from the genesis hash. |
+| Filters apply to the export. | `apps/hub/test/audit/audit-export.test.ts` "filters apply" | in | OpenPlexer exports the full chain. A filtered reference export can pass the chain check if it is an empty export or a contiguous prefix. |
 | The export reads every batch in one read-only, repeatable-read transaction. | `apps/hub/src/api/audit.ts` `streamAudit` | in | |
 | Bad input gets status 400 before the export starts. | `apps/hub/test/audit/audit-export.test.ts` "bad input answers 400 before the stream starts" | in | |
 
@@ -463,7 +463,7 @@ The existing implementation uses these terms. They are not OpenPlexer terms.
 | A hook that cannot decide within 1,200 ms, or that fails, allows the tool call. | `apps/daemon/src/adapters/claude-code/hook-runner.ts` `HARD_TIMEOUT_MS` | in | limitation |
 | A read override removes the native `Read` rule for a member with no role, although `evaluate` would deny the read. See [Claude Code adapter](#claude-code-adapter). | `apps/daemon/src/adapters/claude-code/settings.ts` `readOverridden` | in | possible bug |
 | Nothing limits private-area reads through Codex. See [Codex adapter](#codex-adapter). | `apps/daemon/src/adapters/codex/index.ts` `createCodexAdapter` | in | limitation |
-| The audit verifier has no checkpoint. See [Audit chain and verification](#audit-chain-and-verification). | `apps/hub/src/audit/verify.ts` `GENESIS_HASH` | in | limitation |
+| The reference audit verifier has no checkpoint. See [Audit chain and verification](#audit-chain-and-verification). | `apps/hub/src/audit/verify.ts` `GENESIS_HASH` | in | limitation |
 | The CSV export leaves out `workspace_id`, which is an input of every hash, so a CSV export cannot be verified on its own. | `packages/protocol/src/observability.ts` `AUDIT_CSV_KEYS` | in | limitation |
 | A CSV cell that starts with `=`, `+`, `@`, or `-` gets a `'` prefix, so it no longer equals the value inside the hash. See [Audit export](#audit-export). | `packages/protocol/src/observability.ts` `csvCell` | in | limitation |
 | The hub drops the `item` that `claim.create` requires, and stores the intent in its place. See [Claims](#claims). | `apps/hub/src/ws/server.ts` `claimCreateMsg` | in | accident |
