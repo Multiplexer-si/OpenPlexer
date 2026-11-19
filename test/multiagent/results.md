@@ -1,11 +1,11 @@
 # Multi-agent flow results
 
-Run started 2026-11-18T15:24:39Z.
+Run started 2026-11-19T13:08:56Z.
 
 - claude-code · 2.1.327 (Claude Code) (model haiku)
 - codex · codex-cli 0.169.0 (model gpt-6-luna)
-- openplexer · cc7d85821f2a2d8b212ca6020683c1336790e3bc · go1.27.2
-- openplexer-hub · cc7d85821f2a2d8b212ca6020683c1336790e3bc · go1.27.2
+- openplexer · v0.1.0-rc.1 · go1.27.4
+- openplexer-hub · v0.1.0-rc.1 · go1.27.4
 
 Preflight · PASS
 
