@@ -82,11 +82,15 @@ Each directory under `spec/` holds one contract: a README with the rules, and a 
 
 `tools/auditvectors` generates the OpenPlexer checkpoint fixtures. Run `go run ./tools/auditvectors` from the repository root. [Audit contract](../spec/audit/README.md#generated-and-authored-parts).
 
+## Audit end-to-end tests
+
+Run `go test ./test/audit` to build the audit binaries and test them with temporary directories. The tests verify the reference fixtures and run the shell examples in the [audit guide](audit.md). They run in `make check` and need no running hub or network access.
+
 ## Make targets
 
 | Target | Action |
 |---|---|
-| `make check` | Fails if `gofmt -l .` lists a file. Then runs `go vet ./...` and `go test ./...`. |
+| `make check` | Fails if `gofmt -l .` lists a file. Then runs `go vet ./...` and `go test -count=1 ./...`. |
 | `make build` | Builds every binary under `apps/` into `bin/`. |
 | `make fmt` | Runs `gofmt -w .`. |
 

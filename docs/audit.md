@@ -2,7 +2,7 @@
 
 ## Export from the hub
 
-Run this command on the hub host. It reads the data directory while the server is running or stopped.
+Run this command on the hub host from the directory that contains `bin/` and your hub data. Set `--data-dir` to the directory you used to initialize the hub. The command works while the server is running or stopped. [Hub setup](hub.md#start-the-server).
 
 ```sh
 bin/openplexer-hub export-audit --data-dir ./hub-data --out ./audit-export
@@ -14,7 +14,9 @@ A lead can also call `GET /api/v1/audit/export` with a bearer token. Save the JS
 
 ## Verify offline
 
-Copy the files and the `openplexer-verify` binary to the machine that checks the log. Use a trusted checkpoint JWKS from the hub over authenticated HTTPS or from a trusted operator. If the JWKS came with the export, authenticate it independently. Keep earlier checkpoints and their trusted keys for future comparisons. [Trust model](trust-model.md#how-a-verifier-obtains-a-trusted-checkpoint).
+<!-- audit-example: reviewer -->
+
+On the review machine, put `openplexer-verify` on `PATH`. Copy `export.json` and `checkpoint.jws` into `audit-export/` in your working directory. Save a trusted checkpoint JWKS as `trusted-jwks.json` in the working directory. Get it from the hub over authenticated HTTPS or from a trusted operator. If the JWKS came with the export, authenticate it independently. Keep earlier checkpoints and their trusted keys for future comparisons. [Trust model](trust-model.md#how-a-verifier-obtains-a-trusted-checkpoint).
 
 ```sh
 openplexer-verify --export audit-export/export.json --jwks trusted-jwks.json \
@@ -68,3 +70,5 @@ record 25 (position 3): rule K10: checkpoint 1: expected signed tip 8579a147105f
 Version 1 records and exports have no version field. The contract allows unknown fields and action strings. A checkpoint with an unsupported version fails K5.
 
 Checkpoint delivery to connected daemons and daemon storage of received checkpoints are later work. CSV export and audit retention are also later work.
+
+For logs from the TypeScript hub, see [audit compatibility](audit-compatibility.md).
