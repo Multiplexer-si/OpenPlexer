@@ -4,7 +4,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 )
 
 func TestEvaluateDeniesAGroupThatItDoesNotRead(t *testing.T) {
@@ -54,7 +53,7 @@ func TestEvaluateDeniesAPathLongerThanTheLimit(t *testing.T) {
 		"the slowest glob": {Areas: []Area{{Name: "private", Patterns: []string{"api:" + slowestGlob}, Private: true}}},
 	}
 	for name, bundle := range bundles {
-		for _, length := range []int{longestPath + 1, 1 << 20} {
+		for _, length := range []int{MaxGlobPath + 1, 1 << 20} {
 			for _, action := range []Action{Read, Write} {
 				result := Evaluate(bundle, Query{Repo: "api", Path: strings.Repeat("a", length-1) + "]", Action: action, Member: "m", Now: now})
 				if result.Decision != Deny || result.Area != nil || !strings.Contains(result.Rule, "path is longer than") {
@@ -63,7 +62,7 @@ func TestEvaluateDeniesAPathLongerThanTheLimit(t *testing.T) {
 			}
 		}
 	}
-	at := Evaluate(bundles["the slowest glob"], Query{Repo: "api", Path: strings.Repeat("a", longestPath-1) + "]", Action: Read, Member: "m", Now: now})
+	at := Evaluate(bundles["the slowest glob"], Query{Repo: "api", Path: strings.Repeat("a", MaxGlobPath-1) + "]", Action: Read, Member: "m", Now: now})
 	if at.Decision != Deny || at.Area == nil || *at.Area != "private" {
 		t.Fatalf("a path at the limit: result = %+v, want deny in the area private", at)
 	}
@@ -72,14 +71,9 @@ func TestEvaluateDeniesAPathLongerThanTheLimit(t *testing.T) {
 func TestEvaluateDeniesAQueryOverItsBudget(t *testing.T) {
 	now, _ := ParseTimestamp("2026-01-15T12:00:00Z")
 	bundle := &Bundle{Areas: []Area{{Name: "private", Patterns: slices.Repeat([]string{"api:" + slowestGlob}, 100), Private: true}}}
-	start := time.Now()
-	result := Evaluate(bundle, Query{Repo: "api", Path: strings.Repeat("a", longestPath-1) + "]", Action: Write, Member: "m", Now: now})
-	took := time.Since(start)
-	if result.Decision != Deny || result.Area != nil || !strings.Contains(result.Rule, "budget") {
+	result := Evaluate(bundle, Query{Repo: "api", Path: strings.Repeat("a", MaxGlobPath-1) + "]", Action: Write, Member: "m", Now: now})
+	if result.Decision != Deny || result.Area != nil || result.Rule != errOverBudget.Error() {
 		t.Fatalf("result = %+v, want deny with no area, because the query is over its budget", result)
-	}
-	if took > 2*time.Second {
-		t.Fatalf("the result took %v, want well under the 3 s hook timeout of Codex", took)
 	}
 }
 
@@ -93,10 +87,6 @@ func requireTooLarge(t *testing.T, bundle *Bundle, path string) {
 		}
 	}
 }
-
-// A Codex hook that runs past its timeout lets the call run, so a slow match
-// fails open.
-const matchBudget = 50 * time.Millisecond
 
 var slowGlobs = []struct{ name, glob, path string }{
 	{"a lookbehind", "[]|(?<=b)]", strings.Repeat("ab/", 1333) + "c]"},
@@ -116,24 +106,10 @@ func evaluateSlowGlob(glob, path string) Result {
 func TestEvaluateAnswersWithinTheBudget(t *testing.T) {
 	for _, c := range slowGlobs {
 		t.Run(c.name, func(t *testing.T) {
-			var took time.Duration
-			for range 3 {
-				done := make(chan Result, 1)
-				start := time.Now()
-				go func() { done <- evaluateSlowGlob(c.glob, c.path) }()
-				select {
-				case result := <-done:
-					if strings.Contains(result.Rule, "is not a glob") {
-						t.Fatalf("result = %+v, want a result of the glob", result)
-					}
-				case <-time.After(20 * matchBudget):
-					t.Fatalf("no result after %v, want one within %v", 20*matchBudget, matchBudget)
-				}
-				if took = time.Since(start); took <= matchBudget {
-					return
-				}
+			result := evaluateSlowGlob(c.glob, c.path)
+			if strings.Contains(result.Rule, "is not a glob") || result.Rule == errOverBudget.Error() {
+				t.Fatalf("result = %+v, want a result of the glob", result)
 			}
-			t.Fatalf("the result took %v, want at most %v", took, matchBudget)
 		})
 	}
 }

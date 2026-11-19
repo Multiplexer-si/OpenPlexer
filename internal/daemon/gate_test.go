@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -156,13 +157,18 @@ func (s signer) sign(t *testing.T, bundle []byte) tokenSource {
 	t.Helper()
 	encode := base64.RawURLEncoding.EncodeToString
 	input := encode([]byte(`{"alg":"ES256","typ":"mp-policy+jws","kid":"test"}`)) + "." + encode(bundle)
+	return s.signInput(t, input)
+}
+
+func (s signer) signInput(t *testing.T, input string) tokenSource {
+	t.Helper()
 	digest := sha256.Sum256([]byte(input))
 	r, ss, err := ecdsa.Sign(rand.Reader, s.key, digest[:])
 	if err != nil {
 		t.Fatal(err)
 	}
 	signature := append(r.FillBytes(make([]byte, 32)), ss.FillBytes(make([]byte, 32))...)
-	return tokenSource(input + "." + encode(signature))
+	return tokenSource(input + "." + base64.RawURLEncoding.EncodeToString(signature))
 }
 
 func bundleText(project string, version int) []byte {
@@ -601,6 +607,131 @@ func TestTheEvaluationsOfOneCallShareOneBudget(t *testing.T) {
 	verdict, err = gate.Decide("codex", policy.Query{Action: policy.Write, Path: path})
 	if result, _ := verdict.Result(); err != nil || result.Decision != policy.Deny || !strings.Contains(result.Rule, "budget") {
 		t.Fatalf("a write with no repo in ten repos: %+v, %v, want deny, because the call is over its budget", result, err)
+	}
+}
+
+func TestGateChecksSignedBundleSizesBeforeVerification(t *testing.T) {
+	signer := newSigner(t)
+	keys := signer.keySet(t)
+	previous := signer.sign(t, bundleText("p", 1))
+	const prefix = `{"version":2,"project_id":"p","repos":["api"],"areas":[],"roles":{},"members":{},"pad":"`
+	const suffix = `"}`
+	for _, c := range []struct {
+		name, bom, pad    string
+		size, compactSize int
+		padded, unencoded bool
+		wantLimit         error
+	}{
+		{name: "at the limit", size: policy.MaxBundleBytes},
+		{name: "one byte over", size: policy.MaxBundleBytes + 1, wantLimit: policy.ErrBundlePayloadTooLarge},
+		{name: "BOM shrinks text below the limit", bom: "\uFEFF", size: policy.MaxBundleBytes + 1, wantLimit: policy.ErrBundlePayloadTooLarge},
+		{name: "UTF-8 replacement grows text over the limit", pad: "\x80", size: policy.MaxBundleBytes - 1},
+		{name: "padded payload with whitespace at the limit", padded: true, size: policy.MaxBundleBytes},
+		{name: "padded payload with whitespace over the limit", padded: true, size: policy.MaxBundleBytes + 1, wantLimit: policy.ErrBundlePayloadTooLarge},
+		{name: "unencoded payload at the limit", unencoded: true, size: policy.MaxBundleBytes},
+		{name: "unencoded payload over the limit", unencoded: true, size: policy.MaxBundleBytes + 1, wantLimit: policy.ErrBundlePayloadTooLarge},
+		{name: "compact token at the limit", size: 128, compactSize: policy.MaxCompactBundleBytes},
+		{name: "compact token over the limit", size: 128, compactSize: policy.MaxCompactBundleBytes + 1, wantLimit: policy.ErrCompactBundleTooLarge},
+	} {
+		start := c.bom + prefix + c.pad
+		payload := start + strings.Repeat("x", c.size-len(start)-len(suffix)) + suffix
+		var token tokenSource
+		switch {
+		case c.unencoded:
+			header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"ES256","typ":"mp-policy+jws","kid":"test","crit":["b64"],"b64":false}`))
+			token = signer.signInput(t, header+"."+payload)
+		case c.padded:
+			header := base64.RawURLEncoding.EncodeToString([]byte(`{"alg":"ES256","typ":"mp-policy+jws","kid":"test"}`))
+			segment := base64.URLEncoding.EncodeToString([]byte(payload))
+			token = signer.signInput(t, header+". \t"+segment[:len(segment)-1]+"\f"+segment[len(segment)-1:]+"\r\n")
+		default:
+			token = signer.sign(t, []byte(payload))
+		}
+		if c.compactSize != 0 {
+			token += tokenSource(strings.Repeat(" ", c.compactSize-len(token)))
+		}
+		message := fmt.Appendf(nil, `{"version":2,"bundle":{},"signature":%q}`, token)
+		for _, path := range []string{"load", "sync", "reopen"} {
+			t.Run(c.name+"/"+path, func(t *testing.T) {
+				home := t.TempDir()
+				var signatures, decodes int
+				verifier := policy.BundleVerifier{
+					BeforeSignature:     func() { signatures++ },
+					BeforePayloadDecode: func() { decodes++ },
+				}
+				checkWork := func() {
+					t.Helper()
+					if c.wantLimit != nil && (signatures != 0 || decodes != 0) {
+						t.Errorf("rejection ran %d signature checks and %d payload decodes, want zero of each", signatures, decodes)
+					}
+					if c.wantLimit == nil && (signatures == 0 || decodes == 0) {
+						t.Errorf("acceptance ran %d signature checks and %d payload decodes, want both", signatures, decodes)
+					}
+				}
+				configure(t, home, Settings{
+					KeySet: keys, HubURL: "https://hub.example", ProjectID: "p", MemberID: "mem-ana",
+					Token: base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
+				})
+				if path == "reopen" {
+					if err := writeJSON(home, policyFile, storedPolicy{Token: string(token), ConfirmedAt: loadedAt}); err != nil {
+						t.Fatal(err)
+					}
+				}
+				gate, err := openGate(home, at(loadedAt), verifier)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if path == "reopen" {
+					checkWork()
+					status := gate.Status()
+					if c.wantLimit != nil {
+						if status.State != Rejected || !strings.Contains(status.Detail, c.wantLimit.Error()) {
+							t.Fatalf("reopen = %+v, want %v", status, c.wantLimit)
+						}
+					} else if status.State != Verified || status.Version != 2 {
+						t.Fatalf("reopen = %+v, want verified version 2", status)
+					}
+					return
+				}
+
+				before := load(t, gate, previous)
+				signatures, decodes = 0, 0
+				var status Status
+				if path == "load" {
+					file := filepath.Join(home, "incoming.json")
+					if err := os.WriteFile(file, message, 0o600); err != nil {
+						t.Fatal(err)
+					}
+					status, err = gate.Load(t.Context(), FileSource(file))
+				} else {
+					useHubTransport(t, handlerTransport(func(w http.ResponseWriter, r *http.Request) {
+						switch r.URL.Path {
+						case "/.well-known/jwks.json":
+							if c.wantLimit != nil {
+								t.Error("sync requested the advertised keys for an oversized bundle")
+							}
+							w.Write(keys)
+						case "/api/v1/projects/p/policy.bundle":
+							w.Write(message)
+						default:
+							http.NotFound(w, r)
+						}
+					}))
+					status, err = gate.Sync(t.Context())
+				}
+				checkWork()
+				if c.wantLimit != nil {
+					if !errors.Is(err, ErrRejected) || !errors.Is(err, c.wantLimit) || !strings.Contains(err.Error(), c.wantLimit.Error()) {
+						t.Errorf("incoming bundle error = %v, want %v", err, c.wantLimit)
+					}
+					if status != before || open(t, home, loadedAt).Status() != before {
+						t.Errorf("rejected bundle changed the policy in force: %+v", status)
+					}
+				} else if err != nil || status.State != Verified || status.Version != 2 {
+					t.Errorf("incoming bundle = %+v, %v, want verified version 2", status, err)
+				}
+			})
+		}
 	}
 }
 

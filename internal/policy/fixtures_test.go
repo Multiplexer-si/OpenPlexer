@@ -27,7 +27,7 @@ type fixtureCase struct {
 	Expected json.RawMessage `json:"expected"`
 }
 
-func readFile(t *testing.T, path string) []byte {
+func readFile(t testing.TB, path string) []byte {
 	t.Helper()
 	text, err := os.ReadFile(path)
 	if err != nil {
@@ -36,7 +36,7 @@ func readFile(t *testing.T, path string) []byte {
 	return text
 }
 
-func readFixture(t *testing.T, path string) fixtureFile {
+func readFixture(t testing.TB, path string) fixtureFile {
 	t.Helper()
 	var file fixtureFile
 	if err := json.Unmarshal(readFile(t, path), &file); err != nil {

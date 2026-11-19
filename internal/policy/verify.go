@@ -54,18 +54,40 @@ func ParseKeySet(text []byte) (KeySet, error) {
 // Verified is a bundle whose signature verified.
 type Verified struct {
 	Bundle *Bundle
-	// Payload is the signed JSON text of the bundle. It holds the fields
-	// that Bundle does not model.
+	// Payload is the JSON text decoded from the signed payload. It holds
+	// the fields that Bundle does not model.
 	Payload []byte
 }
 
-// VerifySignedBundle verifies a compact JWS against a key set, under the
-// steps of spec/policy/README.md, and returns the bundle that the token
-// signs. The error says which step failed.
-func VerifySignedBundle(token string, keys KeySet) (*Verified, error) {
-	segments := strings.Split(token, ".")
+// MaxCompactBundleBytes allows room for base64url, the header, and the signature.
+const MaxCompactBundleBytes = 2 * MaxBundleBytes
+
+// ErrCompactBundleTooLarge means the compact JWS exceeds MaxCompactBundleBytes.
+var ErrCompactBundleTooLarge = fmt.Errorf("the signed policy is longer than %d bytes", MaxCompactBundleBytes)
+
+// ErrBundlePayloadTooLarge means the raw payload exceeds MaxBundleBytes.
+var ErrBundlePayloadTooLarge = fmt.Errorf("the policy payload is longer than %d bytes", MaxBundleBytes)
+
+// SignedBundle is a compact JWS that passed the size and header checks.
+type SignedBundle struct {
+	header                    map[string]any
+	input, payload, signature string
+	unencoded                 bool
+}
+
+// ReadSignedBundle checks the compact token, payload size, and protected header.
+func ReadSignedBundle(token string) (*SignedBundle, error) {
+	if len(token) > MaxCompactBundleBytes {
+		return nil, ErrCompactBundleTooLarge
+	}
+	segments := strings.SplitN(token, ".", 4)
 	if len(segments) != 3 {
-		return nil, fmt.Errorf("the token has %d segments, and a compact JWS has 3", len(segments))
+		return nil, fmt.Errorf("the token has %d segments, and a compact JWS has 3", strings.Count(token, ".")+1)
+	}
+	payload := segments[1]
+	// The decoded length is a lower bound even if the header selects unencoded JWS.
+	if len(payload) > MaxBundleBytes && base64URLDecodedLen(payload) > MaxBundleBytes {
+		return nil, ErrBundlePayloadTooLarge
 	}
 	header, err := readHeader(segments[0])
 	if err != nil {
@@ -75,21 +97,59 @@ func VerifySignedBundle(token string, keys KeySet) (*Verified, error) {
 	if err != nil {
 		return nil, err
 	}
-	key, err := keys.choose(header)
+	if unencoded && len(payload) > MaxBundleBytes {
+		return nil, ErrBundlePayloadTooLarge
+	}
+	return &SignedBundle{
+		header: header, input: token[:len(token)-len(segments[2])-1],
+		payload: payload, signature: segments[2], unencoded: unencoded,
+	}, nil
+}
+
+// VerifySignedBundle verifies a compact JWS against a key set, under the
+// steps of spec/policy/README.md, and returns the bundle that the token
+// signs. The error says which step failed.
+func VerifySignedBundle(token string, keys KeySet) (*Verified, error) {
+	bundle, err := ReadSignedBundle(token)
 	if err != nil {
 		return nil, err
 	}
-	signature, ok := decodeBase64URL(segments[2])
+	return BundleVerifier{}.Verify(bundle, keys)
+}
+
+// BundleVerifier verifies a size-checked JWS. Its optional hooks observe work
+// on the signature and payload.
+type BundleVerifier struct {
+	BeforeSignature     func()
+	BeforePayloadDecode func()
+}
+
+func (v BundleVerifier) Verify(signed *SignedBundle, keys KeySet) (*Verified, error) {
+	key, err := keys.choose(signed.header)
+	if err != nil {
+		return nil, err
+	}
+	if v.BeforeSignature != nil {
+		v.BeforeSignature()
+	}
+	signature, ok := decodeBase64URL(signed.signature)
 	if !ok || len(signature) != 64 {
 		return nil, errors.New("the signature segment is not a 64-byte ES256 signature in base64url")
 	}
-	if err := VerifyES256(key, segments[0]+"."+segments[1], signature); err != nil {
+	if err := VerifyES256(key, signed.input, signature); err != nil {
 		return nil, err
 	}
-	payload, err := readPayload(segments[1], unencoded)
+	if v.BeforePayloadDecode != nil {
+		v.BeforePayloadDecode()
+	}
+	payload, err := readPayload(signed.payload, signed.unencoded)
 	if err != nil {
 		return nil, err
 	}
+	if len(payload) > MaxBundleBytes {
+		return nil, ErrBundlePayloadTooLarge
+	}
+	payload = decodeUTF8(payload)
 	bundle, err := ParseBundle(payload)
 	if err != nil {
 		return nil, fmt.Errorf("the signed payload is not a bundle: %w", err)
@@ -252,12 +312,35 @@ func readPayload(segment string, unencoded bool) ([]byte, error) {
 		if !ok {
 			return nil, errors.New("the payload segment is not base64url")
 		}
-		return decodeUTF8(raw), nil
+		return raw, nil
 	}
 	if strings.ContainsFunc(segment, func(r rune) bool { return r > 0x7f }) {
 		return nil, errors.New("the unencoded payload is not ASCII")
 	}
 	return []byte(segment), nil
+}
+
+func base64URLSpace(r rune) bool { return strings.ContainsRune("\t\n\f\r ", r) }
+
+// base64URLDecodedLen counts bytes without decoding the segment. As in
+// decodeBase64URL, ASCII white space is ignored and padding is optional.
+func base64URLDecodedLen(segment string) int {
+	length, padding := 0, 0
+	for i := 0; i < len(segment); i++ {
+		if base64URLSpace(rune(segment[i])) {
+			continue
+		}
+		length++
+		if segment[i] == '=' {
+			padding++
+		} else {
+			padding = 0
+		}
+	}
+	if length%4 == 0 {
+		length -= min(padding, 2)
+	}
+	return base64.RawURLEncoding.DecodedLen(length)
 }
 
 // decodeBase64URL follows the base64url rule of spec/policy/README.md, which
@@ -267,7 +350,7 @@ func decodeBase64URL(segment string) ([]byte, bool) {
 		return nil, false
 	}
 	text := strings.Map(func(r rune) rune {
-		if strings.ContainsRune("\t\n\f\r ", r) {
+		if base64URLSpace(r) {
 			return -1
 		}
 		return r

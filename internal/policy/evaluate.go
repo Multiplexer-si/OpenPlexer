@@ -18,19 +18,22 @@ func Evaluate(bundle *Bundle, q Query) Result {
 	return NewBudget().Evaluate(bundle, q)
 }
 
-// maxWork is the work that one call of an agent may do, in steps of one
-// state of an automaton over one character of a path. On the machine that
-// measured it, the work of maxWork takes about 260 ms, and a hook must
-// answer within 3 s.
-const maxWork = 100_000_000
+// maxWork bounds the work of all file queries and repositories of a call.
+// A unit covers one scan step, emitted instruction, matcher loop iteration,
+// or predicate check, including a comparison with one span of a class.
+// The end-to-end measurements are in spec/policy/README.md.
+const maxWork = 60_000_000
 
 var errOverBudget = fmt.Errorf("the evaluation is over its budget: the globs that apply to the path, matched against it, are more than %d steps of work", maxWork)
 
 // A Budget is the work that the evaluations of one call of an agent may
-// still do. A glob that a read or a write matches against a path costs the
-// length of the path plus one, times the states of the automaton of the
-// glob. An evaluation that would go over the budget denies.
-type Budget struct{ left int }
+// still do. An evaluation that would go over the budget denies.
+type Budget struct {
+	left      int
+	lowercase map[string]string
+	path      filePath
+	matches   []match
+}
 
 // NewBudget returns the budget of one call.
 func NewBudget() *Budget { return &Budget{left: maxWork} }
@@ -42,6 +45,19 @@ func (b *Budget) spend(work int) error {
 	}
 	b.left -= work
 	return nil
+}
+
+// A call can compare the same scopes and directory roots in many repos.
+func (b *Budget) lower(text string) string {
+	if form, ok := b.lowercase[text]; ok {
+		return form
+	}
+	form := lowercase(text)
+	if b.lowercase == nil {
+		b.lowercase = make(map[string]string)
+	}
+	b.lowercase[text] = form
+	return form
 }
 
 // Evaluate is [Evaluate] within the budget b.
@@ -134,14 +150,20 @@ func evaluatePush(q Query, roleName string, role *Role) Result {
 }
 
 func evaluateFile(bundle *Bundle, q Query, roleName string, role *Role, budget *Budget) Result {
-	path, ok := canonicalPath(q.Path)
-	if !ok {
-		return deny("path is absolute or escapes the project root")
+	if err := budget.spend(len(q.Path) + len(q.Repo) + 1); err != nil {
+		return deny(err.Error())
 	}
-	if utf16Length(path) > longestPath {
-		return deny(fmt.Sprintf("path is longer than %d characters", longestPath))
+	if !budget.path.ready || q.Path != budget.path.raw {
+		path, ok := canonicalPath(q.Path)
+		if !ok {
+			return deny("path is absolute or escapes the project root")
+		}
+		if utf16Length(path) > MaxGlobPath {
+			return deny(errPathTooLong.Error())
+		}
+		budget.path = filePath{raw: q.Path, lower: lowercase(path), units: utf16.Encode([]rune(path)), ready: true}
 	}
-	matched, err := bundle.matchAreas(q.Repo, path, budget)
+	matched, err := bundle.matchAreas(q.Repo, budget)
 	if err != nil {
 		return deny(err.Error())
 	}
@@ -157,6 +179,9 @@ func evaluateFile(bundle *Bundle, q Query, roleName string, role *Role, budget *
 	var winner *verdict
 	for _, m := range matched {
 		v := verdict{match: m}
+		if err := budget.spend(grantWork(m.area, q, role, len(bundle.TemporaryGrants))); err != nil {
+			return deny(err.Error())
+		}
 		v.source, v.allowed = bundle.grantFor(m.area, q, role)
 		if !v.allowed && m.area.Private {
 			winner = &v
@@ -176,6 +201,12 @@ func evaluateFile(bundle *Bundle, q Query, roleName string, role *Role, budget *
 		return allow(winner.allowRule(q, roleName)).in(winner.area)
 	}
 	return deny(bundle.denyRule(winner.area, q, roleName, role)).in(winner.area)
+}
+
+type filePath struct {
+	raw, lower string
+	units      []uint16
+	ready      bool
 }
 
 func canonicalPath(raw string) (string, bool) {
@@ -225,29 +256,32 @@ type match struct {
 	specificity
 }
 
-func (b *Bundle) matchAreas(repo, path string, budget *Budget) ([]match, error) {
-	repoLower, pathLower := lowercase(repo), lowercase(path)
-	units := utf16.Encode([]rune(path))
-	var matched []match
+func (b *Bundle) matchAreas(repo string, budget *Budget) ([]match, error) {
+	repoLower := budget.lower(repo)
+	path := budget.path
+	var scratch globScratch
+	matched := budget.matches[:0]
 	for i := range b.Areas {
 		area := &b.Areas[i]
+		if err := budget.spend(1); err != nil {
+			return nil, err
+		}
 		var best *specificity
 		for _, pattern := range area.Patterns {
+			if err := budget.spend(len(pattern) + 1); err != nil {
+				return nil, err
+			}
 			patternRepo, glob, found := strings.Cut(pattern, ":")
 			if !found {
 				patternRepo, glob = "*", pattern
 			}
-			if patternRepo != "*" && lowercase(patternRepo) != repoLower {
+			if patternRepo != "*" && patternRepo != repoLower && budget.lower(patternRepo) != repoLower {
 				continue
 			}
-			glob = normalizeGlob(glob)
+			glob = NormalizeGlob(glob)
 			directory, isTree := strings.CutSuffix(glob, "/**")
-			if !isTree || lowercase(directory) != pathLower {
-				compiled, err := compileGlob(glob)
-				matches := false
-				if err == nil {
-					matches, err = globMatches(compiled, units, budget)
-				}
+			if !isTree || budget.lower(directory) != path.lower {
+				matches, err := scratch.matches(glob, path.units, true, budget, nil)
 				if errors.Is(err, errOverBudget) {
 					return nil, err
 				}
@@ -266,6 +300,7 @@ func (b *Bundle) matchAreas(repo, path string, budget *Budget) ([]match, error) 
 			matched = append(matched, match{area: area, specificity: *best})
 		}
 	}
+	budget.matches = matched
 	return matched, nil
 }
 
@@ -286,6 +321,21 @@ const (
 	byTemporaryGrant = "temporary grant"
 	byOverride       = "override"
 )
+
+func grantWork(area *Area, q Query, role *Role, temporary int) int {
+	if role == nil || q.Action == Read && !area.Private {
+		return 1
+	}
+	grants := role.Read
+	if q.Action == Write {
+		grants = role.Write
+	}
+	work := int64(len(grants)) * (1 + int64(len(area.Name)))
+	if !area.System {
+		work += int64(temporary+len(q.Overrides)) * (1 + int64(len(area.Name)) + int64(len(q.Member)))
+	}
+	return int(min(work+1, maxWork+1))
+}
 
 func (b *Bundle) grantFor(area *Area, q Query, role *Role) (source string, allowed bool) {
 	switch {

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/multiplexer-si/openplexer/internal/policy"
 )
 
 func TestAGlobThatIsNotReadOverlapsEveryEntry(t *testing.T) {
@@ -29,9 +31,9 @@ func TestAGlobThatIsNotReadOverlapsEveryEntry(t *testing.T) {
 }
 
 func TestAPathThatIsTooLongForTheGlobOverlapsIt(t *testing.T) {
-	count := longestPath + 400
+	count := policy.MaxGlobPath + 400
 	glob := fmt.Sprintf("[]|^a{0,%d}]", count)
-	if PatternsOverlap(glob, "b"+strings.Repeat("a", longestPath-2)+"]") {
+	if PatternsOverlap(glob, "b"+strings.Repeat("a", policy.MaxGlobPath-2)+"]") {
 		t.Error("the glob overlaps a path of 4,096 characters that it does not match")
 	}
 	if !PatternsOverlap(glob, "b"+strings.Repeat("a", count)+"]") {
@@ -67,14 +69,14 @@ func TestOverlapAnswersInTime(t *testing.T) {
 func TestAnEntryLongerThanTheLimitOverlapsEveryEntry(t *testing.T) {
 	worst := strings.Repeat("*a", 749) + "c"
 	huge := strings.Repeat("a", 262144)
-	edge := strings.Repeat("a", longestPath)
+	edge := strings.Repeat("a", policy.MaxGlobPath)
 	for name, c := range map[string]struct{ a, b string }{
 		"the worst glob against a path of 262,144 units": {worst, huge},
 		"a path of 262,144 units against the worst glob": {huge, worst},
-		"a glob of 4,097 units":                          {strings.Repeat("a", longestPath) + "*", "docs/guide.md"},
+		"a glob of 4,097 units":                          {strings.Repeat("a", policy.MaxGlobPath) + "*", "docs/guide.md"},
 		"a path of 4,097 units":                          {"docs/**", edge + "a"},
 		"two paths of 4,097 units that differ":           {edge + "a", edge + "b"},
-		"a path of 2,049 characters of two units each":   {strings.Repeat("😀", longestPath/2+1), "docs/guide.md"},
+		"a path of 2,049 characters of two units each":   {strings.Repeat("😀", policy.MaxGlobPath/2+1), "docs/guide.md"},
 	} {
 		t.Run(name, func(t *testing.T) {
 			start := time.Now()
@@ -89,7 +91,7 @@ func TestAnEntryLongerThanTheLimitOverlapsEveryEntry(t *testing.T) {
 	if !PatternsOverlap(edge, edge) {
 		t.Error("equal paths of 4,096 units do not overlap")
 	}
-	if PatternsOverlap(edge, strings.Repeat("a", longestPath-1)+"b") {
+	if PatternsOverlap(edge, strings.Repeat("a", policy.MaxGlobPath-1)+"b") {
 		t.Error("paths of 4,096 units that differ overlap")
 	}
 }

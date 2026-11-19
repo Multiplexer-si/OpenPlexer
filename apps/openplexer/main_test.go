@@ -29,7 +29,7 @@ func TestVersion(t *testing.T) {
 }
 
 type cli struct {
-	t     *testing.T
+	t     testing.TB
 	now   time.Time
 	stdin string
 	bin   string
@@ -62,7 +62,7 @@ func (c cli) must(want int, args ...string) string {
 	return stdout + stderr
 }
 
-func newCLI(t *testing.T) cli {
+func newCLI(t testing.TB) cli {
 	t.Helper()
 	t.Setenv("OPENPLEXER_HOME", filepath.Join(t.TempDir(), "home"))
 	return cli{t: t, now: loadedAt, bin: prebuiltCLI}

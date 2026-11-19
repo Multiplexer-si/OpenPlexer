@@ -177,6 +177,8 @@ To verify a signed bundle, do these steps. A failure in one step means that the 
 
 The verified bundle is the payload. The fields `bundle` and `version` of the message are copies for display, and a bundle verifier does not trust them.
 
+The Go verifier limits a compact JWS token to 2 MiB before splitting it. It limits the raw payload to 1 MiB before verifying the signature or decoding the payload. It derives the decoded length from the base64url segment, ignoring white space and padding as described below. For an unencoded JWS it uses the segment's byte length. It checks the exact raw length again after step 6, before UTF-8 conversion. The hub limits both the submitted JSON bytes and the canonical JSON bytes it signs to 1 MiB each.
+
 The key set is a JSON Web Key Set (RFC 7517) with the public keys of the hub.
 
 Verification does not look at the version of the bundle. A daemon that holds a bundle refuses a verified bundle with a lower `version` for the same `project_id`. That rule belongs to the daemon, not to this contract.
@@ -228,12 +230,44 @@ The reference is at commit `7d80045a`.
 | `bundle.schema.json` rejects a `members` or a `roles` object whose key `__proto__` has a value of the wrong type. The validator of the reference skips that key, so it accepts `{"members": {"__proto__": 5}}`, and it drops the key from the bundle that it returns. | A schema has no way to treat one key name differently, and the stricter reading is the safe one. |
 | A bundle, an override, or a query whose JSON text holds the escape of a lone surrogate, such as `\ud800`, is invalid. The reference accepts it, and it matches the surrogate as one character. No schema states the rule, because a schema sees a string only after the escapes are read. A parser checks it. | A lone surrogate is not a character, and a string of UTF-8 cannot hold one. A JSON parser that cannot hold it replaces it, as the parser of Go does with U+FFFD. The pattern then matches other paths than in the reference: the pattern `a\ud800/**` would match the path `a`, U+FFFD, `/x`, which the reference does not match. To reject the document is the only reading that never allows what the reference denies. |
 | The contract has no operation that tells whether a path is generated. The reference has one, `isGenerated`. | That operation serves the server-side check, which is outside the open-source foundation. The `generated` flag stays in the bundle and never changes a result. |
-| The Go implementation refuses a glob whose size is more than 3000, and it denies every `read` and `write` in a repository that the pattern applies to, as for a pattern that makes the reference throw. The size is the number of characters of the normalized glob plus the number of states of the automaton that matches it against a path of 4,096 characters. A literal character, `?`, `*`, `**`, a class, `.`, `^`, `$`, and a single character with `*` after it are one state each. `**/` is three states. Each alternative after the first adds two states. A group with `*` or `+` after it adds two states for its loop. A count of a body that reads no character, such as `(?=a){3000}`, is no state if its minimum is 0, and one copy of its body otherwise. Any other count is one copy of its body for each time of its minimum, and then a loop if it has no maximum, or one copy and one more state for each further time. The body fits in the path a number of times: the length of the path divided by the fewest characters that the body matches, or the length of the path plus one for a body that can match the empty string. A maximum above that number counts as no maximum, so `(?:a?){0,5000}` is a loop of four states. For a body that matches at least one character, a minimum above that number makes the count one state. A lookaround is one state plus the states of its body. So the limit refuses a plain glob of more than about 1,500 characters, and a count whose times multiplied by the size of its body is more than about 3,000, such as `(?:ab|c){1000}` or `(?:a?){4000000000}`. The reference has no limit. | A hook must answer in time: a Codex hook that runs past its timeout lets the call run. The time of a match grows with the size of the glob times the length of the path, and the schema puts no limit on the length of a pattern. Within the limit, a match against a path of 4,096 characters takes at most about 35 ms on the machine that measured it. The limit also refuses every count on which the reference runs out of stack. |
+| The Go implementation refuses a glob whose size is more than 3000, and it denies every `read` and `write` in a repository that the pattern applies to, as for a pattern that makes the reference throw. The size is the number of characters of the normalized glob plus the number of states of the automaton that matches it against a path of 4,096 characters. A literal character, `?`, `*`, `**`, a class, `.`, `^`, `$`, and a single character with `*` after it are one state each. `**/` is three states. Each alternative after the first adds two states. A group with `*` or `+` after it adds two states for its loop. A count of a body that reads no character, such as `(?=a){3000}`, is no state if its minimum is 0, and one copy of its body otherwise. Any other count is one copy of its body for each time of its minimum, and then a loop if it has no maximum, or one copy and one more state for each further time. The body fits in the path a number of times: the length of the path divided by the fewest characters that the body matches, or the length of the path plus one for a body that can match the empty string. A maximum above that number counts as no maximum, so `(?:a?){0,5000}` is a loop of four states. For a body that matches at least one character, a minimum above that number makes the count one state. A lookaround is one state plus the states of its body. So the limit refuses a plain glob of more than about 1,500 characters, and a count whose times multiplied by the size of its body is more than about 3,000, such as `(?:ab|c){1000}` or `(?:a?){4000000000}`. The reference has no limit. | The schema has no pattern length limit. The size limit bounds compilation and the number of states a match can visit. The work limit below also accounts for the cost of each state. The size limit refuses counts that would exhaust the reference's stack. |
 | The Go implementation denies every `read` and `write` whose path, after step 1 of [`read` and `write`](#read-and-write), is longer than 4,096 characters, with no area. The reference has no limit. | The time of a match grows with the length of the path, and the agent chooses the path. Without the limit, one glob within the size limit takes about 8 s on a path of 1,048,576 characters. |
-| The Go implementation denies a call of an agent whose globs take too much work to match, with no area. The work of a glob is the length of the path plus one, times its size without its length. The work of a call is the sum over every glob that a `read` or a `write` of the call matches against its path, in every repository in which the query is evaluated. The limit is 100,000,000. The reference has no limit. | The size limit bounds one glob, and a bundle can hold many. Within the limit the work of a call takes about 260 ms on the machine that measured it. The 715 patterns of real ignore files, on a path of 256 characters, take 2.5% of the limit. The largest query of the fixtures takes 0.04%. |
+| The Go implementation gives each call 60,000,000 work units across all file queries and repositories. One unit covers one scan step, one emitted instruction, one matcher loop iteration, or one predicate check. A class reserves a comparison for each span against each possible case variant. A range is one span. The evaluator reserves the work for each glob before it starts matching. If a call exceeds the budget, it is denied with no area. The evaluator matches `exec` grants outside the file budget. The reference has no limit. | For `exec`, the evaluator scans only the caller's role grants and checks for a literal prefix followed by whitespace or the end of the command. The slowest accepted `openplexer policy check` in the stress benchmark took 464 ms on an Apple M5 Pro MacBook Pro. The case matched 25,400 directory areas in each of 337 repositories. The Codex hook stops itself after 4 seconds. The installer sets a 5-second Codex timeout. [Measurements](#policy-budget-measurements). |
 | The `rule` text is not part of the contract. | It is wording for a person. |
 
 No fixture case depends on one of these differences. Every expected value is the value that the reference returns.
+
+### Policy budget measurements
+
+Each case ran five times on an Apple M5 Pro MacBook Pro with 48 GB of memory and Go 1.27.2. Times include starting the built CLI, verifying the saved signature, deciding the query, and recording the audit entry. The largest test payloads were 1 MiB. The longest paths were 4,096 UTF-16 code units. The shared directory case used 59,921,633 work units.
+
+| Bundle | Result | Wall time range |
+|---|---|---:|
+| 150 classes of 2,989 members | Denied by the budget | 12.6 to 15.1 ms |
+| 300 classes of 2,989 members | Denied by the budget | 16.7 to 17.2 ms |
+| Large classes against all case variants | Allowed | 39.1 to 48.4 ms |
+| Long alternations | Allowed | 76.9 to 78.1 ms |
+| Counted lookbehinds on a long path | Allowed | 85.4 to 86.0 ms |
+| 25,400 scoped areas across 211 repositories | Allowed | 131.2 to 134.2 ms |
+| 25,400 directory areas shared by 337 repositories | Allowed | 446.5 to 463.7 ms |
+| 250,000 short globs | Allowed | 65.4 to 67.0 ms |
+| 250,000 empty globs in each of 12 repositories | Allowed | 174.6 to 177.0 ms |
+| Unicode repository scopes | Allowed | 22.6 to 23.5 ms |
+| Unicode directory roots | Allowed | 74.7 to 78.2 ms |
+| Nested counts on a short path | Allowed | 90.3 to 94.9 ms |
+
+Run `make build`, then run the benchmark with the built CLI.
+
+```sh
+OPENPLEXER_BIN_DIR="$PWD/bin" go test ./apps/openplexer -run '^$' -bench '^BenchmarkPolicyCheckWork$' -benchtime=1x -count=5
+```
+
+`BenchmarkOrdinaryGlobs` times a full pass over each corpus. The ignore corpus has 52 patterns from OpenPlexer and Multiplexer ignore files. The fixture corpus uses file queries from the policy evaluation fixtures, excluding the class syntax fixture. The medians are from five alternating runs on the same machine.
+
+| Corpus | Before #55, `f96ea3cd^1` | With the new budget |
+|---|---:|---:|
+| Ignore files | 174.0 µs (171.6 to 174.4 µs) | 90.2 µs (89.2 to 90.5 µs) |
+| Policy fixtures | 781.0 µs (771.2 to 783.4 µs) | 608.1 µs (602.8 to 609.0 µs) |
 
 ## Open questions
 
@@ -255,7 +289,7 @@ Each item is behavior of the reference that looks unintended, or a choice that t
 
     The fixture `evaluate-globs` pins the classes that match no path. The fixture `evaluate-class-syntax` pins the classes that match a path, and it records the cases where the reference throws with the expected value `{"throws": true}`. The fixture `evaluate-class-syntax` also holds a lookbehind on a path of 4,001 characters, which an implementation must answer in time. No fixture covers the other cases that version 1 does not define.
 
-    The Go implementation fails closed in every case that version 1 does not define. It denies the `read` or the `write`, and the `rule` names the pattern and the cause.
+    If the query reaches a pattern that cannot be parsed or is too large, Go denies with no area. The `rule` names the original pattern, its area, and the cause. If the call exceeds its work budget, Go denies with no area. The `rule` reports that the evaluation exceeded the budget and gives the limit. The path and directory exceptions above still apply.
 3. **`git.push` compares the repository with case, and an area pattern compares it without case.** A role with `push: ["api"]` may not push to `API`, but the pattern `api:src/**` applies to `API`. The fixture `evaluate-git-push` pins the behavior.
 4. **`exec` denies `$(` but allows `$` followed by a name.** `npm test $HOME` matches the grant `npm test`. The fixture `evaluate-exec` pins the behavior.
 5. **An empty string in an `exec` list allows the empty command.**

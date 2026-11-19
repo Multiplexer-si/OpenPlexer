@@ -102,7 +102,11 @@ The gate keeps its files in the directory that `OPENPLEXER_HOME` names, or in `.
 | `installs/` | The install journal, one record for each hook file: the agent, the file, the project root of a project-scope install, and what `install` added ([The project root](hooks-claude-code.md#the-project-root)) | `install` and `uninstall` |
 | `lock` | An empty file that the commands lock while they write | Every command that writes |
 
-The gate stores the signed token and not the bundle. Each command verifies the token against `keys.json` again before it uses the policy. A token with a bad signature is rejected, and the gate then enforces no policy. A token that the key set verifies is enforced, even when it is an older version than the one `policy load` last stored. `policy load` refuses an older version, but a program that writes a validly signed older bundle straight into `policy.json` rolls the policy back, and the gate reports that bundle as verified. The protection against an agent that writes the file is the hook's denial of writes into the OpenPlexer home, which [issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15) added. A program that runs as you can still do it ([what a same-user attacker can still do](trust-model.md#what-a-same-user-attacker-can-still-do-with-the-policy)). If you remove a key from `keys.json`, every bundle that the key signed stops being enforced.
+When `policy load` or `policy sync` admits a new token, the gate checks its size, verifies its signature against `keys.json`, and validates the bundle. With a hub configured, the bundle must match the configured project ID and name exactly one repository. If a verified or stale policy is already in force, the incoming bundle must also match its project and either have a higher version or match both its version and content. A rejected incoming load keeps the previously verified policy in force.
+
+The gate stores the signed token in `policy.json`. On reopen it checks the same size limits, verifies the signature against the current `keys.json`, and validates the bundle and any configured project and repository requirements. If a stored token fails these checks, the gate enforces no policy. Reopen uses the version in the stored token without a version comparison. A program running as you can roll back the policy by writing an older token that passes the reopen checks. The hook denies agent writes into the OpenPlexer home. [Issue 15](https://github.com/Multiplexer-si/OpenPlexer/issues/15) · [What a same-user attacker can still do](trust-model.md#what-a-same-user-attacker-can-still-do-with-the-policy)
+
+The gate limits the compact JWS token to 2 MiB and the raw payload to 1 MiB before signature verification or payload decoding. It derives the decoded length from the base64url payload segment, or uses the segment's byte length for an unencoded JWS. It checks the exact raw length again before UTF-8 conversion. When publishing a policy, the hub limits the submitted JSON bytes and the canonical JSON bytes it signs to 1 MiB each.
 
 ## The states of a policy
 
@@ -111,9 +115,9 @@ The gate stores the signed token and not the bundle. Each command verifies the t
 | `absent` | No policy is stored. | It decides nothing, and reports that no policy is in force. |
 | `verified` | The stored token verifies, and a load confirmed it within the stale limit. | It decides each action. |
 | `stale` | The stored token verifies, and no load confirmed it within the stale limit. | It decides each action, and reports that the policy is stale. |
-| `rejected` | A policy is stored and cannot be used: the token does not verify against the key set, or a file cannot be read. | It decides nothing, and reports the reason. |
+| `rejected` | The stored policy failed a reopen check. | It decides nothing, and reports the reason. |
 
-The gate stores no state. It computes the state from `policy.json`, `keys.json`, and the clock each time a command runs.
+The gate computes the state from `policy.json`, `keys.json`, `config.json`, and the clock each time it opens the policy.
 
 ```mermaid
 stateDiagram-v2
