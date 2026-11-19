@@ -12,6 +12,7 @@ import (
 	"log"
 	"math/big"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -209,8 +210,27 @@ func must[T any](value T, err error) T {
 	return value
 }
 
+func writeFixture(path string, data []byte) error {
+	temp, err := os.CreateTemp(filepath.Dir(path), ".checkpoint-*.tmp")
+	if err != nil {
+		return err
+	}
+	defer os.Remove(temp.Name())
+	defer temp.Close()
+	if _, err := temp.Write(data); err != nil {
+		return err
+	}
+	if err := temp.Chmod(0644); err != nil {
+		return err
+	}
+	if err := temp.Close(); err != nil {
+		return err
+	}
+	return os.Rename(temp.Name(), path)
+}
+
 func main() {
-	if err := os.WriteFile(fixturePath, generate(), 0644); err != nil {
+	if err := writeFixture(fixturePath, generate()); err != nil {
 		log.Fatal(err)
 	}
 }
