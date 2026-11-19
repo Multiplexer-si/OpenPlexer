@@ -57,7 +57,7 @@ var testBundle = map[string]any{
 	"members": map[string]string{"mem-dev": "dev"},
 }
 
-func signedPolicy(t *testing.T, bundle any) (keys, message string) {
+func signedPolicy(t testing.TB, bundle any) (keys, message string) {
 	t.Helper()
 	key, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
