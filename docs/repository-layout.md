@@ -9,8 +9,11 @@ apps/                    one directory per binary
 internal/                Go packages, one per domain
 spec/                    language-independent contracts
 tools/                   generators, checks, and release packaging
+test/                    audit, release, and agent test harnesses
 docs/                    documentation
+docs/releases/           release checks, support, and limits
 .github/workflows/       CI and releases
+.github/release-notes/   GitHub release note bodies
 ```
 
 To list every Go package, run `go list ./...`.
@@ -84,9 +87,16 @@ Each directory under `spec/` holds one contract: a README with the rules, and a 
 
 `tools/release` builds the platform archives and writes `SHA256SUMS`. [Cut a release](release.md)
 
-## Audit end-to-end tests
+## Test harnesses
 
-Run `go test ./test/audit` to build the audit binaries and test them with temporary directories. The tests verify the reference fixtures and run the shell examples in the [audit guide](audit.md). They run in `make check` and need no running hub or network access.
+Set `OPENPLEXER_BIN_DIR` to an absolute path to test prebuilt binaries. The shared lookup lives in `internal/testbin`. The harnesses build from source by default.
+
+| Harness | What it runs |
+|---|---|
+| [`test/audit`](../test/audit/README.md) | Audit fixtures, guide examples, and tamper cases. |
+| [`test/release`](../test/release/README.md) | Archive and install guide checks. |
+| [`test/multiagent`](../test/multiagent/README.md) | Two agents connected through a local hub. The Go tests substitute processes and HTTP responses. |
+| [`test/realagent`](../test/realagent/README.md) | Real Claude Code and Codex sessions using installed hooks. |
 
 ## Make targets
 

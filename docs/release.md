@@ -18,11 +18,13 @@ Open the [release workflow](https://github.com/Multiplexer-si/OpenPlexer/actions
 
 The Linux, macOS, and Windows binaries are built with CGO disabled.
 
+Record the checks, supported agent versions, and known limits for each release in `docs/releases/`. Use the matching body in `.github/release-notes/` when updating the GitHub release. [v0.1.0-rc.1 checks and limits](releases/v0.1.0-rc.1.md)
+
 To build the archives on demand, choose **Run workflow** on the release workflow page. Download `openplexer-release` from the completed run's artifacts. A run on a branch uses `v0.0.0-dev.` followed by the short commit ID as its version.
 
 ## Rebuild and compare
 
-Use a clean Git checkout with LF line endings and the exact Go version shown in the original workflow's setup log. Set `tag` to the release you want to check. The release tool uses the checked-out commit's timestamp unless you set `SOURCE_DATE_EPOCH` to a Unix timestamp in seconds. Leave it unset to match the workflow.
+Use a clean Git checkout with LF line endings and the exact Go version that built the release. The release workflow pins Go 1.27.4, the version used to build `v0.1.0-rc.1` on Linux amd64. Check the workflow at the tag or its setup log for other releases. Set `tag` to the release you want to check. The release tool uses the checked-out commit's timestamp unless you set `SOURCE_DATE_EPOCH` to a Unix timestamp in seconds. Leave it unset to match the workflow.
 
 The build requires a new output directory. By default it publishes the complete set of files to `dist/release/<tag>/` when the build succeeds. Use `-out` with a new directory to rebuild the same tag again.
 
