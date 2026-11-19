@@ -43,9 +43,9 @@ Chain is consistent from genesis (3 records). Completeness is proven through che
 Records after position 2 are unanchored.
 ```
 
-A failed check prints one diagnostic to standard error. Positions count from genesis, starting at 1. The verifier reports the first failure in the order set by the contract. `<none>` at position 0 means the rule has no record location. `<unknown>` means the record lacks a string ID. Checkpoint numbers follow the order of the flags. [Audit verification rules](../spec/audit/README.md#verification-and-result).
+In the default text mode, a failed check prints one diagnostic to standard error. Positions count from genesis, starting at 1. The verifier reports the first failure in the order set by the contract. `<none>` at position 0 means the rule has no record location. `<unknown>` means the record lacks a string ID. Checkpoint numbers follow the order of the flags. [Audit verification rules](../spec/audit/README.md#verification-and-result).
 
-A changed field breaks the record hash under A3. A missing middle record or a reordered record breaks a link under A5. A nonempty export that starts after genesis fails A4. A page with a cursor fails A6. A contiguous prefix or an empty export fails K9 when a trusted checkpoint covers the missing suffix.
+A change to a hashed value with the original hash fails A3. A broken link after genesis fails A5. A nonempty export that starts after genesis fails A4. A page with a cursor fails A6. A contiguous prefix or an empty export fails K9 when a trusted checkpoint covers the missing suffix.
 
 ```text
 record 18 (position 2): rule A1: expected flagged to be a boolean, found a string. Export the log again
