@@ -13,6 +13,9 @@ const moduleRoot = "../.."
 
 var link = regexp.MustCompile(`\]\(([^)\s]+)\)`)
 
+var heading = regexp.MustCompile(`(?m)^#{1,6} (.+)$`)
+var headingPunctuation = regexp.MustCompile(`[^\p{L}\p{M}\p{N} _-]`)
+
 func external(target string) bool {
 	return strings.Contains(target, "://") || strings.HasPrefix(target, "mailto:")
 }
@@ -64,5 +67,38 @@ func TestRelativeLinksResolve(t *testing.T) {
 	}
 	if pages == 0 {
 		t.Error("found no Markdown files")
+	}
+}
+
+func TestPrivacyGuideTrustModelAnchors(t *testing.T) {
+	const guidePath = "docs/architecture-and-privacy.md"
+	const trustPath = "docs/trust-model.md"
+	guide, err := os.ReadFile(filepath.Join(moduleRoot, guidePath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	trust, err := os.ReadFile(filepath.Join(moduleRoot, trustPath))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The trust model uses Markdown headings with unique slugs.
+	anchors := make(map[string]bool)
+	for _, match := range heading.FindAllStringSubmatch(string(trust), -1) {
+		title := headingPunctuation.ReplaceAllString(strings.ToLower(match[1]), "")
+		anchors[strings.ReplaceAll(strings.TrimSpace(title), " ", "-")] = true
+	}
+	checked := 0
+	for _, match := range link.FindAllStringSubmatch(string(guide), -1) {
+		file, anchor, hasAnchor := strings.Cut(match[1], "#")
+		if !hasAnchor || filepath.ToSlash(filepath.Join(filepath.Dir(guidePath), file)) != trustPath {
+			continue
+		}
+		checked++
+		if !anchors[anchor] {
+			t.Errorf("%s links to missing trust model anchor %q", guidePath, anchor)
+		}
+	}
+	if checked == 0 {
+		t.Errorf("%s links to no trust model anchors", guidePath)
 	}
 }

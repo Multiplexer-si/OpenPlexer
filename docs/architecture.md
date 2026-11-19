@@ -1,41 +1,10 @@
 # Architecture
 
-> [!NOTE]
-> This page describes the design. The [local policy gate](local-policy.md), its hook adapters, and the [single-team hub](hub.md) exist. Connecting the local agent to the hub is part of [issue 20](https://github.com/Multiplexer-si/OpenPlexer/issues/20).
-
-This page explains how the parts of OpenPlexer connect, and why the code is split the way it is. [Concepts](concepts.md) defines the terms. [Repository layout](repository-layout.md) lists every directory.
+This page explains how OpenPlexer's code is split. The [architecture and privacy guide](architecture-and-privacy.md) shows how the parts connect and what each part can guarantee. [Concepts](concepts.md) defines the terms. [Repository layout](repository-layout.md) lists every directory.
 
 ## How the parts connect
 
-```mermaid
-flowchart LR
-    subgraph machine["Developer machine"]
-        agent["Coding agent"]
-        adapter["Adapter"]
-        daemon["Daemon and gate"]
-        policy["Policy evaluator"]
-        agent -- "hook call" --> adapter
-        adapter -- "request" --> daemon
-        daemon -- "allowed or denied?" --> policy
-    end
-    subgraph server["Team server"]
-        hub["Hub"]
-    end
-    daemon -- "claims and decisions" --> hub
-    hub -- "signed policy and Room entries" --> daemon
-    hub -- "exported audit log" --> verifier["Verifier"]
-```
-
-One action passes through the system in these steps.
-
-1. A coding agent is about to act. Its hook calls the adapter for that agent.
-2. The adapter turns the hook call into a request and passes the request to the gate in the daemon.
-3. The gate asks the policy evaluator for a result. The evaluator returns allow, or deny with a reason.
-4. The coding agent continues, or it receives the reason for the denial.
-
-The daemon also connects the developer's machine to the hub. The daemon sends claims and decisions to the Room, and it receives signed policy and the Room entries of other agents.
-
-The hub appends records to the audit log and exports the log. The verifier checks an exported log on any machine.
+The coding agent runs `openplexer hook` before a matched tool call. The adapter translates the call into a policy query, and the local gate evaluates it against the policy on disk. If you configure a team hub, `openplexer daemon` fetches signed policy and sends and receives Room events. The hub exports the team audit log for offline verification. [Where the parts run](architecture-and-privacy.md#where-the-parts-run).
 
 ## Three binaries for three different people
 
@@ -65,7 +34,7 @@ A test in `internal/layering` reads the imports of every package and fails when 
 
 **The daemon and the hub do not import each other.** They run on different machines and they agree only through the contracts in `spec/`. The rule also keeps server code out of the binary that a developer installs.
 
-**The verifier imports only `internal/audit`.** The rule is an allowlist. A new internal package is denied to the verifier until someone adds the package to the allowlist. A reviewer can then read all the code that decides whether a log is valid.
+**The verifier's internal dependencies are limited to `internal/audit` and `internal/policy`.** The dependency test enforces that allowlist. A reviewer can then read all the code that decides whether a log is valid.
 
 Nothing checks a rule that is written only in a document. These rules are in a test, so a change that breaks a rule fails in CI.
 
@@ -79,6 +48,6 @@ A package moves out of `internal/` when an outside importer needs it, and not be
 
 The formats are meant to outlive this implementation. A Room event or an audit record that is defined only by Go types can be implemented only by reading Go. The contracts in [`spec/`](../spec/README.md) define each format with a README of rules, and the schemas, examples, and fixtures that apply to it, so the Go code is one implementation of the contract and not the definition of it.
 
-## What is not decided yet
+## Wire formats
 
-The diagram shows which parts exchange data. It does not show how. The contracts in [`spec/`](../spec/README.md) define the fields of a policy bundle, of a Room event, of the envelope that carries a Room event, and of an audit record. Each contract README lists the questions that are still open for that contract. The single-team hub serves policy and Room replay over HTTP and stores state in files. The live transport between the daemon and the hub remains open. The implementation phases of the [roadmap](roadmap.md) follow the contracts.
+The contracts in [`spec/`](../spec/README.md) define the fields of a policy bundle, a Room event, the envelope that carries a Room event, and an audit record. The hub serves policy and Room replay over HTTP. Its live Room stream exchanges newline-delimited envelopes. [Hub HTTP API](hub.md#http-api).

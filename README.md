@@ -28,6 +28,7 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 |---|---|
 | Understand the ideas behind the four parts | [Concepts](docs/concepts.md) |
 | See how the parts connect, and why the code is split the way it is | [Architecture](docs/architecture.md) |
+| See what stays local, what the hub receives, and what each part guarantees | [Architecture and privacy](docs/architecture-and-privacy.md) |
 | Decide whether to trust the hooks on your machine | [Trust model](docs/trust-model.md) |
 | Load a signed policy on your machine and check an action against it | [Local policy gate](docs/local-policy.md) |
 | Run a hub for your team | [Self-host the OpenPlexer hub](docs/self-host.md) |
