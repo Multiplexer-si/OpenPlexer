@@ -4,7 +4,7 @@ This guide covers the tasks that a contributor does in this repository. [Archite
 
 ## Set up
 
-1. Install [Go](https://go.dev/doc/install) 1.27 or later.
+1. Install Go 1.27 or later and Make. Add Go to your `PATH` and run `go version` to check the version. [Go installation guide](https://go.dev/doc/install).
 2. Clone the repository.
 
 	```sh
@@ -20,7 +20,9 @@ This guide covers the tasks that a contributor does in this repository. [Archite
 
 	The last lines of the output list each package. Each package that has tests reports `ok`, such as `internal/layering`, `internal/spectest`, `internal/policy`, and `internal/daemon`.
 
-The first run downloads the modules that the tests in `internal/spectest`, `internal/policy`, and `internal/daemon` use. The binaries use only the standard library.
+4. Run `make build` to [build the binaries](#build-the-binaries).
+
+The first run downloads the modules that the tests use. The binaries use only the standard library. [Third-party notices](THIRD_PARTY_NOTICES.md).
 
 ## Run the checks
 
@@ -62,6 +64,8 @@ The dependency rules cover the new package without a change to the test. An adap
 
 ## Add an internal package
 
+Read the dependency rules before adding an import. Keep the policy, audit, and Room packages independent of the adapters, the daemon, and the hub. [Dependency rules](docs/repository-layout.md#dependency-rules).
+
 1. Create the directory under `internal/` and add a `doc.go` file with a package comment that says what the package owns.
 2. Decide which packages the new package must not depend on. Add a rule to the `rules` table in `internal/layering/layering_test.go`.
 3. Copy the rule into the table in [Repository layout](docs/repository-layout.md#dependency-rules), and add the package to the package table on the same page.
@@ -101,6 +105,8 @@ The extractor runs the code of the existing TypeScript implementation, so you ne
 
 The extractor has no dependencies of its own. It uses the `tsx` of the checkout, and it never writes in the checkout. Without a checkout you can still run `make check`, which validates the committed files against each other.
 
+The extractor checks the reference commit and refuses changes to the tracked source files it uses. If you need the checkout for a change, ask the maintainers in the issue for that change.
+
 1. Set `REFERENCE` to the path of the checkout.
 
 	```sh
@@ -123,7 +129,7 @@ The extractor has no dependencies of its own. It uses the `tsx` of the checkout,
 	```
 
 5. Read the diff of `spec/`. Review every expected value that changed or is new. If a value looks like a mistake in the reference, keep it, and add the case to the open questions in the README of the contract.
-6. Run the Go checks.
+6. Run the extractor's `check` command from step 2 again. Then run the Go checks.
 
 	```sh
 	make check
@@ -165,6 +171,10 @@ The test in `internal/doclinks` fails when a relative link in a Markdown file po
 
 ## Open a pull request
 
+Make each commit small enough to check on its own. Use a short title with a type and, when useful, the area it affects. Recent commits use `docs: require a clean extractor check before merge` and `fix(extract): allow checkpoint JWKS overrides`.
+
 Open the pull request against `main`. CI runs `make check` and `make build` on every pull request, in one job named `check`.
+
+Use the same title format for the pull request. In the description, link the issue if there is one. Say what changed and which checks passed. For changes to `spec/`, include the extractor's `check` result. [Review and merge a pull request](MAINTAINERS.md#review-and-merge-a-pull-request).
 
 `main` requires the `check` job. GitHub blocks the merge of a pull request while that job fails or is still running. A pull request that breaks a fixture fails the job, so fix the code or the fixture before you ask for a review. The rule does not require the branch to be up to date with `main`, and it does not apply to administrators.
