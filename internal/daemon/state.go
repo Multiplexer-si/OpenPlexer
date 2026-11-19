@@ -64,7 +64,7 @@ type storedPolicy struct {
 	ConfirmedAt time.Time `json:"confirmed_at"`
 }
 
-func classify(home string, staleAfter time.Duration, now time.Time) (Status, *policy.Verified) {
+func classify(home string, staleAfter time.Duration, now time.Time, verifier policy.BundleVerifier) (Status, *policy.Verified) {
 	rejected := func(format string, args ...any) (Status, *policy.Verified) {
 		return Status{State: Rejected, Detail: fmt.Sprintf(format, args...)}, nil
 	}
@@ -75,6 +75,10 @@ func classify(home string, staleAfter time.Duration, now time.Time) (Status, *po
 	case stored == nil:
 		return Status{State: Absent, Detail: "no policy is loaded"}, nil
 	}
+	signed, err := policy.ReadSignedBundle(stored.Token)
+	if err != nil {
+		return rejected("the stored policy does not verify against the key set: %v", err)
+	}
 	keys, err := readKeys(home)
 	switch {
 	case err != nil:
@@ -82,7 +86,7 @@ func classify(home string, staleAfter time.Duration, now time.Time) (Status, *po
 	case keys == nil:
 		return rejected("no key set is configured, so the stored policy cannot be verified")
 	}
-	verified, err := verifyPolicyBundle(stored.Token, *keys)
+	verified, err := verifier.Verify(signed, *keys)
 	if err != nil {
 		return rejected("the stored policy does not verify against the key set: %v", err)
 	}
@@ -99,12 +103,4 @@ func classify(home string, staleAfter time.Duration, now time.Time) (Status, *po
 		status.Detail += fmt.Sprintf(", stale since %s", status.StaleAt.UTC().Format(time.RFC3339))
 	}
 	return status, verified
-}
-
-func verifyPolicyBundle(token string, keys policy.KeySet) (*policy.Verified, error) {
-	// Allow room for base64, the header, and the signature before decoding.
-	if len(token) > 2*policy.MaxBundleBytes {
-		return nil, fmt.Errorf("the signed policy is longer than %d bytes", 2*policy.MaxBundleBytes)
-	}
-	return policy.VerifySignedBundle(token, keys)
 }

@@ -120,14 +120,17 @@ func readResponse(response *http.Response, limit int64) ([]byte, error) {
 		return nil, hubIOError{"could not read the hub response body", err}
 	}
 	if int64(len(body)) > limit {
-		return nil, errors.New("hub response exceeds its size limit")
+		return nil, fmt.Errorf("hub response exceeds its %d-byte size limit", limit)
 	}
 	return body, nil
 }
 
 // hubSource checks that the bundle verifies with the hub's advertised keys.
 // Gate.Load also verifies it with the locally pinned keys before storing it.
-type hubSource struct{ hubClient }
+type hubSource struct {
+	hubClient
+	verifier policy.BundleVerifier
+}
 
 func (h hubSource) Fetch(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
@@ -136,6 +139,7 @@ func (h hubSource) Fetch(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// The JSON envelope contains both the token and a display copy of the bundle.
 	body, err := readResponse(response, 4<<20)
 	if err != nil {
 		return "", err
@@ -143,6 +147,13 @@ func (h hubSource) Fetch(ctx context.Context) (string, error) {
 	token, err := signedToken(body)
 	if err != nil {
 		return "", err
+	}
+	signed, err := policy.ReadSignedBundle(token)
+	if bundleSizeError(err) {
+		return "", err
+	}
+	if err != nil {
+		return "", fmt.Errorf("bundle does not verify with the advertised key set: %w", err)
 	}
 	response, err = h.request(ctx, http.MethodGet, "/.well-known/jwks.json", nil, "", "")
 	if err != nil {
@@ -156,8 +167,7 @@ func (h hubSource) Fetch(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	// Let admission reject and record an oversized payload whose advertised signature verified.
-	if _, err := policy.VerifySignedBundle(token, keys); err != nil && !errors.Is(err, policy.ErrBundlePayloadTooLarge) {
+	if _, err := h.verifier.Verify(signed, keys); err != nil {
 		return "", fmt.Errorf("bundle does not verify with the advertised key set: %w", err)
 	}
 	return token, nil
@@ -169,5 +179,5 @@ func (g *Gate) Sync(ctx context.Context) (Status, error) {
 	if err != nil {
 		return g.status, err
 	}
-	return g.Load(ctx, hubSource{client})
+	return g.Load(ctx, hubSource{hubClient: client, verifier: g.verifier})
 }

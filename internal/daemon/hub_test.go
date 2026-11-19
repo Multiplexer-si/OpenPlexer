@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -145,7 +146,7 @@ func TestAuditCredentialSurfaces(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, err = (hubSource{client}).Fetch(context.Background())
+			_, err = (hubSource{hubClient: client}).Fetch(context.Background())
 			check("fetch error", err)
 			status, err := g.Sync(context.Background())
 			check("sync error", err)
@@ -181,6 +182,29 @@ func useHubTransport(t *testing.T, transport http.RoundTripper) {
 	previous := hubHTTP
 	hubHTTP = &http.Client{Transport: transport, CheckRedirect: previous.CheckRedirect}
 	t.Cleanup(func() { hubHTTP = previous })
+}
+
+func TestPolicySyncBoundsTheHubResponseRead(t *testing.T) {
+	const limit = 4 << 20
+	body := strings.NewReader(strings.Repeat("x", limit+2))
+	useHubTransport(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/api/v1/projects/p/policy.bundle" {
+			t.Fatalf("unexpected request for %s", r.URL.Path)
+		}
+		return &http.Response{StatusCode: http.StatusOK, ContentLength: -1, Body: io.NopCloser(body)}, nil
+	}))
+	home := t.TempDir()
+	configure(t, home, Settings{
+		KeySet: newSigner(t).keySet(t), HubURL: "https://hub.example", ProjectID: "p", MemberID: "mem-ana",
+		Token: base64.RawURLEncoding.EncodeToString(make([]byte, 32)),
+	})
+	status, err := open(t, home, loadedAt).Sync(t.Context())
+	if err == nil || !strings.Contains(err.Error(), "4194304-byte size limit") || status.State != Absent {
+		t.Fatalf("sync = %+v, %v, want the response-size error and no policy", status, err)
+	}
+	if body.Len() != 1 {
+		t.Fatalf("sync read %d response bytes, want %d", body.Size()-int64(body.Len()), limit+1)
+	}
 }
 
 func TestSignedBundleMessageUsesExactFinalMembers(t *testing.T) {

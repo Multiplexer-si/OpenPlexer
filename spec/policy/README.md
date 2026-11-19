@@ -177,7 +177,7 @@ To verify a signed bundle, do these steps. A failure in one step means that the 
 
 The verified bundle is the payload. The fields `bundle` and `version` of the message are copies for display, and a bundle verifier does not trust them.
 
-The Go gate limits a compact JWS token to 2 MiB. The Go verifier limits the authenticated payload to 1 MiB. It counts the bytes from step 6 after base64url decoding, or the ASCII payload bytes for an unencoded JWS, before the UTF-8 conversion in step 7. The hub limits both the submitted JSON bytes and the canonical JSON bytes it signs to 1 MiB each.
+The Go verifier limits a compact JWS token to 2 MiB before splitting it. It limits the raw payload to 1 MiB before verifying the signature or decoding the payload. It derives the decoded length from the base64url segment, ignoring white space and padding as described below. For an unencoded JWS it uses the segment's byte length. It checks the exact raw length again after step 6, before UTF-8 conversion. The hub limits both the submitted JSON bytes and the canonical JSON bytes it signs to 1 MiB each.
 
 The key set is a JSON Web Key Set (RFC 7517) with the public keys of the hub.
 

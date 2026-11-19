@@ -15,11 +15,12 @@ import (
 // stored in one home directory. It is the view of one short process: Open
 // reads the home once, and only Load changes what the gate holds.
 type Gate struct {
-	home   string
-	now    func() time.Time
-	config config
-	status Status
-	bundle *policy.Bundle
+	home     string
+	now      func() time.Time
+	config   config
+	status   Status
+	bundle   *policy.Bundle
+	verifier policy.BundleVerifier
 }
 
 // Open reads the home directory and verifies the stored policy against the
@@ -28,17 +29,21 @@ type Gate struct {
 // still ask for a verdict. The error is for a configuration that cannot be
 // read.
 func Open(home string, now func() time.Time) (*Gate, error) {
+	return openGate(home, now, policy.BundleVerifier{})
+}
+
+func openGate(home string, now func() time.Time, verifier policy.BundleVerifier) (*Gate, error) {
 	config, err := readConfig(home)
 	if err != nil {
 		return nil, err
 	}
-	g := &Gate{home: home, now: now, config: config}
+	g := &Gate{home: home, now: now, config: config, verifier: verifier}
 	g.read()
 	return g, nil
 }
 
 func (g *Gate) read() *policy.Verified {
-	status, verified := classify(g.home, g.config.staleAfter(), g.now())
+	status, verified := classify(g.home, g.config.staleAfter(), g.now(), g.verifier)
 	status.Member = g.config.MemberID
 	g.bundle = nil
 	if verified != nil {
@@ -71,6 +76,10 @@ func (g *Gate) ExecGated() bool {
 // ErrRejected is the error of a Load whose bundle the gate refuses.
 var ErrRejected = errors.New("the bundle is rejected")
 
+func bundleSizeError(err error) bool {
+	return errors.Is(err, policy.ErrCompactBundleTooLarge) || errors.Is(err, policy.ErrBundlePayloadTooLarge)
+}
+
 // Load fetches a signed bundle from the source and makes it the policy in
 // force. The bundle must verify against the configured key set. While a
 // policy is in force, the bundle must also be for the same project, and it
@@ -84,23 +93,29 @@ var ErrRejected = errors.New("the bundle is rejected")
 // bundle is in force.
 func (g *Gate) Load(ctx context.Context, source Source) (Status, error) {
 	token, err := source.Fetch(ctx)
-	if err != nil {
+	if err != nil && !bundleSizeError(err) {
 		return g.status, fmt.Errorf("the policy source is not available, and the policy in force stays: %w", err)
 	}
-	unlock, err := lockHome(g.home)
-	if err != nil {
-		return g.status, err
+	var signed *policy.SignedBundle
+	if err == nil {
+		signed, err = policy.ReadSignedBundle(token)
+	}
+	unlock, lockErr := lockHome(g.home)
+	if lockErr != nil {
+		return g.status, lockErr
 	}
 	defer unlock()
 
+	if bundleSizeError(err) {
+		return g.reject(err)
+	}
 	inForce := g.read()
-	candidate, action, err := g.admit(token, inForce)
 	if err != nil {
-		reason := err.Error()
-		// A failed record does not join the rejection, because a caller takes
-		// an error that wraps ErrNotRecorded to mean that the bundle is in force.
-		_ = g.record(audit.Record{Action: "policy.rejected", Target: g.status.ProjectID, Reason: &reason})
-		return g.status, fmt.Errorf("%w, and the policy in force stays: %w", ErrRejected, err)
+		return g.reject(err)
+	}
+	candidate, action, err := g.admit(signed, inForce)
+	if err != nil {
+		return g.reject(err)
 	}
 	if err := writeJSON(g.home, policyFile, storedPolicy{Token: token, ConfirmedAt: g.now().UTC()}); err != nil {
 		return g.status, err
@@ -111,6 +126,14 @@ func (g *Gate) Load(ctx context.Context, source Source) (Status, error) {
 		Target: candidate.Bundle.ProjectID,
 		Meta:   map[string]any{"version": candidate.Bundle.Version},
 	})
+}
+
+func (g *Gate) reject(err error) (Status, error) {
+	reason := err.Error()
+	// A failed record does not join the rejection, because a caller takes
+	// an error that wraps ErrNotRecorded to mean that the bundle is in force.
+	_ = g.record(audit.Record{Action: "policy.rejected", Target: g.status.ProjectID, Reason: &reason})
+	return g.status, fmt.Errorf("%w, and the policy in force stays: %w", ErrRejected, err)
 }
 
 // ErrNotRecorded is the error of a Load or a Decide that did its work and
@@ -124,7 +147,7 @@ func (g *Gate) record(record audit.Record) error {
 	return nil
 }
 
-func (g *Gate) admit(token string, inForce *policy.Verified) (*policy.Verified, string, error) {
+func (g *Gate) admit(signed *policy.SignedBundle, inForce *policy.Verified) (*policy.Verified, string, error) {
 	keys, err := readKeys(g.home)
 	if err != nil {
 		return nil, "", fmt.Errorf("the key set cannot be read: %w", err)
@@ -132,7 +155,7 @@ func (g *Gate) admit(token string, inForce *policy.Verified) (*policy.Verified, 
 	if keys == nil {
 		return nil, "", errors.New("no key set is configured")
 	}
-	candidate, err := verifyPolicyBundle(token, *keys)
+	candidate, err := g.verifier.Verify(signed, *keys)
 	if err != nil {
 		return nil, "", err
 	}
