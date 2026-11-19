@@ -69,12 +69,19 @@ func run(args []string, stdout, stderr io.Writer) int {
 		}
 	} else if !result.OK {
 		fmt.Fprintln(stderr, result.Diagnostic())
-	} else if result.CheckpointEntries == nil {
-		fmt.Fprintf(stdout, "Chain is consistent from genesis (%d records). Completeness is not proven.\n", result.Entries)
 	} else {
-		fmt.Fprintf(stdout, "Chain is consistent from genesis (%d records). Completeness is proven through checkpoint count %d.\n", result.Entries, *result.CheckpointEntries)
-		if *result.CheckpointEntries < result.Entries {
-			fmt.Fprintf(stdout, "The last %d records have no checkpoint.\n", result.Entries-*result.CheckpointEntries)
+		noun := "records"
+		if result.Entries == 1 {
+			noun = "record"
+		}
+		fmt.Fprintf(stdout, "Chain is consistent from genesis (%d %s). ", result.Entries, noun)
+		if result.CheckpointEntries == nil {
+			fmt.Fprintln(stdout, "Completeness is not proven.")
+		} else {
+			fmt.Fprintf(stdout, "Completeness is proven through checkpoint count %d.\n", *result.CheckpointEntries)
+			if *result.CheckpointEntries < result.Entries {
+				fmt.Fprintf(stdout, "Records after position %d are unanchored.\n", *result.CheckpointEntries)
+			}
 		}
 	}
 	if !result.OK {

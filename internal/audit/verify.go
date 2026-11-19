@@ -73,22 +73,22 @@ func (r VerifyResult) atRecord(record value, position int) VerifyResult {
 func VerifyExport(export, jwks []byte, checkpoints ...string) VerifyResult {
 	doc, err := parse(export)
 	if err != nil || doc.kind != kindObject {
-		return VerifyResult{Rule: "A6", Message: "expected one UTF-8 JSON object, found invalid export data; check the file for corruption or trailing data"}
+		return VerifyResult{Rule: "A6", Message: "expected one UTF-8 JSON object, found invalid export data. Check the file for corruption or trailing data"}
 	}
 	entries, _ := doc.member("entries")
 	if entries.kind != kindArray {
-		return VerifyResult{Rule: "A6", Message: "expected an entries array, found it missing or invalid; export the log again"}
+		return VerifyResult{Rule: "A6", Message: "expected an entries array, found it missing or invalid. Export the log again"}
 	}
 	if cursor, present := doc.member("next_cursor"); !present || cursor.kind != kindNull {
-		return VerifyResult{Rule: "A6", Message: "expected next_cursor to be null, found it missing or non-null; export the full log without paging"}
+		return VerifyResult{Rule: "A6", Message: "expected next_cursor to be null, found it missing or non-null. Export the full log without paging"}
 	}
 	if doc.duplicate != "" {
-		return VerifyResult{Rule: "A6", Message: fmt.Sprintf("expected unique export keys, found repeated key %s; export the log again", doc.duplicate)}
+		return VerifyResult{Rule: "A6", Message: fmt.Sprintf("expected unique export keys, found repeated key %s. Export the log again", doc.duplicate)}
 	}
 	for _, field := range doc.members {
 		if !slices.Equal(field.key, text("entries").units) {
 			if key := field.value.duplicateKey(); key != "" {
-				return VerifyResult{Rule: "A6", Message: fmt.Sprintf("expected unique export keys, found repeated key %s; export the log again", key)}
+				return VerifyResult{Rule: "A6", Message: fmt.Sprintf("expected unique export keys, found repeated key %s. Export the log again", key)}
 			}
 		}
 	}
@@ -101,20 +101,20 @@ func VerifyExport(export, jwks []byte, checkpoints ...string) VerifyResult {
 		}
 		prevHash, _ := record.member("prev_hash")
 		if found, _ := prevHash.str(); found != previous {
-			rule, hint := "A5", "check for missing or reordered records"
+			rule, hint := "A5", "Check for missing or reordered records"
 			if i == 0 {
-				rule, hint = "A4", "check that the export starts at genesis and is unfiltered"
+				rule, hint = "A4", "Check that the export starts at genesis and is unfiltered"
 			}
-			message := fmt.Sprintf("expected prev_hash %s, found %q; %s", previous, found, hint)
+			message := fmt.Sprintf("expected prev_hash %s, found %q. %s", previous, found, hint)
 			return (VerifyResult{Rule: rule, Message: message}).atRecord(record, i+1)
 		}
 		computed, err := hashOf(previous, record)
 		if err != nil {
-			return (VerifyResult{Rule: "A1", Message: err.Error() + "; export the log again"}).atRecord(record, i+1)
+			return (VerifyResult{Rule: "A1", Message: err.Error() + ". Export the log again"}).atRecord(record, i+1)
 		}
 		hash, _ := record.member("hash")
 		if found, _ := hash.str(); found != computed {
-			message := fmt.Sprintf("expected hash %s, found %q; check the record's hashed fields", computed, found)
+			message := fmt.Sprintf("expected hash %s, found %q. Check the record's hashed fields", computed, found)
 			return (VerifyResult{Rule: "A3", Message: message}).atRecord(record, i+1)
 		}
 		previous = computed
@@ -124,10 +124,10 @@ func VerifyExport(export, jwks []byte, checkpoints ...string) VerifyResult {
 
 func checkEntry(record value) string {
 	if record.kind != kindObject {
-		return fmt.Sprintf("expected a record object, found %s; export the log again", record.kind)
+		return fmt.Sprintf("expected a record object, found %s. Export the log again", record.kind)
 	}
 	if key := record.duplicateKey(); key != "" {
-		return fmt.Sprintf("expected unique record keys, found repeated key %s; export the log again", key)
+		return fmt.Sprintf("expected unique record keys, found repeated key %s. Export the log again", key)
 	}
 	for _, field := range []struct {
 		name     string
@@ -162,7 +162,7 @@ func checkEntry(record value) string {
 		if field.nullable {
 			expected += " or null"
 		}
-		return fmt.Sprintf("expected %s to be %s, found %s; export the log again", field.name, expected, found)
+		return fmt.Sprintf("expected %s to be %s, found %s. Export the log again", field.name, expected, found)
 	}
 	return ""
 }

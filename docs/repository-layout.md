@@ -25,7 +25,7 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 | `apps/openplexer-hub` | `openplexer-hub` | The single-team hub server and its local admin commands |
 | `apps/openplexer-verify` | `openplexer-verify` | The standalone verifier for audit logs |
 
-`openplexer` configures the local gate, loads a signed policy bundle, reports the state of the policy, and checks one action. [Local policy gate](local-policy.md) lists those commands. It also installs and removes the hook of Claude Code and Codex, and it is the command that each hook runs. [Claude Code hooks](hooks-claude-code.md) and [Codex hooks](hooks-codex.md) give those commands. `openplexer-hub` manages members, projects, and signed policies and serves the Room HTTP API. [Run the single-team hub](hub.md) gives the commands and endpoints. `openplexer-verify` prints "not implemented yet" to standard error and exits with status 1.
+`openplexer` configures the local gate, loads a signed policy bundle, reports the state of the policy, and checks one action. [Local policy gate](local-policy.md) lists those commands. It also installs and removes the hook of Claude Code and Codex, and it is the command that each hook runs. [Claude Code hooks](hooks-claude-code.md) and [Codex hooks](hooks-codex.md) give those commands. `openplexer-hub` manages members, projects, and signed policies. It serves the Room HTTP API and exports the team audit log. [Run the single-team hub](hub.md) gives the commands and endpoints. `openplexer-verify` checks a JSON export and signed checkpoints offline. [Export and verify an audit log](audit.md).
 
 ## Packages
 
@@ -34,7 +34,7 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 | Package | Owns |
 |---|---|
 | `internal/policy` | The policy model, the policy evaluator, and the verification of a signed bundle against a key set. Pure, no I/O. Its tests run every fixture of `spec/policy`. |
-| `internal/audit` | Canonical JSON, the hash of an audit record, and the verification of a chain. Pure, no I/O. Its tests run every fixture of `spec/canonical-json` and `spec/audit`. |
+| `internal/audit` | Canonical JSON, audit record hashing, and verification of exports and signed checkpoints. Pure, no I/O. Its tests run every fixture of `spec/canonical-json` and `spec/audit`. |
 | `internal/daemon` | The local gate: the policy source, the store of the last verified bundle, the state of the policy, local identity, and the audit log of each decision. It reads and writes one home directory. |
 | `internal/room` | The Room protocol: events, claims, decisions, the envelope, and their validation, the overlap of two claims, and the models of order, expiry, reconnection, and errors. Pure, no I/O. Its tests run every fixture of `spec/room`. |
 | `internal/adapter` | The list of the adapters, and the test that runs every case of `spec/adapter` against them. |
@@ -42,7 +42,7 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 | `internal/adapter/claudecode` | The `Agent` value of Claude Code: its table of gated tools, its settings files, and its hook entry. |
 | `internal/adapter/codex` | The `Agent` value of Codex: its table of gated tools, the reader of `apply_patch` patches, its hook files, and its hook entry. |
 | `internal/jsonedit` | Edits of JSON text that keep every byte they do not change. It imports nothing from the module. |
-| `internal/hub` | The hub file store, membership, repository scope, policy signing, Room sequencing, and HTTP API. |
+| `internal/hub` | The hub file store, membership, repository scope, policy signing, Room sequencing, audit storage and export, and the HTTP API. |
 | `internal/layering` | The tests that enforce the dependency rules, and the rule that only a test may import another module. |
 | `internal/doclinks` | The test that checks the relative links in the documentation. |
 | `internal/spectest` | The tests that check the contracts: every file under `spec/` is in its place, every schema compiles, every example validates against its schema, every fixture file validates against the fixture-file schema, and every hash follows from its rule. |
@@ -60,7 +60,7 @@ The rules apply to transitive imports. The rule table in `internal/layering/laye
 | `internal/hub` | `internal/daemon`, `internal/adapter/...` |
 | `apps/openplexer` | `internal/hub` |
 | `apps/openplexer-hub` | `internal/daemon`, `internal/adapter/...` |
-| `apps/openplexer-verify` | Every internal package except `internal/audit` |
+| `apps/openplexer-verify` | Every internal package except `internal/audit` and `internal/policy` |
 
 A trailing `/...` matches the package and every package under it. The last row is an allowlist. The test denies a new internal package to the verifier until someone adds the package to the `except` list of that rule.
 

@@ -54,7 +54,7 @@ func verifyCheckpoints(records []value, jwks []byte, tokens []string) VerifyResu
 		for j, record := range records {
 			workspace, _ := record.member("workspace_id")
 			if found := string(workspace.appendCanonical(nil)); found != cp.workspace {
-				message := fmt.Sprintf("expected workspace %s, found %s; check that the checkpoint and export came from the same team", cp.workspace, found)
+				message := fmt.Sprintf("expected workspace %s, found %s. Check that the checkpoint and export came from the same team", cp.workspace, found)
 				return (VerifyResult{Rule: "K7", Checkpoint: i + 1, Message: message}).atRecord(record, j+1)
 			}
 		}
@@ -69,7 +69,7 @@ func verifyCheckpoints(records []value, jwks []byte, tokens []string) VerifyResu
 	for i, cp := range claims {
 		if prior, exists := tips[cp.claim]; exists {
 			if prior.tip != cp.tip {
-				message := fmt.Sprintf("expected tip %s from checkpoint %d at count %d, found %s; compare independently kept checkpoints", prior.tip, prior.position, cp.count, cp.tip)
+				message := fmt.Sprintf("expected tip %s from checkpoint %d at count %d, found %s. Compare independently kept checkpoints", prior.tip, prior.position, cp.count, cp.tip)
 				return VerifyResult{Rule: "K8", Checkpoint: i + 1, Message: message}
 			}
 			continue
@@ -80,7 +80,7 @@ func verifyCheckpoints(records []value, jwks []byte, tokens []string) VerifyResu
 	covered := 0
 	for i, cp := range claims {
 		if cp.count > int64(len(records)) {
-			message := fmt.Sprintf("expected at least %d records, found %d; check for a missing suffix or an older export", cp.count, len(records))
+			message := fmt.Sprintf("expected at least %d records, found %d. Check for a missing suffix or an older export", cp.count, len(records))
 			return VerifyResult{Rule: "K9", Checkpoint: i + 1, Message: message}
 		}
 		count := int(cp.count)
@@ -92,9 +92,9 @@ func verifyCheckpoints(records []value, jwks []byte, tokens []string) VerifyResu
 			expected, _ = hash.str()
 		}
 		if expected != cp.tip {
-			message := fmt.Sprintf("expected signed tip %s, found %s at count %d; compare the export with a kept copy", cp.tip, expected, count)
+			message := fmt.Sprintf("expected signed tip %s, found %s at count %d. Compare the export with a kept copy", cp.tip, expected, count)
 			if count == 0 {
-				message = fmt.Sprintf("expected genesis hash %s at count 0, found signed tip %s; check the checkpoint", GenesisHash, cp.tip)
+				message = fmt.Sprintf("expected genesis hash %s at count 0, found signed tip %s. Check the checkpoint", GenesisHash, cp.tip)
 			}
 			failed := VerifyResult{Rule: "K10", Checkpoint: i + 1, Message: message}
 			if count > 0 {
@@ -115,13 +115,13 @@ func readCheckpoint(token string, keys value) (checkpoint, VerifyResult) {
 	}
 	parts := strings.SplitN(token, ".", 4)
 	if len(parts) != 3 {
-		return fail("K1", "expected three compact JWS segments, found an invalid segment count; check the checkpoint file")
+		return fail("K1", "expected three compact JWS segments, found an invalid segment count. Check the checkpoint file")
 	}
 	var decoded [3][]byte
 	for i, part := range parts {
 		raw, err := base64.RawURLEncoding.Strict().DecodeString(part)
 		if err != nil || part == "" || strings.ContainsAny(part, "\r\n") {
-			return fail("K1", fmt.Sprintf("expected unpadded base64url in segment %d, found invalid encoding; copy the compact token exactly", i+1))
+			return fail("K1", fmt.Sprintf("expected unpadded base64url in segment %d, found invalid encoding. Copy the compact token exactly", i+1))
 		}
 		decoded[i] = raw
 	}
@@ -130,23 +130,30 @@ func readCheckpoint(token string, keys value) (checkpoint, VerifyResult) {
 	alg, _ := header.member("alg")
 	typ, _ := header.member("typ")
 	kid, _ := header.member("kid")
-	if !ok || len(header.members) != 3 || !alg.isText("ES256") || !typ.isText(CheckpointType) || kid.kind != kindString || len(kid.units) == 0 {
-		return fail("K2", "expected a canonical checkpoint header with ES256 and a nonempty kid, found an invalid header; use an audit checkpoint token")
+	if !ok || len(header.members) != 3 || !alg.isText("ES256") || kid.kind != kindString || len(kid.units) == 0 {
+		return fail("K2", "expected a canonical checkpoint header with ES256 and a nonempty kid, found an invalid header. Use an audit checkpoint token")
+	}
+	if !typ.isText(CheckpointType) {
+		return fail("K2", fmt.Sprintf("expected typ %q, found %s. Use an audit checkpoint token", CheckpointType, typ.appendCanonical(nil)))
 	}
 	key, err := checkpointKey(keys, kid)
 	if err != nil {
-		return fail("K3", fmt.Sprintf("expected one public ES256 key for kid %s, found %v; check the trusted checkpoint JWKS", kid.appendCanonical(nil), err))
+		return fail("K3", fmt.Sprintf("expected one public ES256 key for kid %s, found %v. Check the trusted checkpoint JWKS", kid.appendCanonical(nil), err))
 	}
 	if err := policy.VerifyES256(key, parts[0]+"."+parts[1], decoded[2]); err != nil {
-		return fail("K4", fmt.Sprintf("expected a valid ES256 signature, found a signature error (%v); check the token and trusted key", err))
+		return fail("K4", fmt.Sprintf("expected a valid ES256 signature, found a signature error (%v). Check the token and trusted key", err))
 	}
 	body, ok := canonicalObject(decoded[1])
 	if !ok {
-		return fail("K6", "expected one canonical payload object, found invalid JSON or a different encoding; obtain the original checkpoint")
+		return fail("K6", "expected one canonical payload object, found invalid JSON or a different encoding. Obtain the original checkpoint")
 	}
-	version, _ := body.member("v")
+	version, present := body.member("v")
 	if version.kind != kindNumber || version.number != 1 {
-		return fail("K5", "expected checkpoint version 1, found a missing or unsupported version; check the checkpoint version")
+		found := "no version"
+		if present {
+			found = string(version.appendCanonical(nil))
+		}
+		return fail("K5", fmt.Sprintf("expected checkpoint version 1, found %s. Use a v1 audit checkpoint", found))
 	}
 	workspace, _ := body.member("workspace_id")
 	count, _ := body.member("entries")
@@ -155,16 +162,16 @@ func readCheckpoint(token string, keys value) (checkpoint, VerifyResult) {
 	issued, _ := body.member("issued_at")
 	date, _ := issued.str()
 	if len(body.members) != 5 || workspace.kind != kindString {
-		return fail("K6", "expected exactly the five v1 fields including a string workspace_id, found invalid payload fields; check the checkpoint producer")
+		return fail("K6", "expected exactly the five v1 fields including a string workspace_id, found invalid payload fields. Check the checkpoint producer")
 	}
 	if count.kind != kindNumber || count.number < 0 || count.number > maxSafeInteger || math.Trunc(count.number) != count.number {
-		return fail("K6", "expected entries to be a nonnegative safe integer, found a missing or invalid count; check the checkpoint producer")
+		return fail("K6", "expected entries to be a nonnegative safe integer, found a missing or invalid count. Check the checkpoint producer")
 	}
 	if len(hash) != 64 || strings.Trim(hash, "0123456789abcdef") != "" {
-		return fail("K6", "expected tip_hash to be 64 lowercase hex characters, found an invalid hash; check the checkpoint producer")
+		return fail("K6", "expected tip_hash to be 64 lowercase hex characters, found an invalid hash. Check the checkpoint producer")
 	}
 	if t, err := time.Parse(CreatedAtLayout, date); err != nil || t.Year() == 0 || t.Format(CreatedAtLayout) != date {
-		return fail("K6", "expected issued_at to be a real UTC timestamp with three fractional digits, found an invalid date or format; check the checkpoint producer")
+		return fail("K6", "expected issued_at to be a real UTC timestamp with a year from 0001 through 9999 and three fractional digits, found an invalid date or format. Check the checkpoint producer")
 	}
 	return checkpoint{claim{string(workspace.appendCanonical(nil)), int64(count.number)}, hash}, VerifyResult{}
 }
