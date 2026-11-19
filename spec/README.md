@@ -118,7 +118,7 @@ A fixture file is a JSON document that lists cases for one operation of one cont
 | `version` | The version of the contract. |
 | `operation` | What an implementation does with each case. The table below lists the operations. |
 | `description` | What the file covers. |
-| `reference` | The commit of the reference that produced the expected values, and the source files that the cases exercise. |
+| `reference` | The commit of the reference and the source files that the cases exercise. OpenPlexer checkpoint fixtures omit this field. |
 | `schema` | For `validate` only: the `$id` of the schema under test. |
 | `shared` | Input that every case of the file shares. |
 | `cases` | The cases. |
@@ -147,6 +147,7 @@ To run a case, do the operation on `shared` and `input`, and compare the whole r
 | `close-code` | room | None | `code`, the code of an error | `close_code`, the close code that the hub sends after the error, or null if it keeps the connection |
 | `canonicalize` | canonical-json | None | `json`, a JSON text | `canonical`, and `sha256` of its UTF-8 bytes |
 | `verify-chain` | audit | None | `records`, in chain order | A chain verification result |
+| `verify-checkpoints` | audit | `jwks` | `export` and `checkpoints`, a list of compact JWS strings | A checkpoint verification result with a rule ID on failure |
 | `bash-targets` | adapter | None | `command`, a shell command line | `targets`, the paths that the line writes |
 | `exec-segments` | adapter | None | `command`, a shell command line | `segments`, the words of each command |
 | `patch-targets` | adapter | None | `patch`, the text of an `apply_patch` call | `targets`, the paths of the patch, or null for a patch that Codex rejects |
@@ -156,7 +157,7 @@ For `validate`, validate `input` against the schema that `schema` names, and com
 
 For `evaluate`, an `expected` of `{"throws": true}` means that the reference throws an error and returns no result. The contract does not define a result for such a case, but an implementation must fail closed on it. So a runner in any language passes the case if the implementation returns `deny` with no `area`, or if it fails with an error and returns no result. The runner fails the case if the implementation returns `allow`, or a result with an `area`. `informational.error` holds the message of the reference. The [second open question of the policy contract](policy/README.md#open-questions) lists the inputs, and the fixture `evaluate-class-syntax` holds the cases.
 
-The fixture-file schema refers to the contract schemas. A fixture file that validates against it therefore has a valid `shared`, a valid `input`, and a valid `expected` in every case. `validate` is the exception, because its inputs are invalid on purpose.
+The fixture-file schema refers to the contract schemas. A fixture file that validates against it has a valid `shared` and `expected` in every case. The `validate` and `verify-checkpoints` operations allow inputs that are invalid on purpose.
 
 For `patterns-overlap` and `path-sets-overlap`, an `expected` of `{"throws": true}` means that the reference throws an error and returns no result. An implementation must fail closed on such a case: a runner passes the case only if the implementation reports an overlap. `informational.error` holds the message of the reference. The [seventh open question of the room contract](room/README.md#open-questions) lists the inputs.
 
@@ -228,3 +229,5 @@ The Go tests in `internal/spectest` run in `make check`. They need neither the r
 The tests read numbers as doubles, and a number outside their range as infinity, as [Numbers](#numbers) says. The validator in the tests compiles each pattern with the Go engine. Inside [the portable subset](#patterns), the Go engine and an ECMA-262 engine give the same verdict on a value made only of characters of the Basic Multilingual Plane, with no lone surrogate.
 
 The Go implementation runs the fixtures against its own code. The tests in `internal/policy` run every `validate` and every `evaluate` case of the policy contract. The tests in `internal/room` run every case of the Room contract. No Go code runs the `verify-signed-bundle` cases yet.
+
+The tests in `internal/audit` check every `verify-checkpoints` result. The test in `tools/auditvectors` compares the committed checkpoint fixtures with a fresh copy from the generator.

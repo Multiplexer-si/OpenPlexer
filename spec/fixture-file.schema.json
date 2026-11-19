@@ -783,6 +783,71 @@
       "if": {
         "properties": {
           "operation": {
+            "const": "verify-checkpoints"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Verify the export in `input.export` using `input.checkpoints` and the checkpoint key set in `shared.jwks`. The export can be malformed on purpose.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "$ref": "urn:openplexer:spec:audit:v1:checkpoint-verify-result"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "checkpoints": {
+                      "items": {
+                        "type": "string"
+                      },
+                      "type": "array"
+                    },
+                    "export": {}
+                  },
+                  "required": [
+                    "export",
+                    "checkpoints"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "audit"
+            ]
+          },
+          "schema": false,
+          "shared": {
+            "additionalProperties": false,
+            "properties": {
+              "jwks": {
+                "$ref": "urn:openplexer:spec:policy:v1:jwks"
+              }
+            },
+            "required": [
+              "jwks"
+            ],
+            "type": "object"
+          }
+        },
+        "required": [
+          "shared"
+        ]
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
             "const": "bash-targets"
           }
         },
@@ -1167,9 +1232,28 @@
           "shared"
         ]
       }
+    },
+    {
+      "else": {
+        "required": [
+          "reference"
+        ]
+      },
+      "if": {
+        "properties": {
+          "operation": {
+            "const": "verify-checkpoints"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "reference": false
+        }
+      }
     }
   ],
-  "description": "A list of cases for one operation of one contract. Each case pairs an input with the result that the reference gives.",
+  "description": "A list of cases for one operation of one contract. Each case pairs an input with its expected result.",
   "properties": {
     "cases": {
       "items": {
@@ -1204,6 +1288,7 @@
         "close-code",
         "canonicalize",
         "verify-chain",
+        "verify-checkpoints",
         "bash-targets",
         "exec-segments",
         "patch-targets",
@@ -1252,7 +1337,6 @@
     "version",
     "operation",
     "description",
-    "reference",
     "cases"
   ],
   "title": "Fixture file",

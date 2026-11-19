@@ -80,6 +80,8 @@ Each directory under `spec/` holds one contract: a README with the rules, and a 
 
 `tools/extract` writes the reference-compatible schemas, examples, and fixtures under `spec/`. It needs a checkout of the existing TypeScript implementation and Node. It runs outside the Go module and outside CI. [Regenerate the contracts and fixtures](../CONTRIBUTING.md#regenerate-the-contracts-and-fixtures).
 
+`tools/auditvectors` generates the OpenPlexer checkpoint fixtures. Run `go run ./tools/auditvectors` from the repository root. [Audit contract](../spec/audit/README.md#generated-and-authored-parts).
+
 ## Make targets
 
 | Target | Action |
@@ -96,4 +98,4 @@ The workflow in `.github/workflows/ci.yml` runs on every pull request and on eve
 
 The module is `github.com/multiplexer-si/openplexer`. It needs Go 1.27 or later.
 
-The three binaries use only the standard library. A test in `internal/layering` fails if a file that is not a test imports another module. The tests in `internal/spectest`, `internal/policy`, and `internal/daemon` use `github.com/santhosh-tekuri/jsonschema/v6` to compile and run the JSON Schemas, so `go.mod` requires that module.
+The three binaries use only the standard library. A test in `internal/layering` fails if a file that is not a test imports another module. The tests in `internal/spectest`, `internal/audit`, `internal/policy`, and `internal/daemon` use `github.com/santhosh-tekuri/jsonschema/v6` to compile and run the JSON Schemas, so `go.mod` requires that module.

@@ -14,7 +14,12 @@ const specDir = "../../spec"
 
 type fixtureFile struct {
 	Operation string `json:"operation"`
-	Cases     []struct {
+	Shared    struct {
+		JWKS struct {
+			Keys []map[string]any `json:"keys"`
+		} `json:"jwks"`
+	} `json:"shared"`
+	Cases []struct {
 		Name     string          `json:"name"`
 		Input    json.RawMessage `json:"input"`
 		Expected json.RawMessage `json:"expected"`
@@ -103,6 +108,9 @@ func TestFixtures(t *testing.T) {
 				var file fixtureFile
 				decode(t, readFile(t, path), &file)
 				run, ok := operations[file.Operation]
+				if file.Operation == "verify-checkpoints" {
+					run, ok = checkpointRunner(t, file.Shared.JWKS.Keys), true
+				}
 				if !ok {
 					t.Fatalf("unknown operation %q", file.Operation)
 				}
