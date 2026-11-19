@@ -143,9 +143,13 @@ const OPERATIONS: Record<string, Operation> = {
   },
   "verify-checkpoints": {
     contract: ["audit"],
-    description: "Verify the export in `input.export` using `input.checkpoints` and the checkpoint key set in `shared.jwks`. The export can be malformed on purpose.",
+    description: "Verify the export in `input.export` using `input.checkpoints` and the checkpoint key set in `shared.jwks`. A case can override that key set with the JSON text in `input.jwks_json`. The export and JWKS text can be malformed on purpose.",
     shared: strict({ jwks: { $ref: schemaId("policy", "jwks") } }),
-    input: strict({ export: {}, checkpoints: { type: "array", items: { type: "string" } } }),
+    input: strict({
+      export: {},
+      checkpoints: { type: "array", items: { type: "string" } },
+      jwks_json: { type: "string" },
+    }, ["export", "checkpoints"]),
     expected: { $ref: schemaId("audit", "checkpoint-verify-result") },
   },
   "bash-targets": {
