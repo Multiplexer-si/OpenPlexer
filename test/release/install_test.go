@@ -23,7 +23,7 @@ func TestReproducibleArchiveAndInstallGuide(t *testing.T) {
 	}
 	target := runtime.GOOS + "/" + runtime.GOARCH
 	name := fmt.Sprintf("openplexer_%s_%s_%s.tar.gz", version, runtime.GOOS, runtime.GOARCH)
-	first, second := t.TempDir(), t.TempDir()
+	first, second := filepath.Join(t.TempDir(), version), filepath.Join(t.TempDir(), version)
 	for _, dir := range []string{first, second} {
 		cmd := exec.CommandContext(t.Context(), "go", "run", "./tools/release", "-version", version, "-target", target, "-out", dir)
 		cmd.Dir = root

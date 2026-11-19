@@ -23,11 +23,11 @@ import (
 
 var targets = []string{"darwin/amd64", "darwin/arm64", "linux/amd64", "linux/arm64", "windows/amd64"}
 var appNames = []string{"openplexer", "openplexer-hub", "openplexer-verify"}
-var versionPattern = regexp.MustCompile(`^v[0-9][a-zA-Z0-9.+-]*$`)
+var versionPattern = regexp.MustCompile(`^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`)
 
 func main() {
 	version := flag.String("version", "", "Release tag to embed in the binaries")
-	out := flag.String("out", "dist/release", "Output directory for archives and SHA256SUMS")
+	out := flag.String("out", "", "New output directory for archives and SHA256SUMS (default dist/release/<version>)")
 	target := flag.String("target", "", "Build only this GOOS/GOARCH pair")
 	flag.Parse()
 	if err := release(*version, *out, *target); err != nil {
@@ -47,26 +47,36 @@ func release(version, out, target string) error {
 		}
 		selected = []string{target}
 	}
+	if out == "" {
+		out = filepath.Join("dist", "release", version)
+	}
+	out = filepath.Clean(out)
+	if err := requireNewOutput(out); err != nil {
+		return err
+	}
 
 	mtime, err := releaseTime()
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(out, 0755); err != nil {
+	parent := filepath.Dir(out)
+	if err := os.MkdirAll(parent, 0755); err != nil {
 		return err
 	}
-	stage, err := os.MkdirTemp(out, ".build-")
+	stage, err := os.MkdirTemp(parent, ".build-")
 	if err != nil {
 		return err
 	}
 	defer os.RemoveAll(stage)
 	bin := filepath.Join(stage, "bin")
-	if err := os.Mkdir(bin, 0755); err != nil {
-		return err
+	artifacts := filepath.Join(stage, "artifacts")
+	for _, dir := range []string{bin, artifacts} {
+		if err := os.Mkdir(dir, 0755); err != nil {
+			return err
+		}
 	}
 
 	var sums strings.Builder
-	var archives []string
 	for _, target := range selected {
 		goos, goarch, _ := strings.Cut(target, "/")
 		args := []string{"build", "-trimpath", "-buildvcs=false", "-ldflags", "-s -w -X main.version=" + version, "-o", bin + string(os.PathSeparator)}
@@ -96,7 +106,7 @@ func release(version, out, target string) error {
 		}
 
 		name := fmt.Sprintf("openplexer_%s_%s_%s%s", version, goos, goarch, extension)
-		f, err := os.Create(filepath.Join(stage, name))
+		f, err := os.Create(filepath.Join(artifacts, name))
 		if err != nil {
 			return err
 		}
@@ -106,16 +116,23 @@ func release(version, out, target string) error {
 			return fmt.Errorf("write %s: %w", name, err)
 		}
 		fmt.Fprintf(&sums, "%x  %s\n", hash.Sum(nil), name)
-		archives = append(archives, name)
 	}
 
-	if err := os.WriteFile(filepath.Join(stage, "SHA256SUMS"), []byte(sums.String()), 0644); err != nil {
+	if err := os.WriteFile(filepath.Join(artifacts, "SHA256SUMS"), []byte(sums.String()), 0644); err != nil {
 		return err
 	}
-	for _, name := range append(archives, "SHA256SUMS") {
-		if err := os.Rename(filepath.Join(stage, name), filepath.Join(out, name)); err != nil {
-			return err
-		}
+	if err := requireNewOutput(out); err != nil {
+		return err
+	}
+	// A competing build publishes a nonempty directory, which Rename cannot replace.
+	return os.Rename(artifacts, out)
+}
+
+func requireNewOutput(out string) error {
+	if _, err := os.Lstat(out); err == nil {
+		return fmt.Errorf("output directory %q already exists", out)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
 	}
 	return nil
 }
