@@ -15,7 +15,7 @@ go run ./test/realagent run
 The harness refuses to run when `CLAUDECODE` or `CODEX_THREAD_ID` is set. Those variables mean that the shell belongs to a Claude Code or Codex session, and the agents would inherit that session's variables. To run the harness from an agent session, start it with a clean environment:
 
 ```sh
-env -i HOME="$HOME" USER="$USER" PATH="$PATH" SHELL="$SHELL" TMPDIR="$TMPDIR" go run ./test/realagent run
+env -i HOME="$HOME" USER="$USER" PATH="$PATH" SHELL="$SHELL" TMPDIR="$TMPDIR" OPENPLEXER_BIN_DIR="${OPENPLEXER_BIN_DIR:-}" go run ./test/realagent run
 ```
 
 Flags of `run`:
@@ -26,7 +26,9 @@ Flags of `run`:
 | `-scenario` | `all` | `allow_write`, `deny_write`, `deny_shell`, `stale`, `no_policy`, `offline`, or `all` |
 | `-out` | A new `realagent-out-*` directory in the system temporary directory | Raw output of each run. The harness keeps it and prints its path. |
 
-The command builds `./apps/openplexer` into a temporary directory, prints one line for each run, and exits with status 1 if a run fails. Before the first scenario of an agent, it asks the agent whether it is signed in, with `claude auth status` or `codex login status`. If the agent is not signed in, no scenario of that agent starts.
+The command builds `./apps/openplexer` into a temporary directory, prints one line for each run, and exits with status 1 if a run fails. Set `OPENPLEXER_BIN_DIR` to the absolute path of a directory containing a prebuilt `openplexer`. The report then records its `--version` output.
+
+Before the first scenario of an agent, the command checks sign-in with `claude auth status` or `codex login status`. If the agent is not signed in, no scenario of that agent starts.
 
 `go run ./test/realagent trust` checks the Codex trust step of an installed hook and prints a report. It makes no model call, so it costs nothing. [The Codex trust step](#the-codex-trust-step) describes it.
 

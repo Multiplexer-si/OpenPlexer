@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/audit"
 	"github.com/multiplexer-si/openplexer/internal/hub"
 	"github.com/multiplexer-si/openplexer/internal/policy"
+	"github.com/multiplexer-si/openplexer/internal/testbin"
 )
 
 func TestVersion(t *testing.T) {
@@ -75,6 +77,7 @@ func TestAdminWorkflow(t *testing.T) {
 	projectURL := "/api/v1/projects/" + example.ProjectID
 	bundleURL := projectURL + "/policy.bundle"
 	request(t, handler, "GET", bundleURL, "", nil, http.StatusUnauthorized)
+	request(t, handler, "GET", bundleURL, "invalid-token", nil, http.StatusUnauthorized)
 	request(t, handler, "GET", bundleURL, member, nil, http.StatusNotFound)
 	project := request(t, handler, "GET", projectURL, member, nil, http.StatusOK)
 	var scope hub.Project
@@ -98,6 +101,10 @@ func TestAdminWorkflow(t *testing.T) {
 	newer := marshal(t, document)
 	request(t, handler, "PUT", projectURL+"/policy", lead, newer, http.StatusOK)
 	request(t, handler, "PUT", projectURL+"/policy", lead, bundle, http.StatusConflict)
+	const auditURL = "/api/v1/audit/export"
+	request(t, handler, "GET", auditURL, "", nil, http.StatusUnauthorized)
+	request(t, handler, "GET", auditURL, member, nil, http.StatusForbidden)
+	request(t, handler, "GET", auditURL, lead, nil, http.StatusOK)
 	// A freshly opened store serves the new policy with the same public key.
 	handler = hub.Open(dir).Handler()
 	verify(t, request(t, handler, "GET", bundleURL, member, nil, http.StatusOK), keys, newer)
@@ -164,13 +171,29 @@ func TestUsage(t *testing.T) {
 
 func commands(t *testing.T, dir string) func(int, ...string) string {
 	t.Helper()
+	bin, err := testbin.Dir("openplexer-hub")
+	if err != nil {
+		t.Fatal(err)
+	}
 	return func(want int, args ...string) string {
 		t.Helper()
 		var stdout, stderr bytes.Buffer
 		if args[0] != "-h" {
 			args = append([]string{args[0], "-data-dir", dir}, args[1:]...)
 		}
-		if got := run(args, &stdout, &stderr); got != want {
+		var got int
+		if bin == "" {
+			got = run(args, &stdout, &stderr)
+		} else {
+			cmd := exec.CommandContext(t.Context(), filepath.Join(bin, "openplexer-hub"), args...)
+			cmd.Stdout, cmd.Stderr = &stdout, &stderr
+			status, err := testbin.Run(cmd)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got = status
+		}
+		if got != want {
 			t.Fatalf("%v returned %d, want %d (%s)", args, got, want, &stderr)
 		}
 		return strings.TrimSpace(stdout.String())
