@@ -173,20 +173,13 @@ func (g *Gate) admit(signed *policy.SignedBundle, inForce *policy.Verified) (*po
 	}
 	if floor == nil {
 		floor = make(map[string]floorEntry)
-		if inForce != nil {
-			entry, err := floorEntryFor(inForce)
-			if err != nil {
-				return nil, "", err
-			}
-			floor[inForce.Bundle.ProjectID] = entry
-			if err := writeFloor(g.home, floor); err != nil {
-				return nil, "", err
-			}
+		if err := g.seedFloor(floor, inForce); err != nil {
+			return nil, "", err
 		}
 	}
 
 	got := candidate.Bundle
-	entry, err := floorEntryFor(candidate)
+	entry, err := floorEntryFor(got.Version, candidate.Payload)
 	if err != nil {
 		return nil, "", err
 	}

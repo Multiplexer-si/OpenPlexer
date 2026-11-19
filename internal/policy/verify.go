@@ -142,19 +142,29 @@ func (v BundleVerifier) Verify(signed *SignedBundle, keys KeySet) (*Verified, er
 	if v.BeforePayloadDecode != nil {
 		v.BeforePayloadDecode()
 	}
-	payload, err := readPayload(signed.payload, signed.unencoded)
+	bundle, payload, err := signed.ParseUnverifiedPayload()
 	if err != nil {
 		return nil, err
 	}
+	return &Verified{Bundle: bundle, Payload: payload}, nil
+}
+
+// ParseUnverifiedPayload decodes and validates the bundle without checking
+// the signature. Only Verify establishes trust in the payload.
+func (signed *SignedBundle) ParseUnverifiedPayload() (*Bundle, []byte, error) {
+	payload, err := readPayload(signed.payload, signed.unencoded)
+	if err != nil {
+		return nil, nil, err
+	}
 	if len(payload) > MaxBundleBytes {
-		return nil, ErrBundlePayloadTooLarge
+		return nil, nil, ErrBundlePayloadTooLarge
 	}
 	payload = decodeUTF8(payload)
 	bundle, err := ParseBundle(payload)
 	if err != nil {
-		return nil, fmt.Errorf("the signed payload is not a bundle: %w", err)
+		return nil, nil, fmt.Errorf("the signed payload is not a bundle: %w", err)
 	}
-	return &Verified{Bundle: bundle, Payload: payload}, nil
+	return bundle, payload, nil
 }
 
 // VerifyES256 verifies the decoded signature over the exact JWS signing input.

@@ -149,6 +149,63 @@ func TestAdmissionMigratesAnEnforcedPolicyWithoutAFloor(t *testing.T) {
 	load(t, open(t, home, loadedAt), original)
 }
 
+func TestAdmissionMigratesARejectedPolicyWithoutAFloor(t *testing.T) {
+	first, next := newSigner(t), newSigner(t)
+	original := bundleText("p", 2)
+	for _, tc := range []struct {
+		name, reason string
+		payload      []byte
+	}{
+		{"older version", "older than version floor 2", bundleText("p", 1)},
+		{"different content", "matches version floor 2 with different content", bytes.Replace(original, []byte("src/**"), []byte("docs/**"), 1)},
+		{"same canonical content", "", append([]byte("\n  "), original...)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			configure(t, home, Settings{KeySet: first.keySet(t)})
+			if err := writeJSON(home, policyFile, storedPolicy{Token: string(first.sign(t, original)), ConfirmedAt: loadedAt}); err != nil {
+				t.Fatal(err)
+			}
+			configure(t, home, Settings{KeySet: next.keySet(t)})
+			gate := open(t, home, loadedAt)
+			if gate.Status().State != Rejected {
+				t.Fatalf("legacy policy after key rotation = %+v, want rejected", gate.Status())
+			}
+			candidate := next.sign(t, tc.payload)
+			if tc.reason != "" {
+				expectFloorRejection(t, gate, candidate, tc.reason)
+			} else if status := load(t, gate, candidate); status.State != Verified || status.Version != 2 {
+				t.Fatalf("load after re-signing = %+v, want verified version 2", status)
+			}
+			removeStoredPolicy(t, home)
+			expectFloorRejection(t, open(t, home, loadedAt), next.sign(t, bundleText("p", 1)), "older than version floor 2")
+		})
+	}
+}
+
+func TestAdmissionRecoversFromAnUnparseableStoredPolicyWithoutAFloor(t *testing.T) {
+	keys := newSigner(t)
+	for _, tc := range []struct{ name, content string }{
+		{"invalid policy file", "{"},
+		{"invalid payload", fmt.Sprintf(`{"token":%q}`, keys.sign(t, []byte(`{"project_id":"p","version":2`)))},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			home := t.TempDir()
+			configure(t, home, Settings{KeySet: keys.keySet(t)})
+			if err := os.WriteFile(filepath.Join(home, policyFile), []byte(tc.content), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			gate := open(t, home, loadedAt)
+			if gate.Status().State != Rejected {
+				t.Fatalf("legacy policy = %+v, want rejected", gate.Status())
+			}
+			if status := load(t, gate, keys.sign(t, bundleText("p", 1))); status.State != Verified || status.Version != 1 {
+				t.Fatalf("load = %+v, want verified version 1", status)
+			}
+		})
+	}
+}
+
 func TestAdmissionKeepsSeparateFloorsAcrossProjectSwitches(t *testing.T) {
 	home := t.TempDir()
 	keys := newSigner(t)

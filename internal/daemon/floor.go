@@ -22,13 +22,47 @@ type floorEntry struct {
 	SHA256  string `json:"sha256"`
 }
 
-func floorEntryFor(bundle *policy.Verified) (floorEntry, error) {
-	canonical, err := audit.Canonical(bundle.Payload)
+func floorEntryFor(version int64, payload []byte) (floorEntry, error) {
+	canonical, err := audit.Canonical(payload)
 	if err != nil {
 		return floorEntry{}, fmt.Errorf("cannot hash the bundle for the policy version floor: %w", err)
 	}
 	digest := sha256.Sum256(canonical)
-	return floorEntry{Version: bundle.Bundle.Version, SHA256: hex.EncodeToString(digest[:])}, nil
+	return floorEntry{Version: version, SHA256: hex.EncodeToString(digest[:])}, nil
+}
+
+func (g *Gate) seedFloor(floor map[string]floorEntry, inForce *policy.Verified) error {
+	var bundle *policy.Bundle
+	var payload []byte
+	switch {
+	case inForce != nil:
+		bundle, payload = inForce.Bundle, inForce.Payload
+	case g.status.State == Rejected:
+		// A rejected policy can constrain admission through the floor only.
+		stored, err := readStoredPolicy(g.home)
+		if err != nil || stored == nil {
+			return nil
+		}
+		signed, err := policy.ReadSignedBundle(stored.Token)
+		if err != nil {
+			return nil
+		}
+		bundle, payload, err = signed.ParseUnverifiedPayload()
+		if err != nil {
+			return nil
+		}
+	default:
+		return nil
+	}
+	entry, err := floorEntryFor(bundle.Version, payload)
+	if err != nil {
+		if inForce == nil {
+			return nil
+		}
+		return err
+	}
+	floor[bundle.ProjectID] = entry
+	return writeFloor(g.home, floor)
 }
 
 // readFloor returns nil only when the file is missing.

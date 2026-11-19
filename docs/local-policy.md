@@ -154,7 +154,7 @@ With no verified policy, the gate does not answer allow or deny. It answers that
 
 The floor stores one version and hash per project because every older version is already refused. The gate saves the floor before replacing `policy.json`. Both writes use the home lock and replace each file atomically. If the policy write fails after the floor is saved, retry with the same bundle or a higher version.
 
-For an existing home without a floor file, the first load or sync that verifies an eligible bundle seeds the floor from the policy in force. This also happens if the version checks then refuse the incoming bundle. Opening the home stays read-only. The stored policy must still pass the reopen checks at the time of migration.
+For an existing home without a floor file, the first load or sync that verifies an eligible bundle seeds the floor from the stored token's `project_id`, `version`, and canonical content hash. If the stored policy is rejected, the gate reads the payload under the same size and parsing rules as a load, without trusting its signature. That seed can only narrow which verified bundles the gate admits. If the rejected policy cannot be parsed and hashed, the floor starts empty. The gate saves a seeded floor even if the version checks then refuse the incoming bundle. Opening the home stays read-only.
 
 `openplexer configure` preserves the floor, including when you change the key set. Removing `policy.json` alone also preserves the floor. To reset all project floors, stop any commands writing to the home and remove `policy-floor.json` by hand. To load an older version, also remove any stored policy that would block the load or seed the floor again.
 
