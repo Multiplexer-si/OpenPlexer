@@ -40,6 +40,8 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 | See what the existing implementation does today | [Inventory of the existing implementation](docs/inventory.md) |
 | Change the code or the documentation | [Contributing](CONTRIBUTING.md) |
 | Publish a release or rebuild its archives | [Cut a release](docs/release.md) |
+| Report a vulnerability | [Security policy](SECURITY.md) |
+| Review changes and cut releases | [Maintainers](MAINTAINERS.md) |
 | Implement a format in another language | [The contracts in `spec/`](spec/README.md) |
 | Check where the material in this repository comes from | [Provenance and scope](docs/provenance.md) |
 
@@ -57,3 +59,5 @@ make build
 ## License
 
 OpenPlexer is licensed under Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
+
+See the [third-party notices](THIRD_PARTY_NOTICES.md) for the licenses of code included in the binaries.
