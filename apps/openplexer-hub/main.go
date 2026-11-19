@@ -8,6 +8,7 @@ import (
 	"io"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/hub"
@@ -20,6 +21,7 @@ Commands:
   remove-member   Revoke a member's bearer token
   add-project     Scope a project to one repository
   publish-policy  Publish a JSON policy bundle
+  export-audit    Write the audit export, checkpoint, and public keys
   serve           Start the HTTP server
 Use <command> -h for command flags.
 `
@@ -67,6 +69,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 		project := flags.String("project", "", "Project ID")
 		path := flags.String("file", "", "Path to the JSON policy bundle")
 		action = func(s *hub.Store) error { return publish(s, *project, *path) }
+	case "export-audit":
+		out := flags.String("out", "", "Output directory for the three audit files")
+		action = func(s *hub.Store) error { return exportAudit(s, *out) }
 	case "serve":
 		listen := flags.String("listen", "127.0.0.1:8787", "HTTP listen address")
 		action = func(s *hub.Store) error { return serve(s, *listen) }
@@ -89,6 +94,47 @@ func run(args []string, stdout, stderr io.Writer) int {
 		return 1
 	}
 	return 0
+}
+
+func exportAudit(s *hub.Store, out string) error {
+	if out == "" {
+		return errors.New("--out is required")
+	}
+	snapshot, err := s.ExportAudit()
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(out, 0700); err != nil {
+		return err
+	}
+	stage, err := os.MkdirTemp(out, ".audit-export-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+	files := []struct {
+		name string
+		data []byte
+	}{
+		{"jwks.json", snapshot.JWKS},
+		{"checkpoint.jws", []byte(snapshot.Checkpoint)},
+		{"export.json", snapshot.Export},
+	}
+	for _, file := range files {
+		if err := os.WriteFile(filepath.Join(stage, file.name), file.data, 0600); err != nil {
+			return err
+		}
+	}
+	// Link without overwriting. Publish the log after its key set and checkpoint.
+	for i, file := range files {
+		if err := os.Link(filepath.Join(stage, file.name), filepath.Join(out, file.name)); err != nil {
+			for _, published := range files[:i] {
+				err = errors.Join(err, os.Remove(filepath.Join(out, published.name)))
+			}
+			return fmt.Errorf("publish audit files: %w", err)
+		}
+	}
+	return nil
 }
 
 func publish(s *hub.Store, project, path string) error {

@@ -1510,6 +1510,135 @@
       }
     },
     {
+      "name": "repeated top-level member",
+      "why": "The export repeats an extension member.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjowLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.WOoYtvz59zxJDY32ypkNSK_g_2wPe6VfJX_h2czU3-POjZph6WBCWOELWfNhRYQsj9aRzdMj_lfcbLRDH5BUHA"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null,
+          "note": "draft",
+          "note": "kept"
+        }
+      },
+      "expected": {
+        "ok": false,
+        "rule": "A6"
+      }
+    },
+    {
+      "name": "repeated entry member",
+      "why": "The second record repeats the display result.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjoyLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjU0NGZlMDFhNDY4ZGNhZGY3ZGViMjM1OTE1NTVkYTExNmZmYmYyNmMwNzBjNjU3ZTRjYzVmMDhkMzMzYjlkY2UiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.UimQDEd3QhbT3SZNki48gMRv6wB7zudenh8O3lep-WVeZVOuIY6glhk7HdvDDdjQtObcKlLt09yAKQHPF5QANA"
+        ],
+        "export": {
+          "entries": [
+            {
+              "result": "old",
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "broken_at": "18",
+        "ok": false,
+        "record_number": 2,
+        "rule": "A1"
+      }
+    },
+    {
+      "name": "repeated meta member",
+      "why": "The second record repeats a name in meta using two spellings of the same decoded name.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjoyLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjU0NGZlMDFhNDY4ZGNhZGY3ZGViMjM1OTE1NTVkYTExNmZmYmYyNmMwNzBjNjU3ZTRjYzVmMDhkMzMzYjlkY2UiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.UimQDEd3QhbT3SZNki48gMRv6wB7zudenh8O3lep-WVeZVOuIY6glhk7HdvDDdjQtObcKlLt09yAKQHPF5QANA"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "18",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1,
+                "\u0076ersion": 2
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "hash": "544fe01a468dcadf7deb23591555da116ffbf26c070c657e4cc5f08d333b9dce",
+              "result": "updated"
+            },
+            {
+              "id": "11",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "policy.updated",
+              "target": "prj-checkpoint-test",
+              "reason": null,
+              "meta": {
+                "version": 1
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "1d6981cb43cff846849a04871f1a3e8efb53dcca15c2ce19d037a70f1826f95b",
+              "result": "updated"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "broken_at": "18",
+        "ok": false,
+        "record_number": 2,
+        "rule": "A1"
+      }
+    },
+    {
       "name": "duplicate keys member in the JWKS",
       "why": "The trusted JWKS repeats the keys member, even though its last value contains the signer.",
       "input": {

@@ -2,19 +2,13 @@ package audit
 
 import (
 	"bytes"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
-	"math/big"
 	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
 	"testing"
-	"time"
-	"unicode/utf16"
 
 	"github.com/santhosh-tekuri/jsonschema/v6"
 )
@@ -32,38 +26,31 @@ func TestMissingGenesisRuleAppliesToNonemptyExports(t *testing.T) {
 	}
 }
 
-type checkpointSchemas struct {
-	entry, header, payload *jsonschema.Schema
-}
-
 type checkpointInput struct {
 	Export      json.RawMessage `json:"export"`
 	Checkpoints []string        `json:"checkpoints"`
 	JWKSJSON    *string         `json:"jwks_json"`
 }
 
+func resultSchema(t *testing.T) *jsonschema.Schema {
+	t.Helper()
+	const name = "checkpoint-verify-result"
+	var doc any
+	decode(t, readFile(t, filepath.Join(specDir, "audit", "v1", name+".schema.json")), &doc)
+	compiler := jsonschema.NewCompiler()
+	if err := compiler.AddResource(auditSchemaID+name, doc); err != nil {
+		t.Fatal(err)
+	}
+	schema, err := compiler.Compile(auditSchemaID + name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return schema
+}
+
 func checkpointRunner(t *testing.T, sharedJWKS json.RawMessage) func(*testing.T, json.RawMessage, json.RawMessage) {
 	t.Helper()
-	compiler := jsonschema.NewCompiler()
-	for _, name := range []string{"export", "checkpoint-protected-header", "checkpoint-payload"} {
-		var schema any
-		decode(t, readFile(t, filepath.Join(specDir, "audit", "v1", name+".schema.json")), &schema)
-		if err := compiler.AddResource(auditSchemaID+name, schema); err != nil {
-			t.Fatal(err)
-		}
-	}
-	compile := func(name string) *jsonschema.Schema {
-		schema, err := compiler.Compile(auditSchemaID + name)
-		if err != nil {
-			t.Fatal(err)
-		}
-		return schema
-	}
-	schemas := checkpointSchemas{
-		entry:   compile("export#/properties/entries/items"),
-		header:  compile("checkpoint-protected-header"),
-		payload: compile("checkpoint-payload"),
-	}
+	schema := resultSchema(t)
 	return func(t *testing.T, input, expected json.RawMessage) {
 		var in checkpointInput
 		decode(t, input, &in)
@@ -71,264 +58,187 @@ func checkpointRunner(t *testing.T, sharedJWKS json.RawMessage) func(*testing.T,
 		if in.JWKSJSON != nil {
 			jwks = json.RawMessage(*in.JWKSJSON)
 		}
-		got := checkCheckpointFixture(t, schemas, jwks, in)
+		got := VerifyExport(in.Export, jwks, in.Checkpoints...)
+		result := checkResult(t, schema, got)
 		var want any
 		decode(t, expected, &want)
-		encoded, err := json.Marshal(got)
-		if err != nil {
-			t.Fatal(err)
-		}
-		var result any
-		decode(t, encoded, &result)
 		if !reflect.DeepEqual(result, want) {
-			t.Errorf("result = %s, want %s", encoded, expected)
+			t.Errorf("result = %v, want %s", result, expected)
 		}
 	}
 }
 
-// checkCheckpointFixture evaluates the published cases using the published
-// schemas, the audit hash code, and the Go crypto package.
-func checkCheckpointFixture(t *testing.T, schemas checkpointSchemas, jwks json.RawMessage, in checkpointInput) map[string]any {
-	export, err := parse(in.Export)
+func checkResult(t *testing.T, schema *jsonschema.Schema, result VerifyResult) any {
+	t.Helper()
+	encoded, err := json.Marshal(result)
 	if err != nil {
-		return fixtureFailure("A6", 0)
+		t.Fatal(err)
 	}
-	records, _ := export.member("entries")
-	cursor, hasCursor := export.member("next_cursor")
-	if records.kind != kindArray || !hasCursor || cursor.kind != kindNull {
-		return fixtureFailure("A6", 0)
+	var wire any
+	decode(t, encoded, &wire)
+	if err := schema.Validate(wire); err != nil {
+		t.Fatalf("result %s violates schema: %v", encoded, err)
 	}
-	slices.Reverse(records.items)
-	entries := make([]any, len(records.items))
-	previous := GenesisHash
-	for i, wireRecord := range records.items {
-		entry := fixtureJSON(wireRecord)
-		entries[i] = entry
-		if schemas.entry.Validate(entry) != nil {
-			return atRecord(fixtureFailure("A1", 0), entries, i)
+	if !result.OK {
+		line := result.Diagnostic()
+		if strings.ContainsAny(line, "\r\n") || !strings.Contains(line, "rule "+result.Rule+": ") || result.Message == "" {
+			t.Errorf("incomplete diagnostic %q", line)
 		}
-		record := entry.(map[string]any)
-		if record["prev_hash"] != previous {
-			rule := "A5"
-			if i == 0 {
-				rule = "A4"
+	}
+	return wire
+}
+
+func chainExportRunner(t *testing.T) func(*testing.T, json.RawMessage, json.RawMessage) {
+	t.Helper()
+	schema := resultSchema(t)
+	return func(t *testing.T, input, expected json.RawMessage) {
+		runVerifyChain(t, input, expected)
+
+		var in struct {
+			Records []map[string]json.RawMessage `json:"records"`
+		}
+		var want struct {
+			OK       bool
+			BrokenAt string `json:"broken_at"`
+			Entries  int
+		}
+		decode(t, input, &in)
+		decode(t, expected, &want)
+
+		rule, position := "", 0
+		previous := GenesisHash
+		for i, record := range in.Records {
+			var id, action, prevHash, hash string
+			decode(t, record["id"], &id)
+			decode(t, record["action"], &action)
+			decode(t, record["prev_hash"], &prevHash)
+			decode(t, record["hash"], &hash)
+			record["result"], _ = json.Marshal(ActionResult(action))
+			if !want.OK && id == want.BrokenAt && position == 0 {
+				position = i + 1
+				switch {
+				case prevHash == previous:
+					rule = "A3"
+				case i == 0:
+					rule = "A4"
+				default:
+					rule = "A5"
+				}
 			}
-			return atRecord(fixtureFailure(rule, 0), entries, i)
+			previous = hash
 		}
-		computed, err := hashOf(previous, wireRecord)
+		slices.Reverse(in.Records)
+		export, err := json.Marshal(map[string]any{"entries": in.Records, "next_cursor": nil})
 		if err != nil {
 			t.Fatal(err)
 		}
-		if record["hash"] != computed {
-			return atRecord(fixtureFailure("A3", 0), entries, i)
+		got := VerifyExport(export, nil)
+		checkResult(t, schema, got)
+		if got.OK != want.OK || got.Rule != rule || got.RecordNumber != position ||
+			got.Entries != want.Entries || (!want.OK && string(got.BrokenAt) != `"`+want.BrokenAt+`"`) {
+			t.Errorf("result = %+v, want chain result %+v, rule %s and position %d", got, want, rule, position)
 		}
-		previous = computed
 	}
+}
 
-	type position struct {
-		workspace string
-		count     int64
-	}
-	type claim struct {
-		position
-		tip string
-	}
-	var keys []value
-	if len(in.Checkpoints) > 0 {
-		keys = fixtureKeys(jwks)
-	}
-	claims := make([]claim, len(in.Checkpoints))
-	for i, token := range in.Checkpoints {
-		body, rule := checkFixtureToken(schemas, keys, token)
-		if rule != "" {
-			return fixtureFailure(rule, i+1)
+func TestExportParsing(t *testing.T) {
+	example := readFile(t, filepath.Join(specDir, "audit", "v1", "examples", "export", "three-records.json"))
+	replace := func(before, after string) []byte {
+		got := bytes.Replace(example, []byte(before), []byte(after), 1)
+		if bytes.Equal(got, example) {
+			t.Fatalf("cannot replace %q in the export example", before)
 		}
-		workspace := body["workspace_id"].(string)
-		for j, entry := range entries {
-			if entry.(map[string]any)["workspace_id"] != workspace {
-				return atRecord(fixtureFailure("K7", i+1), entries, j)
+		return got
+	}
+	for _, tc := range []struct {
+		name, rule string
+		data       []byte
+	}{
+		{"trailing value", "A6", append(bytes.Clone(example), []byte("{}")...)},
+		{"invalid UTF-8", "A6", append(bytes.Clone(example), 0xff)},
+		{"wrong entries case", "A6", replace(`"entries":`, `"Entries":`)},
+		{"repeated entries", "A6", replace(`"entries":`, `"entries":[],"\u0065ntries":`)},
+		{"nested export duplicate", "A6", replace(`"entries":`, `"extension":{"x":0,"x":1},"entries":`)},
+		{"wrong action case", "A1", replace(`"action":`, `"Action":`)},
+		{"duplicate record field", "A1", replace(`"action":`, `"action":"different","action":`)},
+		{"duplicate meta field", "A1", replace(`"meta": {`, `"meta": {"x":[{"a":0,"a":1}],`)},
+		{"invalid agent member", "A1", replace(`"agent_member_id": "mem-ana"`, `"agent_member_id": 17`)},
+		{"missing id", "A1", replace(`"id":`, `"unknown_id":`)},
+		{"extensions accepted", "", replace(`"action":`, `"v":2,"Action":"different","action":`)},
+		{"display result isn't trusted", "", replace(`"result": "updated"`, `"result": "changed"`)},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := VerifyExport(tc.data, nil)
+			if got.Rule != tc.rule || got.OK != (tc.rule == "") {
+				t.Fatalf("VerifyExport = %+v, want rule %q", got, tc.rule)
+			}
+			if got.Rule == "A1" && (got.RecordNumber != 3 || (len(got.BrokenAt) == 0) != (tc.name == "missing id")) {
+				t.Errorf("wrong record location: %+v", got)
+			}
+		})
+	}
+}
+
+func TestCheckpointRejectsAmbiguousKeysAndNoncanonicalSegments(t *testing.T) {
+	var vectors fixtureFile
+	decode(t, readFile(t, filepath.Join(specDir, "audit", "v1", "fixtures", "checkpoint.json")), &vectors)
+	for _, vector := range vectors.Cases {
+		if vector.Name != "checkpoint at the tip" {
+			continue
+		}
+		var in checkpointInput
+		decode(t, vector.Input, &in)
+		var keys struct{ Keys []json.RawMessage }
+		decode(t, vectors.Shared.JWKS, &keys)
+		token := in.Checkpoints[0]
+		parts := strings.Split(token, ".")
+		headerJSON, err := base64.RawURLEncoding.DecodeString(parts[0])
+		if err != nil {
+			t.Fatal(err)
+		}
+		var header struct{ Kid string }
+		decode(t, headerJSON, &header)
+		for _, raw := range keys.Keys {
+			var key map[string]any
+			decode(t, raw, &key)
+			if key["kid"] != header.Kid {
+				continue
+			}
+			t.Run("duplicate kid even with an unusable key", func(t *testing.T) {
+				jwks, err := json.Marshal(map[string]any{"keys": []any{key, map[string]any{"kid": header.Kid}}})
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got := VerifyExport(in.Export, jwks, token); got.Rule != "K3" {
+					t.Errorf("VerifyExport = %+v, want K3", got)
+				}
+			})
+			for name, change := range map[string]func(map[string]any){
+				"private":        func(k map[string]any) { k["d"] = nil },
+				"spaces in x":    func(k map[string]any) { k["x"] = k["x"].(string) + "\n" },
+				"extra key ops":  func(k map[string]any) { k["key_ops"] = []string{"verify", "sign"} },
+				"different case": func(k map[string]any) { k["kid"] = strings.ToUpper(header.Kid) },
+			} {
+				t.Run(name, func(t *testing.T) {
+					var key map[string]any
+					decode(t, raw, &key)
+					change(key)
+					jwks, err := json.Marshal(map[string]any{"keys": []any{key}})
+					if err != nil {
+						t.Fatal(err)
+					}
+					if got := VerifyExport(in.Export, jwks, token); got.Rule != "K3" {
+						t.Errorf("VerifyExport = %+v, want K3", got)
+					}
+				})
 			}
 		}
-		claims[i] = claim{position{workspace, int64(body["entries"].(float64))}, body["tip_hash"].(string)}
-	}
-	tips := map[position]string{}
-	for i, claim := range claims {
-		if prior, seen := tips[claim.position]; seen && prior != claim.tip {
-			return fixtureFailure("K8", i+1)
-		}
-		tips[claim.position] = claim.tip
-	}
-	var covered int64
-	for i, claim := range claims {
-		if claim.count > int64(len(entries)) {
-			return fixtureFailure("K9", i+1)
-		}
-		if claim.count == 0 && claim.tip != GenesisHash {
-			return fixtureFailure("K10", i+1)
-		}
-		if claim.count > 0 {
-			index := int(claim.count - 1)
-			if entries[index].(map[string]any)["hash"] != claim.tip {
-				return atRecord(fixtureFailure("K10", i+1), entries, index)
+		for _, bad := range []string{token + "\n", parts[0] + ".AB." + parts[2], parts[0] + ".." + parts[2]} {
+			if got := VerifyExport(in.Export, vectors.Shared.JWKS, bad); got.Rule != "K1" {
+				t.Errorf("VerifyExport = %+v, want K1", got)
 			}
 		}
-		covered = max(covered, claim.count)
+		return
 	}
-
-	result := map[string]any{"ok": true, "entries": len(entries), "checkpoint_entries": nil, "completeness": "not_proven"}
-	if len(claims) > 0 {
-		result["checkpoint_entries"] = covered
-		result["completeness"] = "through_checkpoint"
-	}
-	return result
-}
-
-func fixtureJSON(v value) any {
-	switch v.kind {
-	case kindBool:
-		return v.flag
-	case kindNumber:
-		return v.number
-	case kindString:
-		s, _ := v.str()
-		return s
-	case kindArray:
-		items := make([]any, len(v.items))
-		for i, item := range v.items {
-			items[i] = fixtureJSON(item)
-		}
-		return items
-	case kindObject:
-		members := make(map[string]any, len(v.members))
-		for _, m := range v.members {
-			members[string(utf16.Decode(m.key))] = fixtureJSON(m.value)
-		}
-		return members
-	default:
-		return nil
-	}
-}
-
-func fixtureFailure(rule string, checkpoint int) map[string]any {
-	result := map[string]any{"ok": false, "rule": rule}
-	if checkpoint > 0 {
-		result["checkpoint"] = checkpoint
-	}
-	return result
-}
-
-func atRecord(result map[string]any, entries []any, index int) map[string]any {
-	result["record_number"] = index + 1
-	record, _ := entries[index].(map[string]any)
-	if id, ok := record["id"].(string); ok {
-		result["broken_at"] = id
-	}
-	return result
-}
-
-func fixtureSegment(segment string) []byte {
-	decoded, err := base64.RawURLEncoding.DecodeString(segment)
-	if err != nil || segment == "" || base64.RawURLEncoding.EncodeToString(decoded) != segment {
-		return nil
-	}
-	return decoded
-}
-
-func fixtureCanonicalObject(raw []byte) value {
-	doc, err := parse(raw)
-	if err != nil || doc.kind != kindObject || !bytes.Equal(raw, doc.appendCanonical(nil)) {
-		return value{}
-	}
-	return doc
-}
-
-func checkFixtureToken(schemas checkpointSchemas, keys []value, token string) (map[string]any, string) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return nil, "K1"
-	}
-	headerBytes, payloadBytes, signature := fixtureSegment(parts[0]), fixtureSegment(parts[1]), fixtureSegment(parts[2])
-	if headerBytes == nil || payloadBytes == nil || signature == nil {
-		return nil, "K1"
-	}
-	header := fixtureCanonicalObject(headerBytes)
-	if schemas.header.Validate(fixtureJSON(header)) != nil {
-		return nil, "K2"
-	}
-	kid, _ := header.member("kid")
-	public := fixturePublicKey(keys, kid)
-	if public == nil {
-		return nil, "K3"
-	}
-	digest := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
-	if len(signature) != 64 || !ecdsa.Verify(public, digest[:], new(big.Int).SetBytes(signature[:32]), new(big.Int).SetBytes(signature[32:])) {
-		return nil, "K4"
-	}
-	body, _ := fixtureJSON(fixtureCanonicalObject(payloadBytes)).(map[string]any)
-	if body == nil {
-		return nil, "K6"
-	}
-	if body["v"] != float64(1) {
-		return nil, "K5"
-	}
-	if schemas.payload.Validate(body) != nil {
-		return nil, "K6"
-	}
-	if _, err := time.Parse(CreatedAtLayout, body["issued_at"].(string)); err != nil {
-		return nil, "K6"
-	}
-	return body, ""
-}
-
-func fixtureKeys(raw []byte) []value {
-	r := reader{text: raw}
-	jwks, err := r.parse()
-	if err != nil || r.repeatedMember {
-		return nil
-	}
-	keys, _ := jwks.member("keys")
-	if keys.kind != kindArray {
-		return nil
-	}
-	for _, key := range keys.items {
-		if key.kind != kindObject {
-			return nil
-		}
-	}
-	return keys.items
-}
-
-func fixturePublicKey(keys []value, kid value) *ecdsa.PublicKey {
-	var key map[string]any
-	for _, candidate := range keys {
-		candidateID, _ := candidate.member("kid")
-		if candidateID.kind == kindString && slices.Equal(candidateID.units, kid.units) {
-			if key != nil {
-				return nil
-			}
-			key = fixtureJSON(candidate).(map[string]any)
-		}
-	}
-	if key["kty"] != "EC" || key["crv"] != "P-256" {
-		return nil
-	}
-	_, private := key["d"]
-	alg, hasAlg := key["alg"]
-	use, hasUse := key["use"]
-	ops, hasOps := key["key_ops"]
-	if private || (hasAlg && alg != "ES256") || (hasUse && use != "sig") || (hasOps && !reflect.DeepEqual(ops, []any{"verify"})) {
-		return nil
-	}
-	x, _ := key["x"].(string)
-	y, _ := key["y"].(string)
-	xb, yb := fixtureSegment(x), fixtureSegment(y)
-	if len(xb) != 32 || len(yb) != 32 {
-		return nil
-	}
-	point := append(append([]byte{4}, xb...), yb...)
-	public, err := ecdsa.ParseUncompressedPublicKey(elliptic.P256(), point)
-	if err != nil {
-		return nil
-	}
-	return public
+	t.Fatal("valid tip vector missing")
 }

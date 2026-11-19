@@ -199,6 +199,16 @@ func generate() []byte {
 	overflow := vector("out-of-range number in an unknown export field", "The export allows any value for this field, including an out-of-range number read as infinity.", []any{}, nil, success(0, nil))
 	overflow.Input["export"].(map[string]any)["extra"] = json.Number("1e400")
 
+	duplicateExport := vector("repeated top-level member", "The export repeats an extension member.", []any{}, []string{zeroToken}, failure("A6", 0, 0, ""))
+	duplicateExport.Input["export"] = json.RawMessage(`{"entries":[],"next_cursor":null,"note":"draft","note":"kept"}`)
+	secondJSON := string(must(json.Marshal(second)))
+	duplicateEntry := json.RawMessage(`{"result":"old",` + secondJSON[1:])
+	duplicateMeta := json.RawMessage(strings.Replace(secondJSON, `"version":2`, `"version":1,"\u0076ersion":2`, 1))
+	cases = append(cases, page, overflow, duplicateExport,
+		vector("repeated entry member", "The second record repeats the display result.", []any{duplicateEntry, first}, []string{middleToken}, failure("A1", 0, 2, second.ID)),
+		vector("repeated meta member", "The second record repeats a name in meta using two spellings of the same decoded name.", []any{duplicateMeta, first}, []string{middleToken}, failure("A1", 0, 2, second.ID)),
+	)
+
 	keysJSON := string(must(json.Marshal([]any{oldKey.jwk()})))
 	duplicateJWKS := vector("duplicate keys member in the JWKS", "The trusted JWKS repeats the keys member, even though its last value contains the signer.", []any{}, []string{zeroToken}, failure("K3", 1, 0, ""))
 	duplicateJWKS.Input["jwks_json"] = `{"keys":[],"keys":` + keysJSON + `}`
@@ -206,7 +216,7 @@ func generate() []byte {
 	nestedDuplicate.Input["jwks_json"] = `{"keys":` + keysJSON + `,"metadata":[{"a":1,"\u0061":2}]}`
 	caseSensitiveJWKS := vector("JWKS members that differ in case", "The unrecognized uppercase KEYS member is distinct from keys.", []any{}, []string{zeroToken}, success(0, 0))
 	caseSensitiveJWKS.Input["jwks_json"] = `{"keys":` + keysJSON + `,"KEYS":[]}`
-	cases = append(cases, page, overflow, duplicateJWKS, nestedDuplicate, caseSensitiveJWKS)
+	cases = append(cases, duplicateJWKS, nestedDuplicate, caseSensitiveJWKS)
 
 	data := map[string]any{
 		"contract": "audit", "version": 1, "operation": "verify-checkpoints",

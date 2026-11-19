@@ -1,6 +1,6 @@
 # Run the single-team hub
 
-`openplexer-hub` serves signed policy bundles and Room events for one team. Each project names one repository and has one Room with the same ID. All active team members can access every project and Room.
+`openplexer-hub` serves signed policy bundles, Room events, and audit exports for one team. Each project names one repository and has one Room with the same ID. All active team members can access every project and Room.
 For a walkthrough from a clean machine to a three-person hub, see [Self-host the OpenPlexer hub](self-host.md).
 
 ## Start the server
@@ -24,7 +24,7 @@ bin/openplexer-hub add-member -data-dir ./hub-data -id mem-ana
 bin/openplexer-hub add-project -data-dir ./hub-data -id prj-shop -repo api
 ```
 
-`add-member` prints the new bearer token once. Give each token to its member through a private channel. The default role is `member`. A `lead` can also publish policy over HTTP. Local admin commands use filesystem access for authorization. To revoke a token, run `bin/openplexer-hub remove-member -data-dir ./hub-data -id mem-ana`. Adding that ID again creates a new token.
+`add-member` prints the new bearer token once. Give each token to its member through a private channel. The default role is `member`. A `lead` can publish policy and export the audit log over HTTP. Local admin commands use filesystem access for authorization. To revoke a token, run `bin/openplexer-hub remove-member -data-dir ./hub-data -id mem-ana`. Adding that ID again creates a new token.
 
 Copy the [minimal JSON bundle example](../spec/policy/v1/examples/bundle/minimal.json) to `bundle.json` and set `repos` to `["api"]`. The bundle's `project_id` and sole `repos` entry must match the project exactly. Use the same repository identifier in the agent's policy queries. IDs for members, projects, and agent sessions start with an ASCII letter or digit and hold up to 128 letters, digits, periods, underscores, or hyphens.
 
@@ -36,11 +36,13 @@ The hub validates the [policy bundle](../spec/policy/README.md), checks member I
 
 ## HTTP API
 
-Use `Authorization: Bearer <token>` on every request except the public key set. Send JSON for request bodies. Successful requests return `200` and JSON.
+Use `Authorization: Bearer <token>` on every request except the two public key endpoints. Send JSON for request bodies. Successful requests return `200` and JSON.
 
 | Method and path | Result |
 |---|---|
-| `GET /.well-known/jwks.json` | The public ES256 key set in the [v1 JWKS format](../spec/policy/v1/jwks.schema.json). |
+| `GET /.well-known/jwks.json` | The public policy signing keys in the [v1 JWKS format](../spec/policy/v1/jwks.schema.json). |
+| `GET /.well-known/audit-jwks.json` | The public audit checkpoint signing keys. |
+| `GET /api/v1/audit/export` | The full audit export, newest first, with a signed tip in the `OpenPlexer-Audit-Checkpoint` response header. Requires a lead token. |
 | `GET /api/v1/projects/{project}` | The project's `id` and `repo`. |
 | `GET /api/v1/projects/{project}/policy.bundle` | The latest [signed policy bundle](../spec/policy/v1/signed-bundle.schema.json). |
 | `PUT /api/v1/projects/{project}/policy` | Publish a JSON bundle and return the signed bundle. Requires a lead token. |
@@ -51,7 +53,7 @@ Use `Authorization: Bearer <token>` on every request except the public key set. 
 | `POST /api/v1/rooms/{room}/claims/{claim}/renew` | Recompute a claim's expiry and return the updated lease. |
 | `POST /api/v1/rooms/{room}/claims/{claim}/release` | End a claim, append a release event, and return the released lease. |
 
-Give members a trusted copy of the public JWKS through an authenticated channel. See the [agent setup](local-policy.md#connect-to-a-team-hub). The agent verifies the JWS against the configured pin and the hub's advertised JWKS. The unsigned display fields are for presentation. The docs on [policy verification](../spec/policy/README.md#the-signed-bundle) give the verification steps.
+Give members a trusted copy of the policy JWKS through an authenticated channel. See the [agent setup](local-policy.md#connect-to-a-team-hub). The agent verifies the JWS against the configured pin and the hub's advertised JWKS. The unsigned display fields are for presentation. The docs on [policy verification](../spec/policy/README.md#the-signed-bundle) give the verification steps.
 
 For an event post, send `type`, `body`, and `agent` with `id`, `vendor`, and optional `parent`. Omit `agent` for a `human` event. The hub prefixes session and parent IDs with the authenticated member ID and a slash. The hub sets `on_behalf_of`, the event ID, the Room, the timestamp, and the next sequence number. The client can send `Idempotency-Key` with up to 128 bytes. A repeated key for the same member and Room returns the original envelope. The claim endpoints write `claim` and `release` events. The event endpoint reserves `decision.confirm` and the two override event types for future hub services.
 
@@ -72,8 +74,14 @@ On the live stream, use `Content-Type: application/x-ndjson` and keep the reques
 | `409` | The proposed policy version conflicts with the current version. |
 | `413` | The body exceeds 1 MiB for policies or 64 KiB for Room operations. |
 
+## Export the audit log
+
+The hub writes one chain for the team. It writes each audit record in the same state update as its action. The log covers `member.added`, `member.removed`, `project.added`, `policy.updated`, and `event.policy-denied`. A denial record links to its Room event. The hub leaves the Room body out of the audit record.
+
+Run `bin/openplexer-hub export-audit --data-dir ./hub-data --out ./audit-export` to write the JSON export, signed checkpoint, and checkpoint JWKS. The command works with the server stopped. The HTTP export requires the `lead` role, which is the single-team hub's admin role. An ordinary member receives `403`. [Export and verify an audit log](audit.md).
+
 ## Data directory and operational limits
 
-Use one server on one host per data directory. The hub uses a file lock to coordinate the server and CLI, and atomically replaces `state.json` on writes. Each operation reads the snapshot into memory. Room history grows with each event, so disk use, memory use, and write time grow with it.
+Use one server on one host per data directory. The hub uses a file lock to coordinate the server and CLI, and atomically replaces `state.json` on writes. Each operation reads the snapshot into memory. Room history and audit records accumulate, so disk use, memory use, and write time grow.
 
-Protect `state.json` and its backups. It contains the ES256 private key, member token hashes, the latest signed policy per project, Room history, and active claims. Back it up to preserve the signing key and Room sequence numbers. The hub keeps Room history indefinitely and generates a signing key once at initialization. Key rotation requires a future change. The local daemon filters posts before sending them. The hub validates event schemas. Server-side content filtering remains open for direct API callers. Keep sensitive material out of Room bodies. The [trust model](trust-model.md#decisions-settled-by-the-single-team-hub) records these choices.
+Protect `state.json` and its backups. It contains the separate ES256 policy and checkpoint private keys, member token hashes, policies, Room history, claims, and the audit chain. Back it up to preserve the keys, the stable team ID, Room sequence numbers, and audit history. The hub initializes audit state in older data directories on the first audited action, export, or checkpoint key request. The audit chain starts with the first audited action. The hub keeps the public checkpoint key history. Key rotation commands are future work. The local daemon filters posts before sending them. The hub validates event schemas. Server-side content filtering remains open for direct API callers. Keep sensitive material out of Room bodies. The [trust model](trust-model.md#decisions-settled-by-the-single-team-hub) records these choices.

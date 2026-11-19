@@ -38,12 +38,13 @@ const (
 // pair and a Go string cannot. The members of an object are sorted by key,
 // and no key repeats.
 type value struct {
-	kind    kind
-	flag    bool
-	number  float64
-	units   []uint16
-	items   []value
-	members []member
+	kind      kind
+	flag      bool
+	number    float64
+	units     []uint16
+	items     []value
+	members   []member
+	duplicate string
 }
 
 type member struct {
@@ -77,21 +78,17 @@ func object(members ...member) value {
 }
 
 func parse(text []byte) (value, error) {
-	r := &reader{text: text}
-	return r.parse()
-}
-
-type reader struct {
-	text           []byte
-	at             int
-	repeatedMember bool
-}
-
-func (r *reader) parse() (value, error) {
-	if !utf8.Valid(r.text) || !json.Valid(r.text) {
+	if !utf8.Valid(text) || !json.Valid(text) {
 		return value{}, errors.New("the text is not JSON")
 	}
+	r := reader{text: text}
 	return r.value(), nil
+}
+
+// reader reads a text that json.Valid accepted, so it checks no syntax.
+type reader struct {
+	text []byte
+	at   int
 }
 
 func (r *reader) space() {
@@ -156,14 +153,17 @@ func (r *reader) array() value {
 
 func (r *reader) object() value {
 	var members []member
+	var duplicate string
 	for r.more('}') {
 		key := r.units()
 		r.space()
 		r.at++
 		m := member{key: key, value: r.value()}
 		if i := slices.IndexFunc(members, func(m member) bool { return slices.Equal(m.key, key) }); i >= 0 {
-			r.repeatedMember = true
 			members[i] = m
+			if duplicate == "" {
+				duplicate = string(appendString(nil, key))
+			}
 		} else {
 			members = append(members, m)
 		}
@@ -173,7 +173,9 @@ func (r *reader) object() value {
 			break
 		}
 	}
-	return object(members...)
+	v := object(members...)
+	v.duplicate = duplicate
+	return v
 }
 
 var escapes = map[byte]uint16{'"': '"', '\\': '\\', '/': '/', 'b': '\b', 'f': '\f', 'n': '\n', 'r': '\r', 't': '\t'}

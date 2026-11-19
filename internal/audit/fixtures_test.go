@@ -88,7 +88,6 @@ func runVerifyChain(t *testing.T, input, expected json.RawMessage) {
 
 var operations = map[string]func(t *testing.T, input, expected json.RawMessage){
 	"canonicalize": runCanonicalize,
-	"verify-chain": runVerifyChain,
 }
 
 // Every case of every fixture file of the two contracts runs. A file with
@@ -106,8 +105,11 @@ func TestFixtures(t *testing.T) {
 				var file fixtureFile
 				decode(t, readFile(t, path), &file)
 				run, ok := operations[file.Operation]
-				if file.Operation == "verify-checkpoints" {
+				switch file.Operation {
+				case "verify-checkpoints":
 					run, ok = checkpointRunner(t, file.Shared.JWKS), true
+				case "verify-chain":
+					run, ok = chainExportRunner(t), true
 				}
 				if !ok {
 					t.Fatalf("unknown operation %q", file.Operation)

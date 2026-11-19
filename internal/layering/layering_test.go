@@ -54,7 +54,7 @@ var rules = []rule{
 		// Allowlist: every internal package is denied except the ones listed.
 		subjects: []string{"apps/openplexer-verify"},
 		deny:     []string{"internal/..."},
-		except:   []string{"internal/audit"},
+		except:   []string{"internal/audit", "internal/policy"},
 	},
 }
 

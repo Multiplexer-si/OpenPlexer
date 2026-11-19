@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/multiplexer-si/openplexer/internal/audit"
 	"github.com/multiplexer-si/openplexer/internal/room"
 )
 
@@ -103,9 +104,20 @@ func (s *Store) postEvent(st *state, req request) (any, error) {
 		}
 	}
 	delete(post.Body, "flagged")
-	event, err := st.appendEvent(req.roomID(), req.member, agent, post.Type, post.Body, s.now(), key)
+	now := s.now()
+	event, err := st.appendEvent(req.roomID(), req.member, agent, post.Type, post.Body, now, key)
 	if err != nil {
 		return nil, fmt.Errorf("%w: event: %w", errInvalid, err)
+	}
+	if event.Type() == "policy.denied" {
+		// Link to the event without copying arbitrary Room text into the audit log.
+		if err := st.appendAudit(audit.Record{
+			ActorMemberID: &req.member, AgentSessionID: &agent.ID,
+			Action: "event.policy-denied", Target: "event:" + event.ID(),
+			Meta: map[string]any{"room_id": event.Mission(), "seq": event.Seq(), "event_id": event.ID()},
+		}, now); err != nil {
+			return nil, err
+		}
 	}
 	return room.EventMessage(event), s.save(st)
 }

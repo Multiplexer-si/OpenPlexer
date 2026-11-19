@@ -33,13 +33,13 @@ func (s *Store) PublishPolicy(project string, text []byte) (SignedBundle, error)
 	var signed SignedBundle
 	err := s.update(func(st *state) error {
 		var err error
-		signed, err = st.publishPolicy(project, text)
+		signed, err = s.publishPolicy(st, project, text, nil)
 		return err
 	})
 	return signed, err
 }
 
-func (st *state) publishPolicy(project string, text []byte) (SignedBundle, error) {
+func (s *Store) publishPolicy(st *state, project string, text []byte, actor *string) (SignedBundle, error) {
 	p, exists := st.Projects[project]
 	if !exists {
 		return SignedBundle{}, fmt.Errorf("%w: project %q", errNotFound, project)
@@ -83,22 +83,32 @@ func (st *state) publishPolicy(project string, text []byte) (SignedBundle, error
 	if err != nil {
 		return SignedBundle{}, err
 	}
-	header, err := json.Marshal(map[string]string{"alg": policyAlg, "typ": policyTyp, "kid": keyID(&key.PublicKey)})
+	token, err := signES256(key, policyTyp, keyID(&key.PublicKey), canonical)
 	if err != nil {
 		return SignedBundle{}, err
 	}
-	input := base64URL(header) + "." + base64URL(canonical)
+	signed := SignedBundle{Version: bundle.Version, Bundle: canonical, Signature: token}
+	st.Policies[project] = signed
+	err = st.appendAudit(audit.Record{ActorMemberID: actor, Action: "policy.updated", Target: "project:" + project,
+		Meta: map[string]any{"project_id": project, "version": bundle.Version}}, s.now())
+	return signed, err
+}
+
+func signES256(key *ecdsa.PrivateKey, typ, kid string, payload []byte) (string, error) {
+	header, err := json.Marshal(map[string]string{"alg": policyAlg, "typ": typ, "kid": kid})
+	if err != nil {
+		return "", err
+	}
+	input := base64URL(header) + "." + base64URL(payload)
 	digest := sha256.Sum256([]byte(input))
 	r, s, err := ecdsa.Sign(rand.Reader, key, digest[:])
 	if err != nil {
-		return SignedBundle{}, err
+		return "", err
 	}
 	var signature [64]byte
 	r.FillBytes(signature[:32])
 	s.FillBytes(signature[32:])
-	signed := SignedBundle{Version: bundle.Version, Bundle: canonical, Signature: input + "." + base64URL(signature[:])}
-	st.Policies[project] = signed
-	return signed, nil
+	return input + "." + base64URL(signature[:]), nil
 }
 
 func signingKey(st *state) (*ecdsa.PrivateKey, error) {
@@ -120,11 +130,14 @@ func publicKeys(st *state) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	jwk := map[string]string{
-		"alg": policyAlg, "use": "sig", "kid": keyID(&key.PublicKey),
+	return map[string]any{"keys": []map[string]string{publicJWK(&key.PublicKey, keyID(&key.PublicKey))}}, nil
+}
+
+func publicJWK(key *ecdsa.PublicKey, kid string) map[string]string {
+	return map[string]string{
+		"alg": policyAlg, "use": "sig", "kid": kid,
 		"kty": "EC", "crv": "P-256",
 		"x": base64URL(key.X.FillBytes(make([]byte, 32))),
 		"y": base64URL(key.Y.FillBytes(make([]byte, 32))),
 	}
-	return map[string]any{"keys": []map[string]string{jwk}}, nil
 }
