@@ -8,16 +8,16 @@ This page lists the directories, binaries, packages, dependency rules, make targ
 apps/                    one directory per binary
 internal/                Go packages, one per domain
 spec/                    language-independent contracts
-tools/                   programs that write files in this repository
+tools/                   generators, checks, and release packaging
 docs/                    documentation
-.github/workflows/       CI
+.github/workflows/       CI and releases
 ```
 
 To list every Go package, run `go list ./...`.
 
 ## Binaries
 
-Each directory under `apps/` builds one binary. `make build` writes the binaries to `bin/`.
+Each directory under `apps/` builds one binary. `make build` writes the binaries to `bin/`. Each binary prints its version with `--version`. [Install OpenPlexer](install.md)
 
 | Directory | Binary | Role |
 |---|---|---|
@@ -82,6 +82,8 @@ Each directory under `spec/` holds one contract: a README with the rules, and a 
 
 `tools/auditvectors` generates the OpenPlexer checkpoint fixtures. Run `go run ./tools/auditvectors` from the repository root. [Audit contract](../spec/audit/README.md#generated-and-authored-parts).
 
+`tools/release` builds the platform archives and writes `SHA256SUMS`. [Cut a release](release.md)
+
 ## Audit end-to-end tests
 
 Run `go test ./test/audit` to build the audit binaries and test them with temporary directories. The tests verify the reference fixtures and run the shell examples in the [audit guide](audit.md). They run in `make check` and need no running hub or network access.
@@ -92,11 +94,14 @@ Run `go test ./test/audit` to build the audit binaries and test them with tempor
 |---|---|
 | `make check` | Fails if `gofmt -l .` lists a file. Then runs `go vet ./...` and `go test -count=1 ./...`. |
 | `make build` | Builds every binary under `apps/` into `bin/`. |
+| `make release VERSION=v0.1.0` | Builds platform archives and `SHA256SUMS` in `dist/release/`. |
 | `make fmt` | Runs `gofmt -w .`. |
 
 ## CI
 
 The workflow in `.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It installs the Go version that `go.mod` names, then runs `make check` and `make build` in one job named `check`. `main` requires that job before a pull request can merge. [Run the checks](../CONTRIBUTING.md#run-the-checks) lists the same commands to run locally, and names the tests that run the fixtures.
+
+`.github/workflows/release.yml` builds the release archives when a `v*` tag is pushed or when someone starts the workflow manually. A tag push publishes a GitHub release. A manual run uploads the archives and checksums as workflow artifacts. [Cut a release](release.md)
 
 ## Toolchain
 
