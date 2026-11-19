@@ -26,11 +26,23 @@ func Dir(apps ...string) (string, error) {
 	if !filepath.IsAbs(dir) {
 		return "", fmt.Errorf("OPENPLEXER_BIN_DIR must be an absolute path: %q", dir)
 	}
+	realDir, err := filepath.EvalSymlinks(filepath.Clean(dir))
+	if err != nil {
+		return "", fmt.Errorf("OPENPLEXER_BIN_DIR %q: %w", dir, err)
+	}
 	for _, app := range apps {
 		path := filepath.Join(dir, app)
-		info, err := os.Stat(path)
+		realPath, err := filepath.EvalSymlinks(path)
 		if err != nil {
-			return "", fmt.Errorf("OPENPLEXER_BIN_DIR: %w", err)
+			return "", fmt.Errorf("OPENPLEXER_BIN_DIR: resolve %s: %w", path, err)
+		}
+		rel, err := filepath.Rel(realDir, realPath)
+		if err != nil || !filepath.IsLocal(rel) {
+			return "", fmt.Errorf("OPENPLEXER_BIN_DIR: %s resolves outside %s to %s", path, realDir, realPath)
+		}
+		info, err := os.Stat(realPath)
+		if err != nil {
+			return "", fmt.Errorf("OPENPLEXER_BIN_DIR: stat %s: %w", path, err)
 		}
 		if !info.Mode().IsRegular() {
 			return "", fmt.Errorf("OPENPLEXER_BIN_DIR: %s is not a regular file", path)
