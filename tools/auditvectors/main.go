@@ -165,6 +165,7 @@ func generate() []byte {
 	wrongWorkspace.WorkspaceID = "wsp-other-test"
 	badDate := tip
 	badDate.IssuedAt = "2026-02-30T12:00:00.000Z"
+	yearZero := payload{1, workspace, 0, audit.GenesisHash, "0000-01-01T00:00:00.000Z"}
 	policyBundle := json.RawMessage(`{"areas":[],"members":{},"project_id":"prj-checkpoint-test","repos":[],"roles":{},"version":1}`)
 
 	cases := []fixtureCase{
@@ -188,6 +189,7 @@ func generate() []byte {
 		vector("filtered export", "The export starts at the second record, whose previous hash is not genesis.", []any{third, second}, nil, failure("A4", 0, 1, second.ID)),
 		vector("padded compact JWS", "The signature segment ends in a padding character.", full, []string{tipToken + "="}, failure("K1", 1, 0, "")),
 		vector("impossible issue date", "The signed date is February 30.", full, []string{newKey.sign(checkpointType, newKey.kid, badDate)}, failure("K6", 1, 0, "")),
+		vector("issue date in year zero", "A checkpoint issue date cannot use year 0000.", []any{}, []string{oldKey.sign(checkpointType, oldKey.kid, yearZero)}, failure("K6", 1, 0, "")),
 		vector("rewritten tip", "The chain verifies and reaches the signed count with a different hash.", []any{rewritten, second, first}, []string{tipToken}, failure("K10", 1, 3, third.ID)),
 	}
 	page := vector("paged export", "The cursor is a string. The audit export requires null.", full, nil, failure("A6", 0, 0, ""))

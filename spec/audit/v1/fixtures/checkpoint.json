@@ -1300,6 +1300,24 @@
       }
     },
     {
+      "name": "issue date in year zero",
+      "why": "A checkpoint issue date cannot use year 0000.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1vbGQiLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjowLCJpc3N1ZWRfYXQiOiIwMDAwLTAxLTAxVDAwOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.YrN_ELp8OHGbY_9CWeQpKy7qIUTlAG-N2pTtrSOstvV-1v6CTDnl1xHctHYdTkDqIIkIiImEh6Eb8fKgkPUs3A"
+        ],
+        "export": {
+          "entries": [],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint": 1,
+        "ok": false,
+        "rule": "K6"
+      }
+    },
+    {
       "name": "rewritten tip",
       "why": "The chain verifies and reaches the signed count with a different hash.",
       "input": {

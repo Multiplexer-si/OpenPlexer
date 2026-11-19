@@ -100,7 +100,7 @@ Find exactly one key whose `kid` equals the header's `kid`. Compare the strings 
 
 **K5. Checkpoint version.** After verifying the signature, read the second segment as a canonical JSON object under K6. The object must have `v` equal to the number `1`. Reject missing versions and any other value.
 
-**K6. Payload shape.** The second segment decodes to the UTF-8 bytes of [canonical JSON](../canonical-json/README.md) for one object. As with K2, compare the decoded bytes with the canonical encoding. This rejects a byte order mark, repeated keys, and other encodings. After K5, validate the object against `v1/checkpoint-payload.schema.json`. `entries` is the record count. `tip_hash` is 64 lowercase hexadecimal characters. `issued_at` is a UTC timestamp of the form `YYYY-MM-DDTHH:MM:SS.sssZ`. The date must exist in the Gregorian calendar. Seconds range from 00 to 59. The time is the hub's claim about when it signed and plays no part in ordering or freshness checks.
+**K6. Payload shape.** The second segment decodes to the UTF-8 bytes of [canonical JSON](../canonical-json/README.md) for one object. As with K2, compare the decoded bytes with the canonical encoding. This rejects a byte order mark, repeated keys, and other encodings. After K5, validate the object against `v1/checkpoint-payload.schema.json`. `entries` is the record count. `tip_hash` is 64 lowercase hexadecimal characters. `issued_at` is a UTC timestamp of the form `YYYY-MM-DDTHH:MM:SS.sssZ`. The date must exist in the Gregorian calendar, with a year from 0001 through 9999. Seconds range from 00 to 59. The time is the hub's claim about when it signed and plays no part in ordering or freshness checks.
 
 ### Verification and result
 
