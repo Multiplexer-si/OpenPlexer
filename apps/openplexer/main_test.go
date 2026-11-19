@@ -15,6 +15,16 @@ const policySpec = "../../spec/policy/v1"
 
 var loadedAt = time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC)
 
+func TestVersion(t *testing.T) {
+	t.Setenv("OPENPLEXER_HOME", "")
+	t.Setenv("HOME", "")
+	t.Setenv("USERPROFILE", "")
+	status, stdout, stderr := (cli{t: t}).run("--version")
+	if status != 0 || stdout != "dev\n" || stderr != "" {
+		t.Fatalf("--version: exit %d, stdout %q, stderr %q", status, stdout, stderr)
+	}
+}
+
 type cli struct {
 	t     *testing.T
 	now   time.Time

@@ -12,15 +12,22 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/audit"
 )
 
+var version = "dev"
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 1 && args[0] == "--version" {
+		fmt.Fprintln(stdout, version)
+		return 0
+	}
 	flags := flag.NewFlagSet("openplexer-verify", flag.ContinueOnError)
 	flags.SetOutput(stderr)
 	flags.Usage = func() {
 		fmt.Fprintln(stderr, "Usage: openplexer-verify --export export.json --jwks jwks.json [--checkpoint file]... [--json]")
+		fmt.Fprintln(stderr, "       openplexer-verify --version")
 		flags.PrintDefaults()
 	}
 	exportPath := flags.String("export", "", "Path to the JSON audit export")

@@ -15,6 +15,7 @@ import (
 )
 
 const usage = `Usage: openplexer-hub <command> [flags]
+       openplexer-hub --version
 Commands:
   init            Initialize a data directory
   add-member      Add a member and print a bearer token
@@ -26,11 +27,17 @@ Commands:
 Use <command> -h for command flags.
 `
 
+var version = "dev"
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	if len(args) == 1 && args[0] == "--version" {
+		fmt.Fprintln(stdout, version)
+		return 0
+	}
 	if len(args) == 0 {
 		fmt.Fprint(stderr, usage)
 		return 2
