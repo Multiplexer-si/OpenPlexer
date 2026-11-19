@@ -83,10 +83,8 @@ func VerifySignedBundle(token string, keys KeySet) (*Verified, error) {
 	if !ok || len(signature) != 64 {
 		return nil, errors.New("the signature segment is not a 64-byte ES256 signature in base64url")
 	}
-	digest := sha256.Sum256([]byte(segments[0] + "." + segments[1]))
-	r, s := new(big.Int).SetBytes(signature[:32]), new(big.Int).SetBytes(signature[32:])
-	if !ecdsa.Verify(key, digest[:], r, s) {
-		return nil, errors.New("the signature does not verify under the key")
+	if err := VerifyES256(key, segments[0]+"."+segments[1], signature); err != nil {
+		return nil, err
 	}
 	payload, err := readPayload(segments[1], unencoded)
 	if err != nil {
@@ -97,6 +95,19 @@ func VerifySignedBundle(token string, keys KeySet) (*Verified, error) {
 		return nil, fmt.Errorf("the signed payload is not a bundle: %w", err)
 	}
 	return &Verified{Bundle: bundle, Payload: payload}, nil
+}
+
+// VerifyES256 verifies the decoded signature over the exact JWS signing input.
+func VerifyES256(key *ecdsa.PublicKey, input string, signature []byte) error {
+	if len(signature) != 64 {
+		return fmt.Errorf("expected a 64-byte ES256 signature, got %d bytes", len(signature))
+	}
+	digest := sha256.Sum256([]byte(input))
+	r, s := new(big.Int).SetBytes(signature[:32]), new(big.Int).SetBytes(signature[32:])
+	if !ecdsa.Verify(key, digest[:], r, s) {
+		return errors.New("the signature does not verify under the key")
+	}
+	return nil
 }
 
 func readHeader(segment string) (map[string]any, error) {
@@ -154,13 +165,22 @@ func (set KeySet) choose(header map[string]any) (*ecdsa.PublicKey, error) {
 }
 
 func isCandidate(key map[string]any, kid any, hasKid bool) bool {
-	if key["kty"] != "EC" || key["crv"] != "P-256" {
-		return false
+	if ext, present := key["ext"]; present {
+		if _, ok := ext.(bool); !ok {
+			return false
+		}
 	}
 	if hasKid {
 		if _, ok := kid.(string); !ok || key["kid"] != kid {
 			return false
 		}
+	}
+	return canVerifyES256(key)
+}
+
+func canVerifyES256(key map[string]any) bool {
+	if key["kty"] != "EC" || key["crv"] != "P-256" {
+		return false
 	}
 	if alg, present := key["alg"]; present && alg != signatureAlgorithm {
 		return false
@@ -174,12 +194,21 @@ func isCandidate(key map[string]any, kid any, hasKid bool) bool {
 			return false
 		}
 	}
-	if ext, present := key["ext"]; present {
-		if _, ok := ext.(bool); !ok {
-			return false
+	return true
+}
+
+// ES256PublicKey validates a JWK selected by the caller for ES256 verification.
+func ES256PublicKey(key map[string]any) (*ecdsa.PublicKey, error) {
+	if !canVerifyES256(key) {
+		return nil, errors.New("expected an EC P-256 key for ES256 verification")
+	}
+	for _, name := range []string{"x", "y"} {
+		text, _ := key[name].(string)
+		if strings.ContainsAny(text, "\r\n") {
+			return nil, fmt.Errorf("the %s of the chosen key contains whitespace", name)
 		}
 	}
-	return true
+	return publicKey(key)
 }
 
 func distinctStrings(list []any) bool {
