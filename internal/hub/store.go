@@ -16,6 +16,8 @@ import (
 	"time"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/multiplexer-si/openplexer/internal/audit"
 )
 
 var (
@@ -44,12 +46,16 @@ type Project struct {
 }
 
 type state struct {
-	SigningKey []byte                   `json:"signing_key"`
-	Members    map[string]member        `json:"members"`
-	Projects   map[string]Project       `json:"projects"`
-	Policies   map[string]SignedBundle  `json:"policies"`
-	Rooms      map[string][]eventRecord `json:"rooms,omitempty"`
-	Claims     map[string]lease         `json:"claims,omitempty"`
+	WorkspaceID    string                   `json:"workspace_id,omitempty"`
+	CheckpointKey  []byte                   `json:"checkpoint_key,omitempty"`
+	CheckpointKeys []map[string]string      `json:"checkpoint_keys,omitempty"`
+	Audit          []audit.Record           `json:"audit,omitempty"`
+	SigningKey     []byte                   `json:"signing_key"`
+	Members        map[string]member        `json:"members"`
+	Projects       map[string]Project       `json:"projects"`
+	Policies       map[string]SignedBundle  `json:"policies"`
+	Rooms          map[string][]eventRecord `json:"rooms,omitempty"`
+	Claims         map[string]lease         `json:"claims,omitempty"`
 }
 
 // Store is a data directory shared by the server and local admin commands.
@@ -79,12 +85,16 @@ func (s *Store) Init() error {
 		if err != nil {
 			return err
 		}
-		return s.save(&state{
+		st := &state{
 			SigningKey: private,
 			Members:    make(map[string]member),
 			Projects:   make(map[string]Project),
 			Policies:   make(map[string]SignedBundle),
-		})
+		}
+		if _, err := st.ensureAudit(); err != nil {
+			return err
+		}
+		return s.save(st)
 	})
 }
 
@@ -111,7 +121,8 @@ func (s *Store) AddMember(id string, role Role) (string, error) {
 			return fmt.Errorf("%w: member %q", errConflict, id)
 		}
 		st.Members[id] = member{Role: role, TokenHash: sha256.Sum256([]byte(token))}
-		return nil
+		return st.appendAudit(audit.Record{Action: "member.added", Target: "member:" + id,
+			Meta: map[string]any{"role": role}}, s.now())
 	})
 	if err != nil {
 		return "", err
@@ -125,7 +136,7 @@ func (s *Store) RemoveMember(id string) error {
 			return fmt.Errorf("%w: member %q", errNotFound, id)
 		}
 		delete(st.Members, id)
-		return nil
+		return st.appendAudit(audit.Record{Action: "member.removed", Target: "member:" + id}, s.now())
 	})
 }
 
@@ -138,7 +149,7 @@ func (s *Store) AddProject(id, repo string) error {
 			return fmt.Errorf("%w: project %q", errConflict, id)
 		}
 		st.Projects[id] = Project{ID: id, Repo: repo}
-		return nil
+		return st.appendAudit(audit.Record{Action: "project.added", Target: "project:" + id}, s.now())
 	})
 }
 

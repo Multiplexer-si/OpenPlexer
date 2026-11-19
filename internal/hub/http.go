@@ -40,12 +40,13 @@ func (s *Store) Handler() http.Handler {
 		if req.role != Lead {
 			return nil, errForbidden
 		}
-		signed, err := st.publishPolicy(req.project(), req.body)
+		signed, err := s.publishPolicy(st, req.project(), req.body, &req.member)
 		if err != nil {
 			return nil, err
 		}
 		return signed, s.save(st)
 	}))
+	s.auditRoutes(mux)
 	s.roomRoutes(mux)
 	return mux
 }
