@@ -1,18 +1,18 @@
 # Trust model
 
 > [!NOTE]
-> This page describes the design OpenPlexer ports from the existing TypeScript implementation and records which choices have shipped. A paragraph that starts with **Existing implementation** states what that implementation does at commit `7d80045a`. A paragraph that starts with **OpenPlexer design** states what the scope or a plan issue settles for OpenPlexer. A paragraph that starts with **Recommendation** states what this page recommends, which nobody has decided yet. A paragraph with no label is an overview, advice to the reader, reasoning such as a comparison of options, or a property of git or of hashing that holds for any implementation. A list or a table belongs to the paragraph that introduces it. Each tag such as (S6) names a file in the existing implementation, which is not public. [Sources](#sources) lists the files. [Open decisions](#open-decisions) lists what is not settled.
+> This page describes the design OpenPlexer ports from the existing TypeScript implementation and records which choices have shipped. A paragraph that starts with **Existing implementation** states what that implementation does at commit `7d80045a`. **OpenPlexer** describes the Go implementation. **OpenPlexer design** records a choice settled by the scope or a plan issue. **Recommendation** marks a proposal. A paragraph with no label is an overview, advice to the reader, reasoning such as a comparison of options, or a property of git or of hashing that holds for any implementation. A list or a table belongs to the paragraph that introduces it. Each tag such as (S6) names a file in the existing implementation, which is not public. [Sources](#sources) lists the files. [Open decisions](#open-decisions) lists what is not settled.
 
-This page is for a developer who decides whether to install the hooks, and for the security reviewer who advises them. It explains what the design guarantees, what it does not, and the reason for each limit. [Concepts](concepts.md) defines the parts, and the [glossary](glossary.md) defines the shared terms. This page defines its other terms where it first uses them. The architecture and privacy guide of [issue 32](https://github.com/Multiplexer-si/OpenPlexer/issues/32) must agree with this page.
+This page is for a developer who decides whether to install the hooks, and for the security reviewer who advises them. It explains what the design guarantees, what it does not, and the reason for each limit. [Concepts](concepts.md) defines the parts, and the [glossary](glossary.md) defines the shared terms. The [architecture and privacy guide](architecture-and-privacy.md) summarizes these guarantees and describes what the Go implementation sends and stores.
 
 ## What the hooks guarantee, in short
 
-If OpenPlexer ships the design on this page, installing the hooks gives you four things.
+OpenPlexer provides these guarantees.
 
-- The gate refuses a write that the policy denies when the write is a call to a file tool that the hooks match, or a shell command whose destination the gate recognizes before it runs, and the hook runs and finishes in time without an error. The coding agent receives the reason.
-- File contents do not leave your machine as part of the telemetry contract. Paths, identifiers, and the prose that agents and people write in the Room do leave it.
-- The daemon verifies the signature of a policy when the policy arrives, and stores it. It keeps enforcing the last verified policy when the hub is unreachable.
-- With a trusted checkpoint, a verifier can show that an exported audit log was not altered up to that checkpoint.
+- When an installed hook runs and finishes, it can block a write that the policy denies if the hook recognizes the target before the tool runs. The coding agent receives the reason.
+- With a hub configured, the daemon can send filtered Room posts with paths, identifiers, and prose. OpenPlexer sends no file contents or raw tool payloads as part of its protocol.
+- A load or sync verifies a policy before storing it. The gate verifies the stored signature against the local key set when it opens. It can keep using that policy while the hub is unreachable.
+- With a trusted checkpoint, a verifier can check that the records' nine hash-covered fields, in chain order, match the signed history through the checkpoint's record count. Display fields such as `id` can change without affecting this check. [Audit verification limits](audit.md#what-the-verifier-cannot-prove).
 
 The hooks do not give you these things.
 
@@ -62,11 +62,11 @@ A git blob id is a hash of a file's contents. It reveals no contents. Anyone who
 
 **Existing implementation.** The hub stores Room history, write records, policies, and audit records in its database, with no scheduled deletion. Data stays until an operator removes it (S1).
 
-### What OpenPlexer intends to send
+### What OpenPlexer sends
 
-**OpenPlexer design.** The foundation excludes the GitHub check, metrics, and the write ledger, which is the record of each file that an agent wrote. Without them, write records, blob ids, and injection counters drop out of the telemetry contract. The daemon sends authenticated Room resumes and posts, with policy requests on startup and periodically while it runs. Its hooks queue a reduced denial event after a policy denial.
+**OpenPlexer.** Local hooks and file-based policy use need no network. When configured for a hub, `policy sync` fetches policy on demand, and the daemon fetches it on startup and periodically. The daemon sends authenticated Room resumes and queued posts to the configured hub. A hook can queue a reduced `policy.denied` event for a policy verdict with a valid session ID. The local decision log stays on the machine. OpenPlexer sends no background metrics, write records, blob IDs, read receipts, or injection counters.
 
-**OpenPlexer design.** The daemon sends only declared fields of the v1 Room event bodies and envelopes. Its HTTP requests also carry the project or Room ID in the route, member bearer authorization, and an idempotency key per queued post. A test checks that extra fields in a post are dropped. [Protocol specifications](../spec/README.md).
+**OpenPlexer.** The daemon sends only the approved fields for the post types it supports. The authenticated HTTP requests carry the project or Room ID in the route and use member bearer authorization. Queued posts carry an idempotency key. The public JWKS request carries no bearer token. [Decisions settled by the hub connection](#decisions-settled-by-the-hub-connection).
 
 ### Free-text filtering is a heuristic
 
@@ -83,6 +83,8 @@ A git blob id is a hash of a file's contents. It reveals no contents. Anyone who
 
 **Existing implementation.** A secret that the detector misses in a denial or an override goes into the audit log, which is append-only and hash-chained. Removing the secret later breaks the chain from that record onward (S9).
 
+**OpenPlexer.** The daemon rejects posts with recognized secret or code patterns in prose and checks identifiers and path fields separately. For queued denials it uses a fixed rule and omits unsafe targets. The hub validates events but does not repeat the daemon's content checks. The hub audit record for a denial links to the Room event and leaves out its body.
+
 Treat the Room as a shared channel that the hub operator can read. The filters catch the common accident, such as a pasted token or a code block, and no more than that. Do not put credentials, source code, or personal data in Room prose.
 
 ### The sent log shows what left the machine
@@ -91,7 +93,7 @@ Treat the Room as a shared channel that the hub operator can read. The filters c
 
 **Existing implementation.** The log is evidence from a daemon that behaves as designed. It lives in a directory that your OS user can write, and it does not record traffic from a program that skips the daemon's code. The security summary describes how to check the log against a capture from a logging proxy between the daemon and the hub (S1).
 
-**OpenPlexer design.** No issue names the sent log yet.
+**OpenPlexer.** The daemon has no sent log. The local audit log records policy decisions, and the Room outbox holds filtered posts pending delivery. Neither records all requests that the daemon sends.
 
 **Recommendation.** Port the sent log. It is the only record on the developer's machine of what the daemon sent, so it is how a developer checks the claims in this section without extra tools.
 
@@ -110,6 +112,8 @@ Treat the Room as a shared channel that the hub operator can read. The filters c
 | Before any hook runs | Nothing beyond the install | The user trusts the project and approves each hook in Codex. Until then, no hook runs (S3). |
 | A config change during a session | The `ConfigChange` hook blocks a change to a settings file in the system area (S6) | No such event. Codex marks an edited hook as modified and stops running it until the user approves it again (S3). |
 
+**OpenPlexer.** The installed hooks run before the tool call. Claude Code covers `Write`, `Edit`, `NotebookEdit`, and `Bash`. Codex covers `Bash` and `apply_patch`. The hooks evaluate covered writes and evaluate shell commands as commands when the verified policy role lists command grants. Neither adapter gates reads or evaluates `git.push` as a policy action. [Claude Code hooks](hooks-claude-code.md#what-the-hook-sees), [Codex hooks](hooks-codex.md#what-the-hook-sees).
+
 ### Actions outside the hooks are not seen
 
 **Existing implementation.** The gate sees only the tool calls that the hook matchers name. These actions do not reach it.
@@ -120,7 +124,9 @@ Treat the Room as a shared channel that the hub operator can read. The filters c
 - A write to a path outside the project tree. The policy governs only project-relative paths. The one exception is the daemon's home directory, which the gate protects when a policy is loaded (S18).
 - Git operations that get around the git hooks. The git hooks are advisory, and a process that controls its own environment or writes the repository's internals gets around them (S6).
 
-### Shell writes are checked before by a heuristic and after by a tree diff
+**OpenPlexer.** Calls outside the configured hook matchers do not reach the gate. For a matched call, the hook blocks a recognized write if it cannot resolve the call's working directory to a project. With a recognized working directory, a write to an unguarded path outside every recognized project makes no file-policy query. The hook blocks writes it recognizes to guarded paths. A hook cannot stop work done by a process outside the coding agent.
+
+### Shell write checks
 
 **Existing implementation.** The check before a shell command recognizes common explicit destinations. A command that writes through an interpreter, a script, or a destination built at run time is not seen before it runs (S18).
 
@@ -128,13 +134,13 @@ Treat the Room as a shared channel that the hub operator can read. The filters c
 
 **Existing implementation.** The check after the command uses the tree snapshot code of the write ledger (S20). Its warning tells the agent that the GitHub check will reject the change (S19).
 
-**OpenPlexer design.** The write ledger and the GitHub check are outside the foundation. Whether the check after the command ports without them is an open decision. If it does not port, a shell write that the check before the command misses is neither prevented nor reported.
+**OpenPlexer.** The hooks recognize some shell write targets before execution. There is no check after the command. A write that the hook cannot find is outside this coverage. [Decisions settled by the hook adapters](#decisions-settled-by-the-hook-adapters).
 
-### Hooks fail open
+### When a hook fails
 
 **Existing implementation.** A hook that throws an error or runs past its time budget allows the action and logs a notice (S21). ADR 0002 calls this deliberate, so that a broken daemon does not stop the agent, and notes that an attacker can trigger it (S6). With no verified policy on disk, the gate allows every action (S25). Two cases fail closed. Under a policy, the gate denies an `apply_patch` whose patch text it cannot parse. The gate also evaluates a token without a member id as an unknown member, and denies that member's writes (S18).
 
-**OpenPlexer design.** The Phase 1 hook fails closed where the coding agent lets it. With no verified policy, it denies every call that it judges. Claude Code blocks a call when the hook fails, because the entry that `install` writes sets `onFailure` to `block`. Codex has no such option, so the hook ends itself with exit status 2 before the timeout of its entry. A Codex hook whose binary is missing or killed still lets the call run. [Decisions settled by install and the hook command](#decisions-settled-by-install-and-the-hook-command) gives each case.
+**OpenPlexer.** With no verified policy, the hook denies every call that it judges. Claude Code blocks a call when the installed hook fails, because the entry sets `onFailure` to `block`. Codex has no such option. The hook tries to end with exit status 2 before the agent's timeout. A Codex hook whose binary is missing or killed can still let the call run. [Decisions settled by install and the hook command](#decisions-settled-by-install-and-the-hook-command) gives each case.
 
 ### The same OS user can undo all of it
 
@@ -158,7 +164,7 @@ Detection is the most that the design can offer against the same OS user. It tur
 
 **OpenPlexer design.** Phase 1 ports none of the three detections. [Open decisions](#open-decisions) records why.
 
-## A policy is trusted because the hub signed it, and only when it arrives
+## Policy signatures and local trust
 
 ### Signature and key distribution
 
@@ -171,7 +177,7 @@ Detection is the most that the design can offer against the same OS user. It tur
 - One key signs both agent tokens and policy bundles. The `typ` header tells them apart (S28).
 - Overrides are not signed. The daemon takes an override from a push on its authenticated connection or from an HTTP fetch, and stores it next to the bundle (S24, S23).
 
-**OpenPlexer design.** In Phase 1, the gate verifies a bundle against a key set that the developer stores locally, with no hub ([issue 16](https://github.com/Multiplexer-si/OpenPlexer/issues/16), [Local policy gate](local-policy.md)). With a locally stored key set, a party that controls the network path or the hub URL can no longer substitute keys. A key that the developer removes from the key set stops verifying at the next command, so the gate stops enforcing every bundle that the key signed. The key does not protect against the hub operator, who holds the private key, and the design trusts the operator. Hub enrollment uses the same local pin. The operator supplies the JWKS for `configure --keys` through a trusted channel.
+**OpenPlexer.** The gate verifies a bundle against the key set that the developer pins locally, with or without a hub. On sync the bundle must verify against both the hub's advertised JWKS and the local pin. A party controlling the hub URL or network path cannot make a key outside the pin pass verification. The gate rechecks stored signatures when it opens, so removing the signer from the pin stops enforcement of its bundles. An operator holding a pinned private key can sign policy that passes the signature check. The operator supplies the JWKS for `configure --keys` through a trusted channel. [Local policy gate](local-policy.md).
 
 ### Offline, the daemon keeps enforcing the last verified bundle
 
@@ -183,7 +189,7 @@ Detection is the most that the design can offer against the same OS user. It tur
 
 **Existing implementation.** A bundle carries a version and a project id, and no issue time or expiry (S26). The daemon enforces a bundle until a newer one arrives, however long that takes. While a machine is offline, it keeps the old rules. A member whom a lead removed from a role keeps that role's grants on that machine, and an override that a lead revoked stays in force until the next connection. An override with an end time expires by the local clock (S27).
 
-**OpenPlexer design.** Issue 16 requires the gate to report when its policy is stale. The existing bundle format cannot express a freshness rule, so the Phase 1 gate measures freshness on the machine. A policy is stale when no load has confirmed it for a configured number of days, 14 by default. A load confirms a policy when it brings the same bundle again or a newer version. The gate keeps enforcing a stale policy, and it reports the state in `openplexer policy status`, with each decision, and in each decision record ([Offline and stale](local-policy.md#offline-and-stale)). A gate that denies everything when its policy goes stale turns a hub outage into a work stoppage, and a developer whose work stops removes the hooks.
+**OpenPlexer.** The bundle format has no signed freshness field. A policy is stale when no load or sync has confirmed it for a configured number of days, 14 by default. The same bundle or a newer version confirms the policy. The gate keeps enforcing a stale policy. It reports that state in `policy status`, `policy check`, and local decision records. [Offline and stale](local-policy.md#offline-and-stale).
 
 **OpenPlexer design.** The time of the last confirmation is local and is not signed. A stale policy therefore means that the machine has not seen the bundle again, and not that the lead changed the policy. A program that runs as the developer can change the time. A replay of an old bundle of the same version also confirms the policy.
 
@@ -200,7 +206,7 @@ Detection is the most that the design can offer against the same OS user. It tur
 
 Such a program cannot change what another developer's daemon enforces, and it cannot produce a bundle that verifies against the hub's real key. It cannot change the hub's policy or the audit log without hub credentials.
 
-**OpenPlexer design.** The Phase 1 gate stores the signed token, and not the bundle, and each command verifies the token against the key set again before it uses the policy. A token with a bad signature fails verification, and the gate then enforces no policy and says so. A validly signed older bundle written straight into `policy.json` verifies, and the gate enforces it, because version comparisons run during a load or sync. That rollback is a same-user action. The hook's denial of writes into the OpenPlexer home, which issue 15 adds, is the protection against an agent that attempts it. For each action that arrives while no verified policy is in force, the gate writes a `policy.unenforced` record to its audit log, so the log reports both an edit and a removal ([The states of a policy](local-policy.md#the-states-of-a-policy)). Neither measure stops a program that also replaces the key set or edits the audit log. Both are cheap, and they catch an agent that edits the policy by mistake.
+**OpenPlexer.** The gate stores a signed token and verifies it each time it opens. A token with a bad signature leaves the gate without a verified policy. A validly signed older bundle written straight into `policy.json` can still be enforced, because version comparisons run during a load or sync. The hook guards the OpenPlexer home from covered writes. When a call reaches the gate with no verified policy, it tries to record `policy.unenforced` in the local audit log. A program running as the same user can replace the key set or edit the audit log. [The states of a policy](local-policy.md#the-states-of-a-policy).
 
 ## The audit chain proves the records agree, not that the log is complete
 
@@ -291,16 +297,18 @@ The operator made these decisions on 2026-11-19. [Issue 23](https://github.com/M
 - **Transport.** The agent accepts HTTPS and loopback HTTP. Requests refuse redirects. The public JWKS request carries no member token.
 - **Credentials.** The developer installs the member bearer token in `config.json` with mode `0600`. The hub authenticates Room authors from that token. A token stays valid until the operator removes the member, and the developer can install a replacement with `configure --token-file`. A revoked token blocks network requests. The gate still evaluates the cached bundle and uses the configured member ID.
 - **Overrides.** A permission-widening override requires its own signed contract. Until that exists, the gate ignores override inputs, including anything reported in Room events.
-- **Denials.** The hook queues the action and a project-relative path that passes the content filter. Command text, absolute local paths, and other unsafe targets become `[omitted]`. The Room gets a fixed reason. Detailed rules stay local.
+- **Denials.** The hook queues the action and a filtered policy target. The adapter makes a write target inside a recognized project relative to its project root before the policy check, even when the tool input names an absolute path. The Room can receive that relative path if it passes the content filter. The filter uses `[omitted]` for `exec` and `git.push` and for any resulting policy target that is still absolute or otherwise unsafe. The Room gets a fixed reason. Command text and detailed rules stay local.
 - **Repository identifier.** Use the ID the lead set with `add-project -repo`. The sole repository in the signed bundle supplies the ID for file queries. The daemon derives no identifier from the Git remote or directory.
-- **Telemetry.** The daemon permits the declared fields of supported Room posts, strips additional members, and rejects recognized secret or code text before it writes an outbox entry. It makes policy and JWKS requests, sends Room resume envelopes with a cursor, and posts Room events with idempotency keys. There are no presence, ledger, metrics, audit export, or raw tool payloads on this connection.
+- **Room delivery.** The daemon resumes a Room stream with its saved cursor and writes received events to standard output. The installed hooks do not inject Room content into the coding agent. The hub offers a claim API. Claims are advisory and the hooks do not consult them.
+- **Outbound data.** The daemon filters supported Room posts before queueing and again before sending. It makes policy and JWKS requests, sends Room resume envelopes with a cursor, and posts Room events with idempotency keys. There are no presence, ledger, metrics, audit export, or raw tool payloads on this connection.
 
 ## Decisions settled by the single-team hub
 
 The [single-team hub](hub.md) implements these choices from [issue 19](https://github.com/Multiplexer-si/OpenPlexer/issues/19).
 
 - **Where the hub keeps its keys.** Initialization generates separate ES256 policy and checkpoint keys. The hub keeps both private keys in its owner-only state file and serves each set of public keys at its own JWKS endpoint. Bearer tokens are random and the hub stores SHA-256 token hashes. Automatic key rotation stays open. Daemon re-pinning is explicit.
-- **What the hub retains.** The hub keeps all Room history and the latest signed policy for each project. It deletes ended leases from the active claim store and removes a member's token hash on revocation. The hub also keeps the team audit chain and signs a checkpoint at export. Room and audit history have no automatic pruning. [Issue 24](https://github.com/Multiplexer-si/OpenPlexer/issues/24), [audit export](audit.md#export-from-the-hub).
+- **What the hub operator controls.** The operator can manage members, read and change the hub's stored state, withhold updates, and sign policy and checkpoints with the hub's keys. All active members can access every project and Room in the team. The hub protocol gives the operator no access to local files or controls for replacing a client's pin. Revoking a token cuts off authenticated requests. The gate still uses its verified policy on disk. A checkpoint kept outside the hub can expose a rewrite of the history it covers. [How a verifier obtains a trusted checkpoint](#how-a-verifier-obtains-a-trusted-checkpoint).
+- **What the hub retains.** The hub keeps all Room history and the latest signed policy for each project. Released leases leave the active store. The next authenticated claim operation in an existing Room removes expired leases and records their expiry in Room history. Revocation removes the member's token hash. The hub also keeps the team audit chain and signs a checkpoint at export. Room and audit history have no automatic pruning. [Issue 24](https://github.com/Multiplexer-si/OpenPlexer/issues/24), [audit export](audit.md#export-from-the-hub).
 
 ## Decisions settled by the hook adapters
 
