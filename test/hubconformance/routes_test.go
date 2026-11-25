@@ -80,7 +80,7 @@ func (f *fixture) auth(t *testing.T) {
 			if r.limit != 0 {
 				t.Run("auth-and-body-order", func(t *testing.T) {
 					oversized := pad(r.body, r.limit+1)
-					rejectedBody := r.earlyRejectionBody(oversized)
+					rejectedBody := r.earlyRejectionBody(f.target, oversized)
 					f.call(t, r.method, r.path, "short", rejectedBody, http.StatusUnauthorized)
 					f.call(t, r.method, r.path, f.unknown, oversized, http.StatusRequestEntityTooLarge)
 					for _, fields := range [][]string{
@@ -97,19 +97,35 @@ func (f *fixture) auth(t *testing.T) {
 					}
 					commaToken := strings.Repeat("a", 21) + "," + strings.Repeat("a", 21)
 					f.call(t, r.method, r.path, commaToken[1:], rejectedBody, http.StatusUnauthorized)
-					if !*wranglerDev {
-						f.call(t, r.method, r.path, commaToken, oversized, http.StatusRequestEntityTooLarge)
-					}
-					f.call(t, r.method, r.path, commaToken, r.body, http.StatusUnauthorized)
+					f.checkCommaBearer(t, r, commaToken, oversized)
 				})
 			}
 		})
 	}
 }
 
-func (r route) earlyRejectionBody(oversized string) string {
+func (f *fixture) checkCommaBearer(t *testing.T, r route, token, oversized string) {
+	t.Helper()
+	switch f.target {
+	case builtInGo:
+		f.call(t, r.method, r.path, token, oversized, http.StatusRequestEntityTooLarge)
+	case externalHub:
+		path := f.redact(r.path)
+		res, err := f.send(t.Context(), r.method, r.path, token, oversized, "")
+		if err != nil {
+			t.Fatalf("%s %s failed: %s", r.method, path, f.redact(err.Error()))
+		}
+		if res.status != http.StatusUnauthorized && res.status != http.StatusRequestEntityTooLarge {
+			t.Fatalf("%s %s: status %d, want 401 or 413", r.method, path, res.status)
+		}
+		res.expect(t, r.method, path, res.status)
+	}
+	f.call(t, r.method, r.path, token, r.body, http.StatusUnauthorized)
+}
+
+func (r route) earlyRejectionBody(target hubTarget, oversized string) string {
 	// Wrangler dev can truncate a 401 while a rejected upload is still in flight.
-	if *wranglerDev {
+	if target == localWrangler {
 		return r.body
 	}
 	return oversized
@@ -201,10 +217,10 @@ func (f *fixture) escapedPaths(t *testing.T) {
 		// Go can return plain text for parser errors and unmatched routes.
 		want := []int{tc.workerStatus}
 		if tc.goStatus != 0 {
-			switch {
-			case f.local:
+			switch f.target {
+			case builtInGo:
 				want[0] = tc.goStatus
-			case !*wranglerDev:
+			case externalHub:
 				// An external hub without -wrangler-dev could use either backend.
 				want = append(want, tc.goStatus)
 			}

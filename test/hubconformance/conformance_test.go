@@ -48,18 +48,32 @@ const (
 	seedRepo       = "R&D"
 )
 
+type hubTarget int
+
+const (
+	builtInGo hubTarget = iota
+	localWrangler
+	externalHub
+)
+
 type fixture struct {
 	origin, lead, member, revoked, unknown string
 	missing                                string
-	local                                  bool
+	target                                 hubTarget
 	client                                 *http.Client
 }
 
-func validateTarget(origin string, wrangler bool) error {
-	if wrangler && origin == "" {
-		return errors.New("-wrangler-dev requires -hub-url")
+func targetFromFlags(origin string, wrangler bool) (hubTarget, error) {
+	switch {
+	case wrangler && origin == "":
+		return 0, errors.New("-wrangler-dev requires -hub-url")
+	case origin == "":
+		return builtInGo, nil
+	case wrangler:
+		return localWrangler, nil
+	default:
+		return externalHub, nil
 	}
-	return nil
 }
 
 func TestValidateTarget(t *testing.T) {
@@ -74,8 +88,8 @@ func TestValidateTarget(t *testing.T) {
 		{name: "wrangler-without-origin", wrangler: true, wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := validateTarget(tc.origin, tc.wrangler); (err != nil) != tc.wantError {
-				t.Fatalf("validateTarget returned %v, want error: %t", err, tc.wantError)
+			if _, err := targetFromFlags(tc.origin, tc.wrangler); (err != nil) != tc.wantError {
+				t.Fatalf("targetFromFlags returned %v, want error: %t", err, tc.wantError)
 			}
 		})
 	}
@@ -83,7 +97,8 @@ func TestValidateTarget(t *testing.T) {
 
 func setup(t *testing.T) *fixture {
 	t.Helper()
-	if err := validateTarget(*hubURL, *wranglerDev); err != nil {
+	target, err := targetFromFlags(*hubURL, *wranglerDev)
+	if err != nil {
 		t.Fatal(err)
 	}
 	id := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
@@ -91,14 +106,14 @@ func setup(t *testing.T) *fixture {
 		t.Fatal("-project and -second-project must be distinct hub IDs")
 	}
 	f := &fixture{
-		local: *hubURL == "", missing: "missing-" + rand.Text(),
+		target: target, missing: "missing-" + rand.Text(),
 		client: &http.Client{
 			Timeout:       10 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
 	t.Cleanup(f.client.CloseIdleConnections)
-	if f.local {
+	if f.target == builtInGo {
 		if *leadTokenFile != "" || *memberTokenFile != "" || *revokedTokenFile != "" {
 			t.Fatal("token file flags require -hub-url")
 		}
@@ -123,7 +138,7 @@ func setup(t *testing.T) *fixture {
 	token := make([]byte, 32)
 	rand.Read(token)
 	f.unknown = base64.RawURLEncoding.EncodeToString(token)
-	if !f.local {
+	if f.target != builtInGo {
 		f.call(t, get, policyKeysPath, "", "", http.StatusOK)
 	}
 	return f
