@@ -57,6 +57,9 @@ func (f *fixture) auth(t *testing.T) {
 						want = http.StatusOK
 					}
 					res := f.call(t, r.method, r.path, tc.token, r.body, want)
+					if r.path == policyKeysPath && tc.token != "" {
+						keyIDs(t, r.path, "", res)
+					}
 					if r.path == auditPath && res.header.Get(checkpoint) != "" {
 						t.Error("unauthorized export included a checkpoint")
 					}
@@ -64,7 +67,11 @@ func (f *fixture) auth(t *testing.T) {
 			}
 			if r.leadOnly {
 				t.Run("member-forbidden", func(t *testing.T) {
-					res := f.call(t, r.method, r.path, f.member, r.body, http.StatusForbidden)
+					body := r.body
+					if r.name == "publish-policy" {
+						body = bundleJSON(*project, f.repo(t, *project), 2, "")
+					}
+					res := f.call(t, r.method, r.path, f.member, body, http.StatusForbidden)
 					if r.path == auditPath && res.header.Get(checkpoint) != "" {
 						t.Error("forbidden export included a checkpoint")
 					}

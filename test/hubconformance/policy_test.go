@@ -17,15 +17,19 @@ import (
 )
 
 func (f *fixture) jwks(t *testing.T) {
+	read := func(t *testing.T, path, prefix string) map[string]bool {
+		t.Helper()
+		return keyIDs(t, path, prefix, f.call(t, get, path, "", "", http.StatusOK))
+	}
 	var policyIDs, auditIDs map[string]bool
-	t.Run("policy", func(t *testing.T) { policyIDs = f.keyIDs(t, policyKeysPath, "") })
-	t.Run("audit", func(t *testing.T) { auditIDs = f.keyIDs(t, auditKeysPath, "audit-") })
+	t.Run("policy", func(t *testing.T) { policyIDs = read(t, policyKeysPath, "") })
+	t.Run("audit", func(t *testing.T) { auditIDs = read(t, auditKeysPath, "audit-") })
 	t.Run("separate-key-pairs", func(t *testing.T) {
 		if policyIDs == nil {
-			policyIDs = f.keyIDs(t, policyKeysPath, "")
+			policyIDs = read(t, policyKeysPath, "")
 		}
 		if auditIDs == nil {
-			auditIDs = f.keyIDs(t, auditKeysPath, "audit-")
+			auditIDs = read(t, auditKeysPath, "audit-")
 		}
 		for id := range auditIDs {
 			if policyIDs[id] {
@@ -35,19 +39,20 @@ func (f *fixture) jwks(t *testing.T) {
 	})
 }
 
-func (f *fixture) keyIDs(t *testing.T, path, prefix string) map[string]bool {
+func keyIDs(t *testing.T, path, prefix string, res response) map[string]bool {
 	t.Helper()
-	res := f.call(t, get, path, "", "", http.StatusOK)
 	if _, err := policy.ParseKeySet(res.body); err != nil {
 		t.Fatal(err)
 	}
-	var jwks struct{ Keys []map[string]any }
+	var jwks map[string]json.RawMessage
 	decode(t, res.body, &jwks)
-	if len(jwks.Keys) == 0 {
+	var keys []map[string]any
+	decode(t, jwks["keys"], &keys)
+	if len(keys) == 0 {
 		t.Fatalf("%s contains no public keys", path)
 	}
-	ids := make(map[string]bool, len(jwks.Keys))
-	for i, key := range jwks.Keys {
+	ids := make(map[string]bool, len(keys))
+	for i, key := range keys {
 		if _, private := key["d"]; private || key["kty"] != "EC" || key["crv"] != "P-256" {
 			t.Fatalf("%s key %d must be a public P-256 key", path, i)
 		}
