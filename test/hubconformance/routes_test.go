@@ -57,8 +57,8 @@ func (f *fixture) auth(t *testing.T) {
 						want = http.StatusOK
 					}
 					res := f.call(t, r.method, r.path, tc.token, r.body, want)
-					if r.path == policyKeysPath && tc.token != "" {
-						keyIDs(t, r.path, "", res)
+					if r.public {
+						keyIDs(t, r.path, res)
 					}
 					if r.path == auditPath && res.header.Get(checkpoint) != "" {
 						t.Error("unauthorized export included a checkpoint")

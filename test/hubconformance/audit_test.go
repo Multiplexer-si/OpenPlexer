@@ -15,7 +15,7 @@ const denialPost = `{"type":"policy.denied","agent":{"id":"session","vendor":"co
 
 type auditEntry struct {
 	audit.Record
-	Result string
+	Result string `json:"result"`
 }
 
 type auditSnapshot struct {
@@ -42,8 +42,10 @@ func (f *fixture) readAudit(t *testing.T, previous ...string) auditSnapshot {
 			t.Fatalf("export does not extend the earlier checkpoint (rule %s)", result.Rule)
 		}
 	}
-	var wire struct{ Entries []auditEntry }
-	decode(t, res.body, &wire)
+	var wire struct {
+		Entries []auditEntry `json:"entries"`
+	}
+	decodeWire(t, res.body, &wire)
 	for i, entry := range wire.Entries {
 		if entry.ID != fmt.Sprint(len(wire.Entries)-i) || entry.Result != audit.ActionResult(entry.Action) {
 			t.Fatalf("export entry %d has the wrong newest-first ID or result", i)

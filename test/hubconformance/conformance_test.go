@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"flag"
 	"fmt"
@@ -314,17 +315,10 @@ func (res response) expectJSON(t *testing.T, method, path string) {
 	}
 }
 
-func decode(t *testing.T, data []byte, dst any) {
-	t.Helper()
-	if err := json.Unmarshal(data, dst); err != nil {
-		t.Fatalf("invalid %T response (%T)", dst, err)
-	}
-}
-
 func decodeWire(t *testing.T, data []byte, dst any) {
 	t.Helper()
-	// Match wire field names exactly and reject duplicate response members.
-	if err := jsonv2.Unmarshal(data, dst); err != nil {
+	// Select final members before checking field types, then match names exactly.
+	if err := jsonv2.Unmarshal(mustCanonical(t, data), dst, jsontext.AllowInvalidUTF8(true)); err != nil {
 		t.Fatalf("invalid %T response (%T)", dst, err)
 	}
 }
