@@ -80,7 +80,8 @@ func (f *fixture) auth(t *testing.T) {
 			if r.limit != 0 {
 				t.Run("auth-and-body-order", func(t *testing.T) {
 					oversized := pad(r.body, r.limit+1)
-					f.call(t, r.method, r.path, "short", oversized, http.StatusUnauthorized)
+					rejectedBody := r.earlyRejectionBody(oversized)
+					f.call(t, r.method, r.path, "short", rejectedBody, http.StatusUnauthorized)
 					f.call(t, r.method, r.path, f.unknown, oversized, http.StatusRequestEntityTooLarge)
 					for _, fields := range [][]string{
 						{"Basic " + f.unknown},
@@ -88,18 +89,15 @@ func (f *fixture) auth(t *testing.T) {
 						// Workerd folds these fields into a bearer value with a 43-byte token.
 						{"Bearer " + strings.Repeat("a", 20), strings.Repeat("b", 21)},
 					} {
-						res, err := f.send(t.Context(), r.method, r.path, "", oversized, "", fields...)
+						res, err := f.send(t.Context(), r.method, r.path, "", rejectedBody, "", fields...)
 						if err != nil {
 							t.Fatal(f.redact(err.Error()))
 						}
 						res.expect(t, r.method, r.path, http.StatusUnauthorized)
 					}
 					commaToken := strings.Repeat("a", 21) + "," + strings.Repeat("a", 21)
-					if *wranglerDev {
-						// Wrangler dev can truncate a 401 while a rejected upload is still in flight.
-						f.call(t, r.method, r.path, commaToken[1:], r.body, http.StatusUnauthorized)
-					} else {
-						f.call(t, r.method, r.path, commaToken[1:], oversized, http.StatusUnauthorized)
+					f.call(t, r.method, r.path, commaToken[1:], rejectedBody, http.StatusUnauthorized)
+					if !*wranglerDev {
 						res, err := f.send(t.Context(), r.method, r.path, commaToken, oversized, "")
 						if err != nil {
 							t.Fatal(f.redact(err.Error()))
@@ -115,6 +113,14 @@ func (f *fixture) auth(t *testing.T) {
 			}
 		})
 	}
+}
+
+func (r route) earlyRejectionBody(oversized string) string {
+	// Wrangler dev can truncate a 401 while a rejected upload is still in flight.
+	if *wranglerDev {
+		return r.body
+	}
+	return oversized
 }
 
 func (f *fixture) methods(t *testing.T) {

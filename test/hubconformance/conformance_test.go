@@ -28,7 +28,7 @@ import (
 
 var (
 	hubURL           = flag.String("hub-url", "", "origin of a seeded hub (default: start a Go hub)")
-	wranglerDev      = flag.Bool("wrangler-dev", false, "use small bodies for comma bearer checks against Wrangler dev")
+	wranglerDev      = flag.Bool("wrangler-dev", false, "use small bodies for early bearer rejections against Wrangler dev")
 	leadTokenFile    = flag.String("lead-token-file", "", "file containing the lead token")
 	memberTokenFile  = flag.String("member-token-file", "", "file containing the member token")
 	revokedTokenFile = flag.String("revoked-token-file", "", "optional file containing a previously revoked token")

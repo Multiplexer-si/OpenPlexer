@@ -35,6 +35,8 @@ go test -count=1 ./test/hubconformance -args \
 
 If the fixture uses other project IDs, pass `-project` and `-second-project` after `-args`.
 
+When testing against `wrangler dev`, pass `-wrangler-dev` after `-args`. The `auth-and-body-order` cases send small bodies for requests the Worker rejects before reading the body. Wrangler dev can truncate the 401 response while a large upload is still in flight. The well-formed unknown token still gets an oversized body because the Worker reads through the first byte over the limit before returning 413. The Workers-pool tests verify the full 401 response to oversized uploads.
+
 ## Coverage limits
 
 - Live streaming waits for [issue #87](https://github.com/Multiplexer-si/OpenPlexer/issues/87).
