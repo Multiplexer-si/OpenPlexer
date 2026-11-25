@@ -143,7 +143,11 @@ test("wraps PKCS#8 with fresh nonces and authenticates the key identity and ciph
   const pkcs8 = await exportPKCS8(privateKey);
   const { kid } = await exportPublicJWK(publicKey, "audit");
   const identity = { team: "demo", purpose: "audit", kid } satisfies Parameters<typeof wrapPKCS8>[2];
-  const key = crypto.getRandomValues(new Uint8Array(32));
+  const wrappingKey = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt", "decrypt"]);
+  if ("privateKey" in wrappingKey) throw new Error("Expected an AES-GCM key");
+  const rawKey = await crypto.subtle.exportKey("raw", wrappingKey);
+  if (!(rawKey instanceof ArrayBuffer)) throw new Error("Expected raw AES-GCM key bytes");
+  const key = new Uint8Array(rawKey);
   const first = await wrapPKCS8(pkcs8, key, identity);
   const second = await wrapPKCS8(pkcs8, key, identity);
   expect(first.nonce).toHaveLength(12);
