@@ -2,7 +2,16 @@ export class HubStorage {
   constructor(private readonly storage: DurableObjectStorage) {}
 
   transaction<T>(fn: (sql: SqlStorage) => T & (T extends PromiseLike<unknown> ? never : unknown)): T {
-    return this.storage.transactionSync(() => fn(this.storage.sql));
+    return this.storage.transactionSync(() => {
+      const result = fn(this.storage.sql);
+      if (result !== null && (typeof result === "object" || typeof result === "function")
+          && typeof Reflect.get(result, "then") === "function") {
+        // The caller gets the synchronous error. Consume a native Promise's rejection.
+        if (result instanceof Promise) void result.catch(() => {});
+        throw new TypeError("Hub transactions must be synchronous");
+      }
+      return result;
+    });
   }
 }
 

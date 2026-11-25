@@ -127,6 +127,26 @@ test("a thrown transaction rolls back the action and its audit record", async ()
   });
 });
 
+const asynchronousWrites: [string, (sql: SqlStorage) => void][] = [
+  ["an async callback that throws after await", async (sql) => {
+    sql.exec("INSERT INTO projects (project_id, repo) VALUES ('demo', 'team/demo')");
+    await Promise.resolve();
+    throw new Error("failed asynchronously");
+  }],
+  ["a callback returning a rejected Promise", (sql) => {
+    sql.exec("INSERT INTO projects (project_id, repo) VALUES ('demo', 'team/demo')");
+    return Promise.reject(new Error("failed asynchronously"));
+  }],
+];
+
+test.each(asynchronousWrites)("rolls back %s", async (_name, write) => {
+  await runInDurableObject(env.TEAM_HUB.get(teamId()), (_instance, ctx) => {
+    const storage = new HubStorage(ctx.storage);
+    expect(() => storage.transaction(write)).toThrow("Hub transactions must be synchronous");
+    expect(ctx.storage.sql.exec("SELECT project_id FROM projects").toArray()).toEqual([]);
+  });
+});
+
 test("a row survives eviction and is read in another object request", async () => {
   const id = teamId();
   const stub = env.TEAM_HUB.get(id);
