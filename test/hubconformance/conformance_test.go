@@ -32,6 +32,7 @@ var (
 	memberTokenFile  = flag.String("member-token-file", "", "file containing the member token")
 	revokedTokenFile = flag.String("revoked-token-file", "", "optional file containing a previously revoked token")
 	project          = flag.String("project", "conformance", "project ID with an initial policy")
+	policyAudit      = flag.Bool("policy-audit", true, "check the audit export around rejected policy writes")
 	secondProject    = flag.String("second-project", "conformance-other", "second project ID with the same repo")
 )
 
