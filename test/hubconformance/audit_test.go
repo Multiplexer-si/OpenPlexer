@@ -107,7 +107,11 @@ func (f *fixture) concurrentWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	verifyBundle(t, published.res, keys, second, repo, 1)
+	acknowledged := verifyBundle(t, published.res, keys, second, repo, 1)
+	stored := verifyBundle(t, f.call(t, get, projectPath(second)+"/policy.bundle", f.member, "", http.StatusOK), keys, second, repo, 1)
+	if stored.Signature != acknowledged.Signature || !sameJSON(t, stored.Bundle, acknowledged.Bundle) {
+		t.Fatal("the stored policy differs from the publication acknowledged during the race")
+	}
 
 	bySeq := make(map[int64][]byte, count)
 	byID := make(map[string]bool, count)
