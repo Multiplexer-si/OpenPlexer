@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
@@ -65,7 +66,7 @@ func validMemberToken(token string) bool {
 		return false
 	}
 	raw, err := base64.RawURLEncoding.Strict().DecodeString(token)
-	return err == nil && len(raw) == 32 && base64.RawURLEncoding.EncodeToString(raw) == token
+	return err == nil && len(raw) == 32
 }
 
 func readCredential(stdin io.Reader, path string, bootstrap bool) (string, error) {
@@ -176,7 +177,7 @@ func (h remoteAdmin) init(id, path string) error {
 	if err != nil {
 		return err
 	}
-	if token == h.token {
+	if subtle.ConstantTimeCompare([]byte(token), []byte(h.token)) == 1 {
 		return errors.New("the bootstrap token and first lead token must be different")
 	}
 	digest := sha256.Sum256([]byte(token))

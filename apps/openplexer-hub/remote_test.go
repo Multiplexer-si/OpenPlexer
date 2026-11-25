@@ -115,6 +115,24 @@ func TestRemoteAdminWorkflow(t *testing.T) {
 	command(0, "", leadToken, "remove-member", "--token-file", "-", "--id", "ana")
 }
 
+func TestRemoteInitRejectsIdenticalCredentials(t *testing.T) {
+	token := testToken("shared fixture")
+	path := filepath.Join(t.TempDir(), "lead.token")
+	if err := os.WriteFile(path, []byte(token), 0600); err != nil {
+		t.Fatal(err)
+	}
+	transport := adminTransport(func(*http.Request) (*http.Response, error) {
+		t.Fatal("sent init with identical bootstrap and lead credentials")
+		return nil, nil
+	})
+	var out, stderr bytes.Buffer
+	code := runWithInput([]string{"init", "--hub", "https://hub.example.test", "--id", "lee", "--lead-token-file", path},
+		strings.NewReader(token), &out, &stderr, transport)
+	if code != 1 || out.Len() != 0 || !strings.Contains(stderr.String(), "bootstrap token and first lead token must be different") {
+		t.Fatalf("exit %d or unexpected output for identical credentials", code)
+	}
+}
+
 func TestRemoteAddMemberTokenResponse(t *testing.T) {
 	lead, issued, other := testToken("lead"), testToken("issued"), testToken("other")
 	for _, tc := range []struct {
@@ -124,6 +142,7 @@ func TestRemoteAddMemberTokenResponse(t *testing.T) {
 		{name: "final null", body: `{"token":"` + issued + `","token":null}`},
 		{name: "wrong type", body: `{"token":42}`},
 		{name: "invalid syntax", body: `{"token":"` + issued[:42] + `+"}`},
+		{name: "nonzero padding bits", body: `{"token":"` + issued[:42] + `B"}`},
 		{name: "valid", body: `{"token":"` + issued + `"}`, token: issued},
 		{name: "final exact name", body: `{"token":null,"token":"` + issued + `","Token":"` + other + `"}`, token: issued},
 	} {
