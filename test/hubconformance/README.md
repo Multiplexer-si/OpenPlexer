@@ -39,10 +39,19 @@ When testing against `wrangler dev`, pass `-hub-url` and `-wrangler-dev` after `
 
 ## Checks by target
 
-On every target, `auth-and-body-order` requires 413 for a well-formed unknown bearer with an oversized body. It also requires 401 for a single 43-byte comma bearer with a small body.
+On every target, `auth-and-body-order` requires 413 for a well-formed unknown bearer with an oversized body.
 
-- With the built-in Go hub or an external hub without `-wrangler-dev`, the suite also requires 413 for that 43-byte comma bearer with an oversized body. It uses oversized bodies for 401 checks with a short bearer, Basic auth, multiple `Authorization` fields, and a short comma bearer.
-- With `-wrangler-dev`, the suite uses small bodies for all of these 401 checks. Wrangler dev can truncate a 401 while a large upload is still in flight. The Workers-pool tests verify the full 401 response to oversized uploads.
+The suite checks a single `Authorization` field with a 43-byte comma bearer.
+
+| Target | Suite flags | Request body | Required status |
+| --- | --- | --- | --- |
+| Built-in Go hub | No `-hub-url` | Oversized | 413 |
+| Local Wrangler | `-hub-url` and `-wrangler-dev` | Small | 401 |
+| External hub of unknown kind | `-hub-url` without `-wrangler-dev` | Oversized | 401 or 413 |
+
+The suite checks the full error envelope for each accepted status. The built-in Go hub and external hubs also require 401 for a small body with the same bearer.
+
+The suite uses oversized bodies for the 401 checks with a short bearer, Basic auth, multiple `Authorization` fields, and a short comma bearer. With `-wrangler-dev`, it uses small bodies for those checks because Wrangler dev can truncate a 401 while a large upload is still in flight. The Workers-pool tests verify the full 401 response to oversized uploads.
 
 The built-in Go hub and `-wrangler-dev` each require the exact escaped-path status listed for that target. An external hub without `-wrangler-dev` can return either listed status because its backend is unknown. All other escaped-path cases require the same status on every target.
 
