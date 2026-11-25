@@ -1,7 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
-import { unescape as unescapeSegment } from "node:querystring";
 import { addMember, addProject, initialize, removeMember } from "./admin";
-import { bearer, HubError, json, notFound } from "./http";
+import { bearer, HubError, invalid, json, notFound } from "./http";
 import { publicKeys, publishPolicy, readPolicy, readProject } from "./publication";
 import { authenticate } from "./state";
 import { HubStorage, migrate } from "./storage";
@@ -32,6 +31,10 @@ export default {
       return notFound().response();
     }
 
+    // Check the original path before forwarding can normalize dot segments.
+    const segments = pathSegments(request.url);
+    if (segments instanceof HubError) return headResponse(request, segments.response());
+
     const id = env.TEAM_HUB.idFromName(`team:${env.TEAM_ID}`);
     return env.TEAM_HUB.get(id).fetch(request);
   },
@@ -48,22 +51,21 @@ export class TeamHub extends DurableObject<Env> {
   }
 
   async fetch(request: Request): Promise<Response> {
-    const { pathname } = new URL(request.url);
     let response: Response;
     try {
+      const segments = pathSegments(request.url);
+      if (segments instanceof HubError) throw segments;
       await this.schemaVersion;
-      response = await this.route(request, pathname);
+      response = await this.route(request, segments);
     } catch (error) {
       response = (error instanceof HubError ? error : new HubError(500, "hub state unavailable")).response();
     }
-    if (request.method === "HEAD") return new Response(null, { status: response.status, headers: response.headers });
-    return response;
+    return headResponse(request, response);
   }
 
-  private async route(request: Request, path: string): Promise<Response> {
+  private async route(request: Request, segments: string[]): Promise<Response> {
     const { method } = request;
-    // ServeMux unescapes each segment after splitting, so an encoded slash stays inside its segment.
-    const [, first, second, collection, target, suffix, ...extra] = path.split("/").map((segment) => unescapeSegment(segment));
+    const [, first, second, collection, target, suffix, ...extra] = segments;
     if (first === "healthz" && second === undefined) {
       allow(method, ["GET", "HEAD"]);
       return Response.json({ ok: true, schema: await this.schemaVersion }, { headers: jsonHeaders });
@@ -73,7 +75,7 @@ export class TeamHub extends DurableObject<Env> {
       return json(this.storage.transaction(publicKeys));
     }
     if (first !== "api" || second !== "v1" || extra.length > 0) throw notFound();
-    if (collection === "projects" && target) {
+    if (collection === "projects" && target && target !== "/") {
       if (suffix === "policy") {
         allow(method, ["PUT"]);
         return publishPolicy(request, this.storage, target, this.env.TEAM_ID, this.env.WRAP_KEY_V1);
@@ -101,13 +103,31 @@ export class TeamHub extends DurableObject<Env> {
             return json(await addProject(request, this.storage));
         }
       }
-      if (target === "members" && suffix) {
+      if (target === "members" && suffix && suffix !== "/") {
         allow(method, ["DELETE"]);
         return json(removeMember(request, this.storage, suffix));
       }
     }
     throw notFound();
   }
+}
+
+function pathSegments(url: string): string[] | HubError {
+  const path = url.replace(/^https?:\/\/[^/?#]*/i, "").split(/[?#]/, 1)[0];
+  let segments: string[];
+  try {
+    // Decode after splitting so an escaped slash stays inside its segment.
+    segments = path.split("/").map((segment) => decodeURIComponent(segment));
+  } catch {
+    return invalid("malformed path escape");
+  }
+  if (segments.some((segment) => segment === "." || segment === "..")) return notFound();
+  return segments;
+}
+
+function headResponse(request: Request, response: Response): Response {
+  if (request.method === "HEAD") return new Response(null, response);
+  return response;
 }
 
 function allow(method: string, allowed: string[]): void {

@@ -225,7 +225,7 @@ type response struct {
 	body   []byte
 }
 
-func (f *fixture) send(ctx context.Context, method, path, token, body, key string) (response, error) {
+func (f *fixture) send(ctx context.Context, method, path, token, body, key string, authorization ...string) (response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, f.origin+path, strings.NewReader(body))
 	if err != nil {
 		return response{}, err
@@ -233,12 +233,19 @@ func (f *fixture) send(ctx context.Context, method, path, token, body, key strin
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	for _, value := range authorization {
+		req.Header.Add("Authorization", value)
+	}
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
 	}
+	return f.do(req)
+}
+
+func (f *fixture) do(req *http.Request) (response, error) {
 	res, err := f.client.Do(req)
 	if err != nil {
 		return response{}, err

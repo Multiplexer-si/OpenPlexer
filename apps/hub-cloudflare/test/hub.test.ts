@@ -38,6 +38,18 @@ test("returns uncached JSON for unknown paths", async () => {
   expect(await response.json()).toEqual({ error: "not found" });
 });
 
+test.each(["/./healthz", "/unused/../healthz", "/%2E/healthz", "/unused/%2e%2E/healthz", "/unused/.%2e/healthz"])(
+  "rejects dot segments before forwarding %s",
+  async (path) => {
+    const incoming = new Request(`https://${env.HUB_HOSTNAME}${path}`);
+    const response = await worker.fetch(incoming, env);
+    expect(response.status).toBe(404);
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Content-Type")).toBe("application/json");
+    expect(await response.json()).toEqual({ error: "not found" });
+  },
+);
+
 test("rejects other hostnames before routing to storage", async () => {
   const before = (await listDurableObjectIds(env.TEAM_HUB)).length;
   for (const host of [`${env.HUB_HOSTNAME}.example`, "localhost", "127.0.0.1"]) {

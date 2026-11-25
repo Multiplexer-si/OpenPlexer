@@ -5,6 +5,8 @@ On startup, the object applies any pending schema migrations.
 `GET /healthz` returns `{"ok":true,"schema":1}` on a fresh object.
 The Worker serves team setup, member and project administration, and signed policies.
 
+For a single `Authorization` field with a 43-byte bearer token that contains a comma, the Worker returns 401 before reading the body and the Go hub applies the body cap (neither hub issues such a token).
+
 ## Run locally
 
 From this directory, use Node 24 and npm 11.

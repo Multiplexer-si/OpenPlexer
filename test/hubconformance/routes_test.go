@@ -82,9 +82,29 @@ func (f *fixture) auth(t *testing.T) {
 					oversized := pad(r.body, r.limit+1)
 					f.call(t, r.method, r.path, "short", oversized, http.StatusUnauthorized)
 					f.call(t, r.method, r.path, f.unknown, oversized, http.StatusRequestEntityTooLarge)
+					for _, fields := range [][]string{
+						{"Basic " + f.unknown},
+						{"Bearer " + f.unknown, "Bearer " + f.unknown},
+						// Workerd folds these fields into a bearer value with a 43-byte token.
+						{"Bearer " + strings.Repeat("a", 20), strings.Repeat("b", 21)},
+					} {
+						res, err := f.send(t.Context(), r.method, r.path, "", oversized, "", fields...)
+						if err != nil {
+							t.Fatal(f.redact(err.Error()))
+						}
+						res.expect(t, r.method, r.path, http.StatusUnauthorized)
+					}
 					commaToken := strings.Repeat("a", 21) + "," + strings.Repeat("a", 21)
 					f.call(t, r.method, r.path, commaToken[1:], oversized, http.StatusUnauthorized)
-					f.call(t, r.method, r.path, commaToken, oversized, http.StatusRequestEntityTooLarge)
+					res, err := f.send(t.Context(), r.method, r.path, commaToken, oversized, "")
+					if err != nil {
+						t.Fatal(f.redact(err.Error()))
+					}
+					// The Worker rejects any comma. Go applies the body cap when there is one field.
+					if res.status != http.StatusUnauthorized && res.status != http.StatusRequestEntityTooLarge {
+						t.Fatalf("%s %s: status %d, want 401 or 413", r.method, r.path, res.status)
+					}
+					res.expect(t, r.method, r.path, res.status)
 					f.call(t, r.method, r.path, commaToken, r.body, http.StatusUnauthorized)
 				})
 			}
@@ -141,22 +161,47 @@ func (f *fixture) methods(t *testing.T) {
 func (f *fixture) escapedPaths(t *testing.T) {
 	p := projectPath(*project)
 	for _, tc := range []struct {
-		path, token string
-		status      int
+		path, token         string
+		status, otherStatus int
 	}{
 		{path: "/.well-known/%6Awks.json", status: http.StatusOK},
 		{path: p + "/%70olicy.bundle", token: f.member, status: http.StatusOK},
 		{path: "/.well-known%2Fjwks.json", status: http.StatusNotFound},
 		{path: p + "%2Fpolicy.bundle", status: http.StatusUnauthorized},
 		{path: p + "%2Fpolicy.bundle", token: f.member, status: http.StatusNotFound},
+		{path: projectPath("%"), status: http.StatusBadRequest},
+		{path: projectPath("%2"), status: http.StatusBadRequest},
+		{path: projectPath("%GG"), status: http.StatusBadRequest},
+		// Go decodes arbitrary bytes, then fails to find the project.
+		{path: projectPath("%FF"), token: f.member, status: http.StatusBadRequest, otherStatus: http.StatusNotFound},
+		// Go redirects literal dot segments and treats escaped dots as wildcard values.
+		{path: projectPath("."), status: http.StatusNotFound, otherStatus: http.StatusTemporaryRedirect},
+		{path: projectPath(".."), status: http.StatusNotFound, otherStatus: http.StatusTemporaryRedirect},
+		{path: projectPath("%2E"), status: http.StatusNotFound, otherStatus: http.StatusUnauthorized},
+		{path: projectPath(".%2e"), status: http.StatusNotFound, otherStatus: http.StatusUnauthorized},
+		{path: projectPath("%2F"), status: http.StatusNotFound},
+		{path: projectPath(""), status: http.StatusNotFound},
 	} {
-		// An unmatched Go route returns plain text, so compare response statuses here.
-		res, err := f.send(t.Context(), get, tc.path, tc.token, "", "")
+		// Opaque sends the path verbatim, including escapes rejected by the Go client URL parser.
+		req, err := http.NewRequestWithContext(t.Context(), get, f.origin, nil)
+		if err != nil {
+			t.Fatal(f.redact(err.Error()))
+		}
+		req.URL.Opaque = tc.path
+		if tc.token != "" {
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+		}
+		res, err := f.do(req)
 		if err != nil {
 			t.Fatalf("GET %s failed: %s", tc.path, f.redact(err.Error()))
 		}
-		if res.status != tc.status {
-			t.Errorf("GET %s (authenticated: %t): status %d, want %d", tc.path, tc.token != "", res.status, tc.status)
+		// Go can return plain text for parser errors and unmatched routes.
+		want := []int{tc.status}
+		if tc.otherStatus != 0 {
+			want = append(want, tc.otherStatus)
+		}
+		if !slices.Contains(want, res.status) {
+			t.Errorf("GET %s (authenticated: %t): status %d, want one of %v", tc.path, tc.token != "", res.status, want)
 		}
 	}
 }

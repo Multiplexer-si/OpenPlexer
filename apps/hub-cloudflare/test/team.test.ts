@@ -219,6 +219,7 @@ test("unescapes route segments without turning escaped slashes into separators",
   await check(await addProject(lead), 200, {});
   const signature = await signed(await call(project + "/policy", "PUT", lead, bundle(1)), 1);
   await check(await call("/.well-known/%6Awks.json"), 200, await check(await call(keys), 200));
+  await check(await call(keys + "?ignored=/../%GG"), 200, await check(await call(keys), 200));
   await check(await call("/api/v1/%70rojects/%64emo", "GET", lead), 200, { id: "demo", repo });
   expect(await signed(await call(project + "/%70olicy.bundle", "GET", lead), 1)).toBe(signature);
 
@@ -226,8 +227,23 @@ test("unescapes route segments without turning escaped slashes into separators",
   await error(await call(project + "%2Fpolicy.bundle"), 401, "invalid bearer token");
   await error(await call(project + "%2Fpolicy.bundle", "GET", lead), 404, "not found");
   await error(await call(project + "%252Fpolicy.bundle", "GET", lead), 404, "not found");
+  await error(await call("/api/v1/projects/%252E"), 401, "invalid bearer token");
   await addMember(lead, "ana");
   await check(await call(admin + "/%6Dembers/%61na", "DELETE", lead), 200, {});
+});
+
+test.each(["%", "%2", "%GG", "%FF", "%E2%82", "%C0%AF", "%ED%A0%80"])(
+  "rejects malformed path escape %s before routing",
+  async (segment) => {
+    await error(await call("/api/v1/projects/" + segment), 400, "invalid input: malformed path escape");
+  },
+);
+
+test.each(["", "%2F", "%2f"])("rejects empty or whole-slash wildcard %j", async (segment) => {
+  const path = "/api/v1/projects/" + segment;
+  await error(await call(path), 404, "not found");
+  await error(await call(path + "/policy", "PUT"), 404, "not found");
+  await error(await call(admin + "/members/" + segment, "DELETE"), 404, "not found");
 });
 
 test("checks bearer syntax before body limits and membership after", async () => {
@@ -239,11 +255,18 @@ test("checks bearer syntax before body limits and membership after", async () =>
     [admin + "/projects", "POST", 64 << 10, '{"id":"exact","repo":"team/demo"}'],
   ] as const) {
     const oversized = json.padEnd(limit + 1);
+    const wrongScheme = incoming(path, method, undefined, oversized);
+    wrongScheme.headers.set("Authorization", "Basic " + newToken());
+    await error(await exports.default.fetch(wrongScheme), 401, "invalid bearer token");
     await error(await call(path, method, "short", oversized), 401, "invalid bearer token");
     await error(await call(path, method, newToken(), oversized), 413, "request body is too large");
     await error(await call(path, method, commaToken.slice(1), oversized), 401, "invalid bearer token");
-    await error(await call(path, method, commaToken, oversized), 413, "request body is too large");
+    await error(await call(path, method, commaToken, oversized), 401, "invalid bearer token");
     await error(await call(path, method, commaToken, json), 401, "invalid bearer token");
+    const duplicate = incoming(path, method, "a".repeat(20), oversized);
+    duplicate.headers.append("Authorization", "b".repeat(21));
+    expect(duplicate.headers.get("Authorization")).toBe("Bearer " + "a".repeat(20) + ", " + "b".repeat(21));
+    await error(await exports.default.fetch(duplicate), 401, "invalid bearer token");
     await check(await call(path, method, lead, json.padEnd(limit)), 200);
   }
   // Call the object directly so the failing stream is not consumed by service routing.
