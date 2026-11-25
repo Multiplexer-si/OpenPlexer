@@ -3,9 +3,9 @@
 This Worker routes requests for one team to one SQLite-backed Durable Object.
 On startup, the object applies any pending schema migrations.
 `GET /healthz` returns `{"ok":true,"schema":1}` on a fresh object.
-The Worker serves team setup, member and project administration, and signed policies.
+The Worker serves team setup, member and project administration, signed policies, and signed audit exports.
 
-On authenticated routes, the Worker rejects bearer tokens containing a comma with 401 before reading the body. On policy publication, the Go hub applies the body cap before rejecting a single 43-byte comma bearer. The public JWKS route checks no bearer.
+On authenticated routes, the Worker rejects bearer tokens containing a comma with 401 before reading the body. On policy publication, the Go hub applies the body cap before rejecting a single 43-byte comma bearer. The public JWKS routes check no bearer.
 
 ## Run locally
 
@@ -37,12 +37,15 @@ npm run deploy -- --dry-run --outdir dist
 The Node suite runs the canonical JSON, policy signature, and audit fixtures.
 The Workers suite runs the same tests in workerd, plus the Durable Object and SQLite tests.
 It checks Web Crypto for signing and wrapping and uses synchronous `node:crypto` to seal records.
+The export load test drains 250,001 sealed records and reports the byte count and elapsed time.
 The pinned workerd compatibility date enables Node.js compatibility by default.
 Testing and building the bundle require no Cloudflare account.
 
-Run `./scripts/conformance.sh` from this directory with Go, curl, and OpenSSL installed.
+Run `./scripts/conformance.sh` from this directory with Go, Node, curl, and OpenSSL installed.
 The script starts Wrangler on port 8787 with fresh SQLite state and disposable credentials.
-It seeds the hub, runs the policy and member HTTP checks, and runs `openplexer policy sync`.
+It checks auth, methods, both JWKS endpoints, projects and policies, and audit export.
+It verifies the remote export with `openplexer-verify` and checks that changing a record fails with rule A3.
+It also runs `openplexer policy sync`.
 The run ends with `policy: verified`.
 
 Run `npm run gen:vectors` to regenerate the TypeScript-signed bundle and checkpoint
@@ -71,7 +74,7 @@ npx wrangler secret put BOOTSTRAP_TOKEN < .wrangler/bootstrap.token
 openssl rand -hex 32 | npx wrangler secret put WRAP_KEY_V1
 ```
 
-Keep the wrapping secret for future policy signing. Check `/healthz` on the configured HTTPS hostname.
+Keep the wrapping secret for policy and audit signing. Check `/healthz` on the configured HTTPS hostname.
 
 ## Set up a team
 
@@ -101,5 +104,9 @@ bin/openplexer-hub publish-policy --hub "$hub" --token-file "$tokens/lee.token" 
 
 Fetch the policy keys from `/.well-known/jwks.json` over your trusted HTTPS origin and give the JWKS file to your team.
 Follow the [agent setup](../../docs/local-policy.md#connect-to-a-team-hub) to pin the keys and sync policy.
+
+`GET /api/v1/audit/export` requires a lead token. It returns the full team chain and a signed checkpoint.
+`GET /.well-known/audit-jwks.json` publishes all checkpoint keys, including retired keys.
+Use a lead token to export the log or rotate either signing key. [Hub admin commands](../../docs/hub.md#administer-a-cloudflare-team).
 
 See the [Cloudflare hub design](../../docs/cloudflare-hub-design.md) for the storage and deployment model.

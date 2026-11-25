@@ -39,7 +39,7 @@ wrangler_pid=$!
 
 cd "$worker_dir/../.."
 mkdir "$state/bin"
-go build -o "$state/bin/" ./apps/openplexer ./apps/openplexer-hub
+go build -o "$state/bin/" ./apps/openplexer ./apps/openplexer-hub ./apps/openplexer-verify
 
 health_status=$(curl -fsS -o "$state/health.json" -w '%{http_code}' --max-time 2 \
   --retry-connrefused --retry 15 --retry-delay 1 "$origin/healthz")
@@ -69,12 +69,36 @@ cat > "$state/policy.json" <<'JSON'
 JSON
 admin publish-policy --project conformance --file "$state/policy.json"
 
-# Run only the served auth, method, policy JWKS, project, and policy sections.
-# The Worker tests check the audit chain in SQLite until #85 serves exports.
-sections='^TestHub$/^(auth|methods|jwks|projects-and-policy)$/^(escaped-paths|policy-jwks|project|policy-bundle|publish-policy|policy|read-projects-and-seeded-policy|missing-project-and-bundle|publish-and-version-floor|body-limit|canonical-limit)$'
+sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export)$/^(escaped-paths|policy-jwks|audit-jwks|audit-export|project|policy-bundle|publish-policy|policy|audit|separate-key-pairs|read-projects-and-seeded-policy|missing-project-and-bundle|publish-and-version-floor|body-limit|canonical-limit)$'
 go test -count=1 -v ./test/hubconformance -run "$sections" -args \
   -hub-url "$origin" -wrangler-dev -lead-token-file "$state/lead.token" -member-token-file "$state/member.token" \
-  -revoked-token-file "$state/revoked.token" -policy-audit=false
+  -revoked-token-file "$state/revoked.token"
+
+admin export --out "$state/audit"
+verify() {
+  "$state/bin/openplexer-verify" --export "$state/audit/$1" --jwks "$state/audit/jwks.json" \
+    --checkpoint "$state/audit/checkpoint.jws" --json
+}
+verify export.json > "$state/audit/verified.json"
+node - "$state/audit" <<'JS'
+const fs = require("node:fs");
+const dir = process.argv[2];
+const audit = JSON.parse(fs.readFileSync(dir + "/export.json", "utf8"));
+const result = JSON.parse(fs.readFileSync(dir + "/verified.json", "utf8"));
+if (result.ok !== true || result.completeness !== "through_checkpoint" ||
+    result.entries !== audit.entries.length || result.checkpoint_entries !== result.entries) {
+  throw new Error("Expected the checkpoint to authenticate the full export");
+}
+audit.entries[0].target += "-tampered";
+fs.writeFileSync(dir + "/tampered.json", JSON.stringify(audit));
+JS
+if verify tampered.json > "$state/audit/rejected.json"; then
+  echo "Verifier accepted a changed audit record" >&2
+  exit 1
+else
+  test "$?" -eq 1
+fi
+grep -Fq '"rule":"A3"' "$state/audit/rejected.json"
 
 curl -fsS --max-time 5 "$origin/.well-known/jwks.json" > "$state/policy.jwks.json"
 export OPENPLEXER_HOME="$state/openplexer"

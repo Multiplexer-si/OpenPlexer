@@ -37,7 +37,7 @@ The hub validates the [policy bundle](../spec/policy/README.md), checks member I
 
 ## Administer a Cloudflare team
 
-The Worker accepts `--hub <origin>` on `init`, `add-member`, `remove-member`, `add-project`, and `publish-policy`.
+Use `--hub <origin>` for remote commands.
 Use HTTPS off loopback. The commands refuse redirects.
 Pass a private regular file with `--token-file` or send the credential on stdin.
 [Deploy the Worker and set its secrets](../apps/hub-cloudflare/README.md#deploy).
@@ -55,6 +55,21 @@ bin/openplexer-hub remove-member --hub "$hub" --token-file lee.token --id mem-an
 For `init`, use the bootstrap credential. The command saves the first lead's token in the named private file and sends its SHA-256 hash.
 Keep the file and use it again if initialization needs a retry.
 Use a lead token for the other commands. `add-member` prints the new token once. The Worker refuses to remove the last lead.
+
+Use `stage-key` and `activate-key` with a lead token to rotate a Worker signing key.
+Set `--purpose` to `policy` or `audit`. Staging prints the pending key ID and publishes the public key in its JWKS.
+
+```sh
+kid=$(bin/openplexer-hub stage-key --hub "$hub" --token-file lee.token --purpose audit)
+```
+
+Share the updated JWKS through a trusted channel before you activate the key.
+
+```sh
+bin/openplexer-hub activate-key --hub "$hub" --token-file lee.token --purpose audit --kid "$kid"
+```
+
+The next audit export uses the new audit key. After policy activation, publish a higher policy version to sign a project's bundle with the new policy key. The JWKS keeps retired public keys.
 
 ## HTTP API
 
@@ -102,8 +117,16 @@ The hub writes one chain for the team. It writes each audit record in the same s
 
 Run `bin/openplexer-hub export-audit --data-dir ./hub-data --out ./audit-export` to write the JSON export, signed checkpoint, and checkpoint JWKS. The command works with the server stopped. The HTTP export requires the `lead` role, which is the single-team hub's admin role. An ordinary member receives `403`. [Export and verify an audit log](audit.md).
 
+To export from a running hub, use a lead token.
+
+```sh
+bin/openplexer-hub export --hub "$hub" --token-file lee.token --out ./audit-export
+```
+
+`export-audit` also accepts `--hub`. Both forms save `export.json`, `checkpoint.jws`, and `jwks.json` as private files. Both preserve existing files. The command fetches the checkpoint JWKS after downloading the export.
+
 ## Data directory and operational limits
 
 Use one server on one host per data directory. The hub uses a file lock to coordinate the server and CLI, and atomically replaces `state.json` on writes. Each operation reads the snapshot into memory. Room history and audit records accumulate, so disk use, memory use, and write time grow.
 
-Protect `state.json` and its backups. It contains the separate ES256 policy and checkpoint private keys, member token hashes, policies, Room history, claims, and the audit chain. Back it up to preserve the keys, the stable team ID, Room sequence numbers, and audit history. The hub initializes audit state in older data directories on the first audited action, export, or checkpoint key request. The audit chain starts with the first audited action. The hub keeps the public checkpoint key history. Key rotation commands are future work. The local daemon filters posts before sending them. The hub validates event schemas. Server-side content filtering remains open for direct API callers. Keep sensitive material out of Room bodies. The [trust model](trust-model.md#decisions-settled-by-the-single-team-hub) records these choices.
+Protect `state.json` and its backups. It contains the separate ES256 policy and checkpoint private keys, member token hashes, policies, Room history, claims, and the audit chain. Back it up to preserve the keys, the stable team ID, Room sequence numbers, and audit history. The hub initializes audit state in older data directories on the first audited action, export, or checkpoint key request. The audit chain starts with the first audited action. The hub keeps the public checkpoint key history. The local daemon filters posts before sending them. The hub validates event schemas. Server-side content filtering remains open for direct API callers. Keep sensitive material out of Room bodies. The [trust model](trust-model.md#decisions-settled-by-the-single-team-hub) records these choices.
