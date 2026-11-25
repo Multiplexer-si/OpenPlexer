@@ -95,16 +95,21 @@ func (f *fixture) auth(t *testing.T) {
 						res.expect(t, r.method, r.path, http.StatusUnauthorized)
 					}
 					commaToken := strings.Repeat("a", 21) + "," + strings.Repeat("a", 21)
-					f.call(t, r.method, r.path, commaToken[1:], oversized, http.StatusUnauthorized)
-					res, err := f.send(t.Context(), r.method, r.path, commaToken, oversized, "")
-					if err != nil {
-						t.Fatal(f.redact(err.Error()))
+					if *wranglerDev {
+						// Wrangler dev can truncate a 401 while a rejected upload is still in flight.
+						f.call(t, r.method, r.path, commaToken[1:], r.body, http.StatusUnauthorized)
+					} else {
+						f.call(t, r.method, r.path, commaToken[1:], oversized, http.StatusUnauthorized)
+						res, err := f.send(t.Context(), r.method, r.path, commaToken, oversized, "")
+						if err != nil {
+							t.Fatal(f.redact(err.Error()))
+						}
+						// The Worker rejects any comma. Go applies the body cap when there is one field.
+						if res.status != http.StatusUnauthorized && res.status != http.StatusRequestEntityTooLarge {
+							t.Fatalf("%s %s: status %d, want 401 or 413", r.method, r.path, res.status)
+						}
+						res.expect(t, r.method, r.path, res.status)
 					}
-					// The Worker rejects any comma. Go applies the body cap when there is one field.
-					if res.status != http.StatusUnauthorized && res.status != http.StatusRequestEntityTooLarge {
-						t.Fatalf("%s %s: status %d, want 401 or 413", r.method, r.path, res.status)
-					}
-					res.expect(t, r.method, r.path, res.status)
 					f.call(t, r.method, r.path, commaToken, r.body, http.StatusUnauthorized)
 				})
 			}

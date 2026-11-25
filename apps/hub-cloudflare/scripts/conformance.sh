@@ -73,7 +73,7 @@ admin publish-policy --project conformance --file "$state/policy.json"
 # The Worker tests check the audit chain in SQLite until #85 serves exports.
 sections='^TestHub$/^(auth|methods|jwks|projects-and-policy)$/^(escaped-paths|policy-jwks|project|policy-bundle|publish-policy|policy|read-projects-and-seeded-policy|missing-project-and-bundle|publish-and-version-floor|body-limit|canonical-limit)$'
 go test -count=1 -v ./test/hubconformance -run "$sections" -args \
-  -hub-url "$origin" -lead-token-file "$state/lead.token" -member-token-file "$state/member.token" \
+  -hub-url "$origin" -wrangler-dev -lead-token-file "$state/lead.token" -member-token-file "$state/member.token" \
   -revoked-token-file "$state/revoked.token" -policy-audit=false
 
 curl -fsS --max-time 5 "$origin/.well-known/jwks.json" > "$state/policy.jwks.json"
