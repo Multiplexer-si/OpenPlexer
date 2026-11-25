@@ -5,7 +5,7 @@ On startup, the object applies any pending schema migrations.
 `GET /healthz` returns `{"ok":true,"schema":1}` on a fresh object.
 The Worker serves team setup, member and project administration, and signed policies.
 
-For a single `Authorization` field with a 43-byte bearer token that contains a comma, the Worker returns 401 before reading the body and the Go hub applies the body cap (neither hub issues such a token).
+On authenticated routes, the Worker rejects bearer tokens containing a comma with 401 before reading the body. On policy publication, the Go hub applies the body cap before rejecting a single 43-byte comma bearer. The public JWKS route checks no bearer.
 
 ## Run locally
 
