@@ -1,6 +1,8 @@
 name = "openplexer-hub"
 main = "src/index.ts"
 compatibility_date = "2026-11-17"
+# Keep dot segments visible at the Worker entry point so routing can reject them.
+compatibility_flags = ["fetch_legacy_url"]
 
 [vars]
 HUB_HOSTNAME = "hub.example.com"

@@ -80,15 +80,59 @@ func (f *fixture) auth(t *testing.T) {
 			if r.limit != 0 {
 				t.Run("auth-and-body-order", func(t *testing.T) {
 					oversized := pad(r.body, r.limit+1)
-					f.call(t, r.method, r.path, "short", oversized, http.StatusUnauthorized)
+					rejectedBody := r.earlyRejectionBody(f.target, oversized)
+					f.call(t, r.method, r.path, "short", rejectedBody, http.StatusUnauthorized)
 					f.call(t, r.method, r.path, f.unknown, oversized, http.StatusRequestEntityTooLarge)
+					for _, fields := range [][]string{
+						{"Basic " + f.unknown},
+						{"Bearer " + f.unknown, "Bearer " + f.unknown},
+						// Workerd folds these fields into a bearer value with a 43-byte token.
+						{"Bearer " + strings.Repeat("a", 20), strings.Repeat("b", 21)},
+					} {
+						res, err := f.send(t.Context(), r.method, r.path, "", rejectedBody, "", fields...)
+						if err != nil {
+							t.Fatal(f.redact(err.Error()))
+						}
+						res.expect(t, r.method, r.path, http.StatusUnauthorized)
+					}
+					commaToken := strings.Repeat("a", 21) + "," + strings.Repeat("a", 21)
+					f.call(t, r.method, r.path, commaToken[1:], rejectedBody, http.StatusUnauthorized)
+					f.checkCommaBearer(t, r, commaToken, oversized)
 				})
 			}
 		})
 	}
 }
 
+func (f *fixture) checkCommaBearer(t *testing.T, r route, token, oversized string) {
+	t.Helper()
+	switch f.target {
+	case builtInGo:
+		f.call(t, r.method, r.path, token, oversized, http.StatusRequestEntityTooLarge)
+	case externalHub:
+		path := f.redact(r.path)
+		res, err := f.send(t.Context(), r.method, r.path, token, oversized, "")
+		if err != nil {
+			t.Fatalf("%s %s failed: %s", r.method, path, f.redact(err.Error()))
+		}
+		if res.status != http.StatusUnauthorized && res.status != http.StatusRequestEntityTooLarge {
+			t.Fatalf("%s %s: status %d, want 401 or 413", r.method, path, res.status)
+		}
+		res.expect(t, r.method, path, res.status)
+	}
+	f.call(t, r.method, r.path, token, r.body, http.StatusUnauthorized)
+}
+
+func (r route) earlyRejectionBody(target hubTarget, oversized string) string {
+	// Wrangler dev can truncate a 401 while a rejected upload is still in flight.
+	if target == localWrangler {
+		return r.body
+	}
+	return oversized
+}
+
 func (f *fixture) methods(t *testing.T) {
+	t.Run("escaped-paths", f.escapedPaths)
 	seen := map[string]bool{}
 	for _, r := range f.routes() {
 		if r.method == get {
@@ -130,6 +174,60 @@ func (f *fixture) methods(t *testing.T) {
 				t.Errorf("Allow must contain exactly %v", want)
 			}
 		})
+	}
+}
+
+func (f *fixture) escapedPaths(t *testing.T) {
+	p := projectPath(*project)
+	for _, tc := range []struct {
+		path, token            string
+		workerStatus, goStatus int
+	}{
+		{path: "/.well-known/%6Awks.json", workerStatus: http.StatusOK},
+		{path: p + "/%70olicy.bundle", token: f.member, workerStatus: http.StatusOK},
+		{path: "/.well-known%2Fjwks.json", workerStatus: http.StatusNotFound},
+		{path: p + "%2Fpolicy.bundle", workerStatus: http.StatusUnauthorized},
+		{path: p + "%2Fpolicy.bundle", token: f.member, workerStatus: http.StatusNotFound},
+		{path: projectPath("%"), workerStatus: http.StatusBadRequest},
+		{path: projectPath("%2"), workerStatus: http.StatusBadRequest},
+		{path: projectPath("%GG"), workerStatus: http.StatusBadRequest},
+		// Go decodes arbitrary bytes, then fails to find the project.
+		{path: projectPath("%FF"), token: f.member, workerStatus: http.StatusBadRequest, goStatus: http.StatusNotFound},
+		// Go redirects literal dot segments and treats escaped dots as wildcard values.
+		{path: projectPath("."), workerStatus: http.StatusNotFound, goStatus: http.StatusTemporaryRedirect},
+		{path: projectPath(".."), workerStatus: http.StatusNotFound, goStatus: http.StatusTemporaryRedirect},
+		{path: projectPath("%2E"), workerStatus: http.StatusNotFound, goStatus: http.StatusUnauthorized},
+		{path: projectPath(".%2e"), workerStatus: http.StatusNotFound, goStatus: http.StatusUnauthorized},
+		{path: projectPath("%2F"), workerStatus: http.StatusNotFound},
+		{path: projectPath(""), workerStatus: http.StatusNotFound},
+	} {
+		// Opaque sends the path verbatim, including escapes rejected by the Go client URL parser.
+		req, err := http.NewRequestWithContext(t.Context(), get, f.origin, nil)
+		if err != nil {
+			t.Fatal(f.redact(err.Error()))
+		}
+		req.URL.Opaque = tc.path
+		if tc.token != "" {
+			req.Header.Set("Authorization", "Bearer "+tc.token)
+		}
+		res, err := f.do(req)
+		if err != nil {
+			t.Fatalf("GET %s failed: %s", tc.path, f.redact(err.Error()))
+		}
+		// Go can return plain text for parser errors and unmatched routes.
+		want := []int{tc.workerStatus}
+		if tc.goStatus != 0 {
+			switch f.target {
+			case builtInGo:
+				want[0] = tc.goStatus
+			case externalHub:
+				// An external hub without -wrangler-dev could use either backend.
+				want = append(want, tc.goStatus)
+			}
+		}
+		if !slices.Contains(want, res.status) {
+			t.Errorf("GET %s (authenticated: %t): status %d, want %v", tc.path, tc.token != "", res.status, want)
+		}
 	}
 }
 

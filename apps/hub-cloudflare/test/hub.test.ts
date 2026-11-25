@@ -31,13 +31,24 @@ test("serves uncached health with the initialized schema version", async () => {
   expect(await response.json()).toEqual({ ok: true, schema: 1 });
 });
 
-test("returns the Go hub error for unsupported routes and methods", async () => {
-  for (const response of [await request("/api/v1/projects/demo"), await request("/healthz", { method: "POST" })]) {
+test("returns uncached JSON for unknown paths", async () => {
+  const response = await request("/api/v1/unknown");
+  expect(response.status).toBe(404);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect(await response.json()).toEqual({ error: "not found" });
+});
+
+test.each(["/./healthz", "/unused/../healthz", "/%2E/healthz", "/unused/%2e%2E/healthz", "/unused/.%2e/healthz"])(
+  "rejects dot segments before forwarding %s",
+  async (path) => {
+    const incoming = new Request(`https://${env.HUB_HOSTNAME}${path}`);
+    const response = await worker.fetch(incoming, env);
     expect(response.status).toBe(404);
     expect(response.headers.get("Cache-Control")).toBe("no-store");
+    expect(response.headers.get("Content-Type")).toBe("application/json");
     expect(await response.json()).toEqual({ error: "not found" });
-  }
-});
+  },
+);
 
 test("rejects other hostnames before routing to storage", async () => {
   const before = (await listDurableObjectIds(env.TEAM_HUB)).length;

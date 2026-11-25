@@ -35,6 +35,27 @@ bin/openplexer-hub publish-policy -data-dir ./hub-data -project prj-shop -file b
 
 The hub validates the [policy bundle](../spec/policy/README.md), checks member IDs against the hub roster, and signs the canonical JSON. Policy role names and grants come from the bundle. Increase `version` with each change. Republishing identical canonical JSON at the current version returns the stored signature. Update and republish the bundle to remove a member's policy grants after revoking their hub token.
 
+## Administer a Cloudflare team
+
+The Worker accepts `--hub <origin>` on `init`, `add-member`, `remove-member`, `add-project`, and `publish-policy`.
+Use HTTPS off loopback. The commands refuse redirects.
+Pass a private regular file with `--token-file` or send the credential on stdin.
+[Deploy the Worker and set its secrets](../apps/hub-cloudflare/README.md#deploy).
+
+```sh
+hub=https://hub.example.com
+umask 077
+bin/openplexer-hub init --hub "$hub" --id mem-lee --lead-token-file lee.token < bootstrap.token
+bin/openplexer-hub add-member --hub "$hub" --token-file lee.token --id mem-ana > ana.token
+bin/openplexer-hub add-project --hub "$hub" --token-file lee.token --id prj-shop --repo api
+bin/openplexer-hub publish-policy --hub "$hub" --token-file lee.token --project prj-shop --file bundle.json
+bin/openplexer-hub remove-member --hub "$hub" --token-file lee.token --id mem-ana
+```
+
+For `init`, use the bootstrap credential. The command saves the first lead's token in the named private file and sends its SHA-256 hash.
+Keep the file and use it again if initialization needs a retry.
+Use a lead token for the other commands. `add-member` prints the new token once. The Worker refuses to remove the last lead.
+
 ## HTTP API
 
 Use `Authorization: Bearer <token>` on every request except the two public key endpoints. Send JSON for request bodies. Successful requests return `200` and JSON.

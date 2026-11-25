@@ -11,7 +11,7 @@ const tokenType = {
 const algorithm = { name: "ECDSA", namedCurve: "P-256" };
 const signatureAlgorithm = { name: "ECDSA", hash: "SHA-256" };
 const utf8 = new TextEncoder();
-const maxBundleBytes = 1 << 20;
+export const maxBundleBytes = 1 << 20;
 const policyJSONOptions = { loneSurrogates: "replace", rejectNumberOverflow: true } as const;
 
 export type JWSStage = "compact" | "header" | "key" | "signature" | "payload";
@@ -112,9 +112,13 @@ export async function importPublicJWK(jwk: JsonObject, purpose: SigningPurpose):
 }
 
 export async function signJWS(payload: JsonValue, key: CryptoKey, kid: string, purpose: SigningPurpose): Promise<string> {
+  return signCanonicalJWS(canonicalJSON(payload), key, kid, purpose);
+}
+
+export async function signCanonicalJWS(canonical: string, key: CryptoKey, kid: string, purpose: SigningPurpose): Promise<string> {
   if (!kid || (purpose === "audit" && !kid.startsWith("audit-"))) throw new JWSError("header");
   const header = canonicalJSON({ alg: "ES256", kid, typ: tokenType[purpose] });
-  const body = utf8.encode(canonicalJSON(payload));
+  const body = utf8.encode(canonical);
   if (purpose === "policy" && body.length > maxBundleBytes) throw new JWSError("payload");
   const input = encodeBase64URL(utf8.encode(header)) + "." + encodeBase64URL(body);
   const signature = new Uint8Array(await crypto.subtle.sign(signatureAlgorithm, key, utf8.encode(input)));

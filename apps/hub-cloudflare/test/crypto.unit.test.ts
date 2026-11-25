@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "vitest";
 import canonicalFixtures from "../../../spec/canonical-json/v1/fixtures/canonicalize.json?raw";
+import bundleFixtures from "../../../spec/policy/v1/fixtures/validate-bundle.json?raw";
 import policyFixtures from "../../../spec/policy/v1/fixtures/verify-signed-bundle.json?raw";
 import keySelectionFixtures from "../../../spec/policy/v1/fixtures/verify-signed-bundle-key-selection.json?raw";
 import chainFixtures from "../../../spec/audit/v1/fixtures/verify-chain.json?raw";
@@ -11,7 +12,7 @@ import { canonicalJSON, canonicalize, isJsonObject, parseJSON } from "../src/can
 import type { JsonObject, JsonValue } from "../src/canonical";
 import { exportPKCS8, exportPrivateJWK, exportPublicJWK, generateSigningKey, importPKCS8, importPrivateJWK, JWSError, signJWS, verifyJWS } from "../src/jws";
 import type { JWSStage } from "../src/jws";
-import { verifyPolicyBundle } from "../src/policy";
+import { parsePolicyBundle, verifyPolicyBundle } from "../src/policy";
 import { unwrapPKCS8, wrapPKCS8 } from "../src/wrap";
 import { verifyExportFixture } from "./fixture-verifiers";
 
@@ -46,6 +47,17 @@ describe("canonicalize.json", () => {
     const canonical = canonicalize(string(input.json));
     const sha256 = createHash("sha256").update(canonical).digest("hex");
     expect({ canonical, sha256 }).toEqual(expected);
+  });
+});
+
+describe("validate-bundle.json", () => {
+  test.each(fixture(bundleFixtures).cases)("$name", ({ input, expected }) => {
+    const parse = () => parsePolicyBundle(canonicalJSON(input));
+    if (object(expected).valid === true) {
+      expect(parse().bundle).toEqual(input);
+    } else {
+      expect(parse).toThrow(SyntaxError);
+    }
   });
 });
 

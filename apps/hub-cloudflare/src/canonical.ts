@@ -5,6 +5,8 @@ export function isJsonObject(value: JsonValue | undefined): value is JsonObject 
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
+export class LoneSurrogateError extends SyntaxError {}
+
 type ParseOptions = { rejectNumberOverflow?: boolean } & (
   | { duplicates?: WeakSet<JsonObject>; loneSurrogates?: "reject" }
   | { duplicates?: never; loneSurrogates: "replace" }
@@ -51,7 +53,7 @@ export function parseJSON(input: string | Uint8Array, options: ParseOptions = {}
       if (options.loneSurrogates) {
         const decoded: string = JSON.parse(token);
         if (!decoded.isWellFormed()) {
-          if (options.loneSurrogates === "reject") throw new SyntaxError("JSON contains a lone surrogate");
+          if (options.loneSurrogates === "reject") throw new LoneSurrogateError("JSON contains a lone surrogate");
           replacements.push(source.slice(copied, match.index), JSON.stringify(decoded.toWellFormed()));
           copied = match.index + token.length;
         }

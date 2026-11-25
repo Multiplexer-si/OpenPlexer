@@ -191,7 +191,10 @@ func (f *fixture) projectsAndPolicy(t *testing.T) {
 		if err != nil || !bytes.Equal(canonical, mustCanonical(t, published.Bundle)) {
 			t.Fatal("published bundle differs from the submitted policy")
 		}
-		before := f.readAudit(t)
+		before := 0
+		if *policyAudit {
+			before = len(f.readAudit(t).entries)
+		}
 		t.Run("identical-republish", func(t *testing.T) {
 			retry := verifyBundle(t, f.call(t, put, path+"/policy", f.lead, " \n"+text, http.StatusOK), keys, id, repo, 2)
 			if retry.Signature != published.Signature {
@@ -209,8 +212,11 @@ func (f *fixture) projectsAndPolicy(t *testing.T) {
 			f.call(t, put, path+"/policy", f.lead, bundleJSON(f.missing, repo, 3, ""), http.StatusBadRequest)
 		})
 		current := verifyBundle(t, f.call(t, get, path+"/policy.bundle", f.member, "", http.StatusOK), keys, id, repo, 2)
-		if current.Signature != published.Signature || len(f.readAudit(t).entries) != len(before.entries) {
-			t.Fatal("retry or rejected publication changed the stored policy or audit log")
+		if current.Signature != published.Signature {
+			t.Fatal("retry or rejected publication changed the stored policy")
+		}
+		if *policyAudit && len(f.readAudit(t).entries) != before {
+			t.Fatal("retry or rejected publication changed the audit log")
 		}
 	})
 	t.Run("body-limit", func(t *testing.T) {

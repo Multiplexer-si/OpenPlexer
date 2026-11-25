@@ -33,22 +33,13 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version: '24'
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
       - run: npm ci
       - run: npm run typecheck
       - run: npm run test:unit
       - run: npm test
       - run: npm run deploy -- --dry-run --outdir dist
-      - name: Check Wrangler local mode with test bindings
-        run: |
-          mkdir -p .wrangler
-          printf '%s\n' BOOTSTRAP_TOKEN=local-test WRAP_KEY_V1=local-test > .dev.vars
-          ./node_modules/.bin/wrangler dev --local --var DEV_MODE:1 > .wrangler/ci.log 2>&1 &
-          wrangler_pid=$!
-          trap 'status=$?; kill "$wrangler_pid" 2>/dev/null || true; cat .wrangler/ci.log || true; exit "$status"' EXIT
-          health_status=$(curl -fsS -o .wrangler/health.json -w '%{http_code}' --max-time 2 --retry-connrefused --retry 15 --retry-delay 1 http://127.0.0.1:8787/healthz)
-          test "$health_status" = 200
-          test "$(cat .wrangler/health.json)" = '{"ok":true,"schema":1}'
-          foreign_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 -H 'Host: foreign.example' http://127.0.0.1:8787/healthz)
-          test "$foreign_status" = 404
-          grep -F 'env.BOOTSTRAP_TOKEN' .wrangler/ci.log
-          grep -F 'env.WRAP_KEY_V1' .wrangler/ci.log
+      - name: Check Worker conformance and daemon policy sync
+        run: ./scripts/conformance.sh

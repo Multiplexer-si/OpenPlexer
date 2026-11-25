@@ -17,7 +17,7 @@ import (
 const usage = `Usage: openplexer-hub <command> [flags]
        openplexer-hub --version
 Commands:
-  init            Initialize a data directory
+  init            Initialize a data directory or a Worker team
   add-member      Add a member and print a bearer token
   remove-member   Revoke a member's bearer token
   add-project     Scope a project to one repository
@@ -34,6 +34,10 @@ func main() {
 }
 
 func run(args []string, stdout, stderr io.Writer) int {
+	return runWithInput(args, os.Stdin, stdout, stderr, nil)
+}
+
+func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer, transport http.RoundTripper) int {
 	if len(args) == 1 && args[0] == "--version" {
 		fmt.Fprintln(stdout, version)
 		return 0
@@ -51,9 +55,13 @@ func run(args []string, stdout, stderr io.Writer) int {
 	flags.SetOutput(stderr)
 	dir := flags.String("data-dir", "./hub-data", "Hub data directory")
 	var action func(*hub.Store) error
+	var remoteAction func(remoteAdmin) error
 	switch command {
 	case "init":
 		action = (*hub.Store).Init
+		id := flags.String("id", "", "First lead's member ID with --hub")
+		leadFile := flags.String("lead-token-file", "", "Private file to create or reuse for the first lead with --hub")
+		remoteAction = func(h remoteAdmin) error { return h.init(*id, *leadFile) }
 	case "add-member":
 		id := flags.String("id", "", "Member ID")
 		role := flags.String("role", string(hub.Member), "Member role (lead or member)")
@@ -65,17 +73,21 @@ func run(args []string, stdout, stderr io.Writer) int {
 			_, err = fmt.Fprintln(stdout, token)
 			return err
 		}
+		remoteAction = func(h remoteAdmin) error { return h.addMember(*id, *role, stdout) }
 	case "remove-member":
 		id := flags.String("id", "", "Member ID")
 		action = func(s *hub.Store) error { return s.RemoveMember(*id) }
+		remoteAction = func(h remoteAdmin) error { return h.removeMember(*id) }
 	case "add-project":
 		id := flags.String("id", "", "Project ID and Room ID")
 		repo := flags.String("repo", "", "Repository identifier used in the bundle")
 		action = func(s *hub.Store) error { return s.AddProject(*id, *repo) }
+		remoteAction = func(h remoteAdmin) error { return h.addProject(*id, *repo) }
 	case "publish-policy":
 		project := flags.String("project", "", "Project ID")
 		path := flags.String("file", "", "Path to the JSON policy bundle")
 		action = func(s *hub.Store) error { return publish(s, *project, *path) }
+		remoteAction = func(h remoteAdmin) error { return h.publishPolicy(*project, *path) }
 	case "export-audit":
 		out := flags.String("out", "", "Output directory for the three audit files")
 		action = func(s *hub.Store) error { return exportAudit(s, *out) }
@@ -85,6 +97,11 @@ func run(args []string, stdout, stderr io.Writer) int {
 	default:
 		fmt.Fprintf(stderr, "Unknown command %q\n%s", command, usage)
 		return 2
+	}
+	var address, tokenFile string
+	if remoteAction != nil {
+		flags.StringVar(&address, "hub", "", "Worker hub origin")
+		flags.StringVar(&tokenFile, "token-file", "-", "Private credential file or - for stdin with --hub")
 	}
 	if err := flags.Parse(args[1:]); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -96,7 +113,23 @@ func run(args []string, stdout, stderr io.Writer) int {
 		fmt.Fprintln(stderr, "Unexpected positional arguments")
 		return 2
 	}
-	if err := action(hub.Open(*dir)); err != nil {
+	used := make(map[string]bool)
+	flags.Visit(func(f *flag.Flag) { used[f.Name] = true })
+	var err error
+	if used["hub"] {
+		if used["data-dir"] {
+			fmt.Fprintln(stderr, "Use either --hub or --data-dir")
+			return 2
+		}
+		err = runRemote(address, tokenFile, command, stdin, transport, remoteAction)
+	} else {
+		if used["token-file"] || (command == "init" && (used["id"] || used["lead-token-file"])) {
+			fmt.Fprintln(stderr, "Worker credentials and first lead flags require --hub")
+			return 2
+		}
+		err = action(hub.Open(*dir))
+	}
+	if err != nil {
 		fmt.Fprintf(stderr, "openplexer-hub %s: %v\n", command, err)
 		return 1
 	}
@@ -144,13 +177,17 @@ func exportAudit(s *hub.Store, out string) error {
 	return nil
 }
 
-func publish(s *hub.Store, project, path string) error {
+func policyText(path string) ([]byte, error) {
 	file, err := os.Open(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer file.Close()
-	text, err := io.ReadAll(io.LimitReader(file, hub.MaxPolicyBytes+1))
+	return io.ReadAll(io.LimitReader(file, hub.MaxPolicyBytes+1))
+}
+
+func publish(s *hub.Store, project, path string) error {
+	text, err := policyText(path)
 	if err != nil {
 		return err
 	}

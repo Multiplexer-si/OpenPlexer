@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,10 +29,12 @@ import (
 
 var (
 	hubURL           = flag.String("hub-url", "", "origin of a seeded hub (default: start a Go hub)")
+	wranglerDev      = flag.Bool("wrangler-dev", false, "use small bodies for early bearer rejections against Wrangler dev (requires -hub-url)")
 	leadTokenFile    = flag.String("lead-token-file", "", "file containing the lead token")
 	memberTokenFile  = flag.String("member-token-file", "", "file containing the member token")
 	revokedTokenFile = flag.String("revoked-token-file", "", "optional file containing a previously revoked token")
 	project          = flag.String("project", "conformance", "project ID with an initial policy")
+	policyAudit      = flag.Bool("policy-audit", true, "check the audit export around rejected policy writes")
 	secondProject    = flag.String("second-project", "conformance-other", "second project ID with the same repo")
 )
 
@@ -45,28 +48,72 @@ const (
 	seedRepo       = "R&D"
 )
 
+type hubTarget int
+
+const (
+	builtInGo hubTarget = iota
+	localWrangler
+	externalHub
+)
+
 type fixture struct {
 	origin, lead, member, revoked, unknown string
 	missing                                string
-	local                                  bool
+	target                                 hubTarget
 	client                                 *http.Client
+}
+
+func targetFromFlags(origin string, wrangler bool) (hubTarget, error) {
+	switch {
+	case wrangler && origin == "":
+		return 0, errors.New("-wrangler-dev requires -hub-url")
+	case origin == "":
+		return builtInGo, nil
+	case wrangler:
+		return localWrangler, nil
+	default:
+		return externalHub, nil
+	}
+}
+
+func TestValidateTarget(t *testing.T) {
+	for _, tc := range []struct {
+		name, origin string
+		wrangler     bool
+		wantError    bool
+	}{
+		{name: "built-in-go"},
+		{name: "external", origin: "https://hub.example.test"},
+		{name: "wrangler-with-origin", origin: "https://hub.example.test", wrangler: true},
+		{name: "wrangler-without-origin", wrangler: true, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := targetFromFlags(tc.origin, tc.wrangler); (err != nil) != tc.wantError {
+				t.Fatalf("targetFromFlags returned %v, want error: %t", err, tc.wantError)
+			}
+		})
+	}
 }
 
 func setup(t *testing.T) *fixture {
 	t.Helper()
+	target, err := targetFromFlags(*hubURL, *wranglerDev)
+	if err != nil {
+		t.Fatal(err)
+	}
 	id := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 	if !id.MatchString(*project) || !id.MatchString(*secondProject) || *project == *secondProject {
 		t.Fatal("-project and -second-project must be distinct hub IDs")
 	}
 	f := &fixture{
-		local: *hubURL == "", missing: "missing-" + rand.Text(),
+		target: target, missing: "missing-" + rand.Text(),
 		client: &http.Client{
 			Timeout:       10 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
 		},
 	}
 	t.Cleanup(f.client.CloseIdleConnections)
-	if f.local {
+	if f.target == builtInGo {
 		if *leadTokenFile != "" || *memberTokenFile != "" || *revokedTokenFile != "" {
 			t.Fatal("token file flags require -hub-url")
 		}
@@ -91,7 +138,7 @@ func setup(t *testing.T) *fixture {
 	token := make([]byte, 32)
 	rand.Read(token)
 	f.unknown = base64.RawURLEncoding.EncodeToString(token)
-	if !f.local {
+	if f.target != builtInGo {
 		f.call(t, get, policyKeysPath, "", "", http.StatusOK)
 	}
 	return f
@@ -224,7 +271,7 @@ type response struct {
 	body   []byte
 }
 
-func (f *fixture) send(ctx context.Context, method, path, token, body, key string) (response, error) {
+func (f *fixture) send(ctx context.Context, method, path, token, body, key string, authorization ...string) (response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, f.origin+path, strings.NewReader(body))
 	if err != nil {
 		return response{}, err
@@ -232,12 +279,19 @@ func (f *fixture) send(ctx context.Context, method, path, token, body, key strin
 	if token != "" {
 		req.Header.Set("Authorization", "Bearer "+token)
 	}
+	for _, value := range authorization {
+		req.Header.Add("Authorization", value)
+	}
 	if body != "" {
 		req.Header.Set("Content-Type", "application/json")
 	}
 	if key != "" {
 		req.Header.Set("Idempotency-Key", key)
 	}
+	return f.do(req)
+}
+
+func (f *fixture) do(req *http.Request) (response, error) {
 	res, err := f.client.Do(req)
 	if err != nil {
 		return response{}, err
