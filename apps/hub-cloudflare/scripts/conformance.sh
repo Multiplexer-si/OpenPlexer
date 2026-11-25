@@ -28,10 +28,9 @@ trap 'exit 143' TERM
 
 # Disposable local test credentials and state.
 openssl rand -hex 32 > "$state/bootstrap.token"
-{
-  printf 'BOOTSTRAP_TOKEN=%s\n' "$(cat "$state/bootstrap.token")"
-  printf 'WRAP_KEY_V1=%s\n' "$(openssl rand -hex 32)"
-} > "$state/test.env"
+bootstrap_token=$(cat "$state/bootstrap.token")
+wrap_key=$(openssl rand -hex 32)
+printf 'BOOTSTRAP_TOKEN=%s\nWRAP_KEY_V1=%s\n' "$bootstrap_token" "$wrap_key" > "$state/test.env"
 
 origin=http://127.0.0.1:8787
 ./node_modules/.bin/wrangler dev --local --ip 127.0.0.1 --port 8787 \
@@ -46,7 +45,8 @@ health_status=$(curl -fsS -o "$state/health.json" -w '%{http_code}' --max-time 2
   --retry-connrefused --retry 15 --retry-delay 1 "$origin/healthz")
 kill -0 "$wrangler_pid"
 test "$health_status" = 200
-test "$(cat "$state/health.json")" = '{"ok":true,"schema":1}'
+health_body=$(cat "$state/health.json")
+test "$health_body" = '{"ok":true,"schema":1}'
 foreign_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 -H 'Host: foreign.example' "$origin/healthz")
 test "$foreign_status" = 404
 grep -Fq 'env.BOOTSTRAP_TOKEN' "$state/wrangler.log"
