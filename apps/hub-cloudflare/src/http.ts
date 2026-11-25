@@ -71,11 +71,3 @@ export async function cappedBody(request: Request, limit: number): Promise<Uint8
   }
   return bytes.subarray(0, size);
 }
-
-export function routeID(segment: string): string {
-  try {
-    return decodeURIComponent(segment);
-  } catch {
-    throw notFound();
-  }
-}

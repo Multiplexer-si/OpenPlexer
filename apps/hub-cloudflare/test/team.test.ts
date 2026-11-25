@@ -214,6 +214,22 @@ test("checks method before auth and serves implicit HEAD", async () => {
   expect(await head.text()).toBe("");
 });
 
+test("unescapes route segments without turning escaped slashes into separators", async () => {
+  const { lead } = await setup();
+  await check(await addProject(lead), 200, {});
+  const signature = await signed(await call(project + "/policy", "PUT", lead, bundle(1)), 1);
+  await check(await call("/.well-known/%6Awks.json"), 200, await check(await call(keys), 200));
+  await check(await call("/api/v1/%70rojects/%64emo", "GET", lead), 200, { id: "demo", repo });
+  expect(await signed(await call(project + "/%70olicy.bundle", "GET", lead), 1)).toBe(signature);
+
+  await error(await call("/.well-known%2Fjwks.json"), 404, "not found");
+  await error(await call(project + "%2Fpolicy.bundle"), 401, "invalid bearer token");
+  await error(await call(project + "%2Fpolicy.bundle", "GET", lead), 404, "not found");
+  await error(await call(project + "%252Fpolicy.bundle", "GET", lead), 404, "not found");
+  await addMember(lead, "ana");
+  await check(await call(admin + "/%6Dembers/%61na", "DELETE", lead), 200, {});
+});
+
 test("checks bearer syntax before body limits and membership after", async () => {
   const { lead } = await setup();
   await check(await addProject(lead), 200, {});

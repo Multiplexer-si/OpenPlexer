@@ -1,6 +1,7 @@
 import { DurableObject } from "cloudflare:workers";
+import { unescape as unescapeSegment } from "node:querystring";
 import { addMember, addProject, initialize, removeMember } from "./admin";
-import { bearer, HubError, json, notFound, routeID } from "./http";
+import { bearer, HubError, json, notFound } from "./http";
 import { publicKeys, publishPolicy, readPolicy, readProject } from "./publication";
 import { authenticate } from "./state";
 import { HubStorage, migrate } from "./storage";
@@ -61,43 +62,49 @@ export class TeamHub extends DurableObject<Env> {
 
   private async route(request: Request, path: string): Promise<Response> {
     const { method } = request;
-    if (path === "/healthz") {
+    // ServeMux unescapes each segment after splitting, so an encoded slash stays inside its segment.
+    const [, first, second, collection, target, suffix, ...extra] = path.split("/").map((segment) => unescapeSegment(segment));
+    if (first === "healthz" && second === undefined) {
       allow(method, ["GET", "HEAD"]);
       return Response.json({ ok: true, schema: await this.schemaVersion }, { headers: jsonHeaders });
     }
-    if (path === "/.well-known/jwks.json") {
+    if (first === ".well-known" && second === "jwks.json" && collection === undefined) {
       allow(method, ["GET", "HEAD"]);
       return json(this.storage.transaction(publicKeys));
     }
-    const project = /^\/api\/v1\/projects\/([^/]+)(?:\/(policy\.bundle|policy))?$/.exec(path);
-    if (project) {
-      if (project[2] === "policy") {
+    if (first !== "api" || second !== "v1" || extra.length > 0) throw notFound();
+    if (collection === "projects" && target) {
+      if (suffix === "policy") {
         allow(method, ["PUT"]);
-        return publishPolicy(request, this.storage, routeID(project[1]), this.env.TEAM_ID, this.env.WRAP_KEY_V1);
+        return publishPolicy(request, this.storage, target, this.env.TEAM_ID, this.env.WRAP_KEY_V1);
       }
-      allow(method, ["GET", "HEAD"]);
-      const hash = bearer(request);
-      return this.storage.transaction((sql) => {
-        authenticate(sql, hash);
-        const id = routeID(project[1]);
-        return project[2] ? readPolicy(sql, id) : json(readProject(sql, id));
-      });
+      if (suffix === undefined || suffix === "policy.bundle") {
+        allow(method, ["GET", "HEAD"]);
+        const hash = bearer(request);
+        return this.storage.transaction((sql) => {
+          authenticate(sql, hash);
+          return suffix ? readPolicy(sql, target) : json(readProject(sql, target));
+        });
+      }
     }
-    switch (path) {
-      case "/api/v1/admin/init":
-        allow(method, ["POST"]);
-        return json(await initialize(request, this.storage, this.env));
-      case "/api/v1/admin/members":
-        allow(method, ["POST"]);
-        return json(await addMember(request, this.storage));
-      case "/api/v1/admin/projects":
-        allow(method, ["POST"]);
-        return json(await addProject(request, this.storage));
-    }
-    const member = /^\/api\/v1\/admin\/members\/([^/]+)$/.exec(path);
-    if (member) {
-      allow(method, ["DELETE"]);
-      return json(removeMember(request, this.storage, routeID(member[1])));
+    if (collection === "admin") {
+      if (suffix === undefined) {
+        switch (target) {
+          case "init":
+            allow(method, ["POST"]);
+            return json(await initialize(request, this.storage, this.env));
+          case "members":
+            allow(method, ["POST"]);
+            return json(await addMember(request, this.storage));
+          case "projects":
+            allow(method, ["POST"]);
+            return json(await addProject(request, this.storage));
+        }
+      }
+      if (target === "members" && suffix) {
+        allow(method, ["DELETE"]);
+        return json(removeMember(request, this.storage, suffix));
+      }
     }
     throw notFound();
   }

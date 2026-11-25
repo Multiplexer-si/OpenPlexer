@@ -89,6 +89,7 @@ func (f *fixture) auth(t *testing.T) {
 }
 
 func (f *fixture) methods(t *testing.T) {
+	t.Run("escaped-paths", f.escapedPaths)
 	seen := map[string]bool{}
 	for _, r := range f.routes() {
 		if r.method == get {
@@ -130,6 +131,29 @@ func (f *fixture) methods(t *testing.T) {
 				t.Errorf("Allow must contain exactly %v", want)
 			}
 		})
+	}
+}
+
+func (f *fixture) escapedPaths(t *testing.T) {
+	p := projectPath(*project)
+	for _, tc := range []struct {
+		path, token string
+		status      int
+	}{
+		{path: "/.well-known/%6Awks.json", status: http.StatusOK},
+		{path: p + "/%70olicy.bundle", token: f.member, status: http.StatusOK},
+		{path: "/.well-known%2Fjwks.json", status: http.StatusNotFound},
+		{path: p + "%2Fpolicy.bundle", status: http.StatusUnauthorized},
+		{path: p + "%2Fpolicy.bundle", token: f.member, status: http.StatusNotFound},
+	} {
+		// An unmatched Go route returns plain text, so compare response statuses here.
+		res, err := f.send(t.Context(), get, tc.path, tc.token, "", "")
+		if err != nil {
+			t.Fatalf("GET %s failed: %s", tc.path, f.redact(err.Error()))
+		}
+		if res.status != tc.status {
+			t.Errorf("GET %s (authenticated: %t): status %d, want %d", tc.path, tc.token != "", res.status, tc.status)
+		}
 	}
 }
 
