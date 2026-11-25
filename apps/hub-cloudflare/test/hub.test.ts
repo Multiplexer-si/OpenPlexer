@@ -3,6 +3,7 @@ import { env, exports } from "cloudflare:workers";
 import { beforeEach, expect, test, vi } from "vitest";
 import worker, { type Env as HubEnv } from "../src/index";
 import { HubStorage, migrate, schemaMigrations } from "../src/storage";
+import type { TransactionSQL } from "../src/storage";
 
 declare global {
   namespace Cloudflare {
@@ -87,7 +88,9 @@ test("applying the same migration twice preserves the schema and rows", async ()
   await runInDurableObject(env.TEAM_HUB.get(teamId()), (_instance, ctx) => {
     const storage = new HubStorage(ctx.storage);
     const sql = ctx.storage.sql;
-    sql.exec("INSERT INTO team (singleton, workspace_id, policy_kid, audit_kid) VALUES (1, 'workspace', 'policy', 'audit')");
+    storage.transaction((tx) => {
+      tx.exec("INSERT INTO team (singleton, workspace_id, policy_kid, audit_kid) VALUES (1, 'workspace', 'policy', 'audit')");
+    });
     const schema = () => sql.exec("SELECT name, sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name").toArray();
     const before = schema();
     expect(before.map((entry) => entry.name)).toEqual([
@@ -110,7 +113,9 @@ test("an existing object can apply a later numbered migration", async () => {
   await runInDurableObject(env.TEAM_HUB.get(teamId()), (_instance, ctx) => {
     const storage = new HubStorage(ctx.storage);
     const sql = ctx.storage.sql;
-    sql.exec("INSERT INTO projects (project_id, repo) VALUES ('demo', 'team/demo')");
+    storage.transaction((tx) => {
+      tx.exec("INSERT INTO projects (project_id, repo) VALUES ('demo', 'team/demo')");
+    });
     const migrations = [...schemaMigrations, { version: 2, sql: "ALTER TABLE projects ADD COLUMN label TEXT" }];
     expect(migrate(storage, migrations)).toBe(2);
     expect(migrate(storage, migrations)).toBe(2);
@@ -139,7 +144,7 @@ test("a thrown transaction rolls back the action and its audit record", async ()
   });
 });
 
-const asynchronousWrites: [string, (sql: SqlStorage) => void][] = [
+const asynchronousWrites: [string, (sql: TransactionSQL) => void][] = [
   ["an async callback that throws after await", async (sql) => {
     sql.exec("INSERT INTO projects (project_id, repo) VALUES ('demo', 'team/demo')");
     await Promise.resolve();
@@ -149,6 +154,14 @@ const asynchronousWrites: [string, (sql: SqlStorage) => void][] = [
     sql.exec("INSERT INTO projects (project_id, repo) VALUES ('demo', 'team/demo')");
     return Promise.reject(new Error("failed asynchronously"));
   }],
+  ["a callback returning a thenable", (sql) => {
+    sql.exec("INSERT INTO projects (project_id, repo) VALUES ('demo', 'team/demo')");
+    return { then() {} };
+  }],
+  ["a callback returning a callable thenable", (sql) => {
+    sql.exec("INSERT INTO projects (project_id, repo) VALUES ('demo', 'team/demo')");
+    return Object.assign(() => {}, { then() {} });
+  }],
 ];
 
 test.each(asynchronousWrites)("rolls back %s", async (_name, write) => {
@@ -156,6 +169,45 @@ test.each(asynchronousWrites)("rolls back %s", async (_name, write) => {
     const storage = new HubStorage(ctx.storage);
     expect(() => storage.transaction(write)).toThrow("Hub transactions must be synchronous");
     expect(ctx.storage.sql.exec("SELECT project_id FROM projects").toArray()).toEqual([]);
+  });
+});
+
+test.each(["promise", "return", "throw"])("blocks deferred SQL after callback exit by %s", async (exit) => {
+  await runInDurableObject(env.TEAM_HUB.get(teamId()), async (_instance, ctx) => {
+    const storage = new HubStorage(ctx.storage);
+    const completed = Promise.withResolvers<unknown>();
+    const failure = new Error("stop before commit");
+    const write: (sql: TransactionSQL) => void = (sql) => {
+      const exec = sql.exec.bind(sql);
+      const writeLater = () => {
+        try {
+          exec("INSERT INTO projects (project_id, repo) VALUES ('deferred', 'team/demo')");
+          completed.resolve(undefined);
+        } catch (error) {
+          completed.resolve(error);
+        }
+      };
+      if (exit === "promise") {
+        return (async () => {
+          await Promise.resolve();
+          writeLater();
+        })();
+      }
+      queueMicrotask(writeLater);
+      if (exit === "throw") throw failure;
+    };
+
+    if (exit === "promise") {
+      expect(() => storage.transaction(write)).toThrow("Hub transactions must be synchronous");
+    } else if (exit === "throw") {
+      expect(() => storage.transaction(write)).toThrow(failure);
+    } else {
+      expect(storage.transaction(write)).toBeUndefined();
+    }
+    const error = await completed.promise;
+    expect(ctx.storage.sql.exec("SELECT project_id FROM projects").toArray()).toEqual([]);
+    expect(error).toBeInstanceOf(TypeError);
+    expect(error).toHaveProperty("message", "Hub transaction has ended");
   });
 });
 
