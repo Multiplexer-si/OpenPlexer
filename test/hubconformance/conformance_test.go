@@ -6,6 +6,8 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/json/jsontext"
+	jsonv2 "encoding/json/v2"
 	"flag"
 	"fmt"
 	"io"
@@ -40,7 +42,7 @@ const (
 	checkpoint     = "OpenPlexer-Audit-Checkpoint"
 	policyLimit    = 1 << 20
 	roomLimit      = 64 << 10
-	seedRepo       = "conformance-repo"
+	seedRepo       = "R&D"
 )
 
 type fixture struct {
@@ -182,7 +184,8 @@ func (f *fixture) startGoHub(t *testing.T) {
 	go func() { done <- cmd.Wait(); close(done) }()
 	t.Cleanup(func() { _ = cmd.Process.Kill(); <-done })
 	f.origin = "http://" + addr
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	const startupSeconds = 60
+	ctx, cancel := context.WithTimeout(t.Context(), startupSeconds*time.Second)
 	defer cancel()
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
@@ -195,7 +198,7 @@ func (f *fixture) startGoHub(t *testing.T) {
 		case err := <-done:
 			t.Fatalf("openplexer-hub exited while starting on %s: %v\n%s", addr, err, f.redact(stderr.String()))
 		case <-ctx.Done():
-			t.Fatalf("openplexer-hub did not answer on %s within 5 seconds", addr)
+			t.Fatalf("openplexer-hub did not answer on %s within %d seconds", addr, startupSeconds)
 		case <-ticker.C:
 		}
 	}
@@ -274,7 +277,16 @@ func (res response) expect(t *testing.T, method, path string, want int) {
 		t.Fatalf("%s %s: status %d, want %d", method, path, res.status, want)
 	}
 	if want == http.StatusMethodNotAllowed {
-		return
+		contentType := res.header.Values("Content-Type")
+		if len(contentType) == 1 && contentType[0] == "text/plain; charset=utf-8" &&
+			string(res.body) == "Method Not Allowed\n" {
+			for name := range res.header {
+				if strings.EqualFold(name, "Cache-Control") {
+					t.Fatalf("%s %s: plain-text 405 must omit Cache-Control", method, path)
+				}
+			}
+			return
+		}
 	}
 	res.expectJSON(t, method, path)
 	if want == http.StatusUnauthorized && res.header.Get("WWW-Authenticate") != "Bearer" {
@@ -296,16 +308,17 @@ func (res response) expectJSON(t *testing.T, method, path string) {
 		}
 	} else if res.status >= 400 {
 		var body map[string]string
-		decode(t, res.body, &body)
+		decodeWire(t, res.body, &body)
 		if len(body) != 1 || strings.TrimSpace(body["error"]) == "" {
 			t.Errorf("%s %s: expected an error envelope", method, path)
 		}
 	}
 }
 
-func decode(t *testing.T, data []byte, dst any) {
+func decodeWire(t *testing.T, data []byte, dst any) {
 	t.Helper()
-	if err := json.Unmarshal(data, dst); err != nil {
+	// Select final members before checking field types, then match names exactly.
+	if err := jsonv2.Unmarshal(mustCanonical(t, data), dst, jsontext.AllowInvalidUTF8(true)); err != nil {
 		t.Fatalf("invalid %T response (%T)", dst, err)
 	}
 }

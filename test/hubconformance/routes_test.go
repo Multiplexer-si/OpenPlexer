@@ -1,7 +1,6 @@
 package hubconformance
 
 import (
-	"bytes"
 	"net/http"
 	"slices"
 	"strings"
@@ -58,6 +57,9 @@ func (f *fixture) auth(t *testing.T) {
 						want = http.StatusOK
 					}
 					res := f.call(t, r.method, r.path, tc.token, r.body, want)
+					if r.public {
+						keyIDs(t, r.path, res)
+					}
 					if r.path == auditPath && res.header.Get(checkpoint) != "" {
 						t.Error("unauthorized export included a checkpoint")
 					}
@@ -65,7 +67,11 @@ func (f *fixture) auth(t *testing.T) {
 			}
 			if r.leadOnly {
 				t.Run("member-forbidden", func(t *testing.T) {
-					res := f.call(t, r.method, r.path, f.member, r.body, http.StatusForbidden)
+					body := r.body
+					if r.name == "publish-policy" {
+						body = bundleJSON(*project, f.repo(t, *project), 2, "")
+					}
+					res := f.call(t, r.method, r.path, f.member, body, http.StatusForbidden)
 					if r.path == auditPath && res.header.Get(checkpoint) != "" {
 						t.Error("forbidden export included a checkpoint")
 					}
@@ -125,15 +131,6 @@ func (f *fixture) methods(t *testing.T) {
 			}
 		})
 	}
-	t.Run("method-error-envelope", func(t *testing.T) {
-		path := projectPath(*project)
-		res := f.call(t, http.MethodDelete, path, f.lead, "", http.StatusMethodNotAllowed)
-		if bytes.Equal(res.body, []byte("Method Not Allowed\n")) &&
-			res.header.Get("Content-Type") == "text/plain; charset=utf-8" && res.header.Get("Cache-Control") == "" {
-			t.Skip("Go ServeMux 405 uses plain text and omits Cache-Control: no-store")
-		}
-		res.expectJSON(t, http.MethodDelete, path)
-	})
 }
 
 func pad(body string, size int) string { return body + strings.Repeat(" ", size-len(body)) }

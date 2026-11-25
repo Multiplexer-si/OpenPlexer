@@ -1,8 +1,38 @@
-export class HubStorage {
-  constructor(private readonly storage: DurableObjectStorage) {}
+export interface TransactionSQL {
+  exec<T extends Record<string, SqlStorageValue>>(query: string, ...bindings: SqlStorageValue[]): T[];
+}
 
-  transaction<T>(fn: (sql: SqlStorage) => T & (T extends PromiseLike<unknown> ? never : unknown)): T {
-    return this.storage.transactionSync(() => fn(this.storage.sql));
+export class HubStorage {
+  readonly #storage: DurableObjectStorage;
+
+  constructor(storage: DurableObjectStorage) {
+    this.#storage = storage;
+  }
+
+  transaction<T>(fn: (sql: TransactionSQL) => T & (T extends PromiseLike<unknown> ? never : unknown)): T {
+    return this.#storage.transactionSync(() => {
+      let active = true;
+      const sql: TransactionSQL = {
+        exec: <Row extends Record<string, SqlStorageValue>>(query: string, ...bindings: SqlStorageValue[]) => {
+          if (!active) throw new TypeError("Hub transaction has ended");
+          // Finish the statement here so a live SQL cursor cannot escape the callback.
+          return this.#storage.sql.exec<Row>(query, ...bindings).toArray();
+        },
+      };
+      let result: T;
+      try {
+        result = fn(sql);
+      } finally {
+        active = false;
+      }
+      if (result !== null && (typeof result === "object" || typeof result === "function")
+          && typeof Reflect.get(result, "then") === "function") {
+        // The caller gets the synchronous error. Consume a native Promise's rejection.
+        if (result instanceof Promise) void result.catch(() => {});
+        throw new TypeError("Hub transactions must be synchronous");
+      }
+      return result;
+    });
   }
 }
 
@@ -107,9 +137,10 @@ export const schemaMigrations: readonly Migration[] = [
 export function migrate(storage: HubStorage, migrations = schemaMigrations): number {
   return storage.transaction((sql) => {
     sql.exec("CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY) STRICT");
-    let { version } = sql.exec<{ version: number }>(
+    const [current] = sql.exec<{ version: number }>(
       "SELECT COALESCE(MAX(version), 0) AS version FROM schema_migrations",
-    ).one();
+    );
+    let { version } = current;
 
     for (const migration of migrations) {
       if (migration.version > version) {

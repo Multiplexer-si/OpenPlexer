@@ -2,7 +2,7 @@
 
 unexport VERSION
 
-go_files = find . -type d -name node_modules -prune -o -type f -name '*.go' ! -name '.*' -print0
+go_files = find . -type d -name node_modules -prune -o -name '*.go' ! -name '.*' \( -type f -o -type l \) -print0
 
 check:
 	@test -z "$$($(go_files) | xargs -0 gofmt -l)" || { echo "gofmt needed on:"; $(go_files) | xargs -0 gofmt -l; exit 1; }

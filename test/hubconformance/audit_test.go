@@ -15,7 +15,7 @@ const denialPost = `{"type":"policy.denied","agent":{"id":"session","vendor":"co
 
 type auditEntry struct {
 	audit.Record
-	Result string
+	Result string `json:"result"`
 }
 
 type auditSnapshot struct {
@@ -42,8 +42,10 @@ func (f *fixture) readAudit(t *testing.T, previous ...string) auditSnapshot {
 			t.Fatalf("export does not extend the earlier checkpoint (rule %s)", result.Rule)
 		}
 	}
-	var wire struct{ Entries []auditEntry }
-	decode(t, res.body, &wire)
+	var wire struct {
+		Entries []auditEntry `json:"entries"`
+	}
+	decodeWire(t, res.body, &wire)
 	for i, entry := range wire.Entries {
 		if entry.ID != fmt.Sprint(len(wire.Entries)-i) || entry.Result != audit.ActionResult(entry.Action) {
 			t.Fatalf("export entry %d has the wrong newest-first ID or result", i)
@@ -107,7 +109,11 @@ func (f *fixture) concurrentWrites(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	verifyBundle(t, published.res, keys, second, repo, 1)
+	acknowledged := verifyBundle(t, published.res, keys, second, repo, 1)
+	stored := verifyBundle(t, f.call(t, get, projectPath(second)+"/policy.bundle", f.member, "", http.StatusOK), keys, second, repo, 1)
+	if stored.Signature != acknowledged.Signature || !sameJSON(t, stored.Bundle, acknowledged.Bundle) {
+		t.Fatal("the stored policy differs from the publication acknowledged during the race")
+	}
 
 	bySeq := make(map[int64][]byte, count)
 	byID := make(map[string]bool, count)
@@ -132,6 +138,7 @@ func (f *fixture) concurrentWrites(t *testing.T) {
 		}
 	}
 	retry := f.call(t, post, eventsPath(id), f.member, denialPost, http.StatusOK, "race-0")
+	eventFrom(t, retry.body, id)
 	if !sameJSON(t, retry.body, posts[0].res.body) {
 		t.Fatal("denial retry returned a different envelope")
 	}

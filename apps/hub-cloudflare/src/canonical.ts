@@ -5,9 +5,10 @@ export function isJsonObject(value: JsonValue | undefined): value is JsonObject 
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-type ParseOptions =
+type ParseOptions = { rejectNumberOverflow?: boolean } & (
   | { duplicates?: WeakSet<JsonObject>; loneSurrogates?: "reject" }
-  | { duplicates?: never; loneSurrogates: "replace" };
+  | { duplicates?: never; loneSurrogates: "replace" }
+);
 
 type Container =
   | { kind: "array"; value?: JsonValue[]; index: number }
@@ -22,8 +23,11 @@ export function parseJSON(input: string | Uint8Array, options: ParseOptions = {}
   const stack: Container[] = [];
   const replacements: string[] = [];
   let copied = 0;
-  // A reviver cannot see values or member names that the last member replaced.
-  for (const match of source.matchAll(/"(?:[^"\\]|\\[^])*"|[{}\[\],]/g)) {
+  // Scan the source because a reviver cannot see members that were overwritten.
+  const tokens = options.rejectNumberOverflow
+    ? /"(?:[^"\\]|\\[^])*"|[{}\[\],]|-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?/g
+    : /"(?:[^"\\]|\\[^])*"|[{}\[\],]/g;
+  for (const match of source.matchAll(tokens)) {
     const token = match[0];
     const parent = stack.at(-1);
     if (token === "{" || token === "[") {
@@ -41,6 +45,8 @@ export function parseJSON(input: string | Uint8Array, options: ParseOptions = {}
     } else if (token === ",") {
       if (parent?.kind === "array") parent.index++;
       if (parent?.kind === "object") parent.key = undefined;
+    } else if (token[0] !== '"') {
+      if (!Number.isFinite(Number(token))) throw new SyntaxError("JSON number exceeds the finite double range");
     } else {
       if (options.loneSurrogates) {
         const decoded: string = JSON.parse(token);

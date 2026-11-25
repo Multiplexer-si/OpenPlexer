@@ -6,26 +6,33 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"encoding/json/jsontext"
 	"fmt"
 	"math/big"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/multiplexer-si/openplexer/internal/audit"
+	"github.com/multiplexer-si/openplexer/internal/hub"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
 
 func (f *fixture) jwks(t *testing.T) {
+	read := func(t *testing.T, path string) map[string]bool {
+		t.Helper()
+		return keyIDs(t, path, f.call(t, get, path, "", "", http.StatusOK))
+	}
 	var policyIDs, auditIDs map[string]bool
-	t.Run("policy", func(t *testing.T) { policyIDs = f.keyIDs(t, policyKeysPath, "") })
-	t.Run("audit", func(t *testing.T) { auditIDs = f.keyIDs(t, auditKeysPath, "audit-") })
+	t.Run("policy", func(t *testing.T) { policyIDs = read(t, policyKeysPath) })
+	t.Run("audit", func(t *testing.T) { auditIDs = read(t, auditKeysPath) })
 	t.Run("separate-key-pairs", func(t *testing.T) {
 		if policyIDs == nil {
-			policyIDs = f.keyIDs(t, policyKeysPath, "")
+			policyIDs = read(t, policyKeysPath)
 		}
 		if auditIDs == nil {
-			auditIDs = f.keyIDs(t, auditKeysPath, "audit-")
+			auditIDs = read(t, auditKeysPath)
 		}
 		for id := range auditIDs {
 			if policyIDs[id] {
@@ -35,19 +42,27 @@ func (f *fixture) jwks(t *testing.T) {
 	})
 }
 
-func (f *fixture) keyIDs(t *testing.T, path, prefix string) map[string]bool {
+func keyIDs(t *testing.T, path string, res response) map[string]bool {
 	t.Helper()
-	res := f.call(t, get, path, "", "", http.StatusOK)
-	if _, err := policy.ParseKeySet(res.body); err != nil {
+	prefix := ""
+	if path == auditKeysPath {
+		prefix = "audit-"
+		if !jsontext.Value(res.body).IsValid(jsontext.AllowInvalidUTF8(true)) {
+			t.Fatal("audit JWKS must be valid JSON with unique member names")
+		}
+	} else if _, err := policy.ParseKeySet(res.body); err != nil {
 		t.Fatal(err)
 	}
-	var jwks struct{ Keys []map[string]any }
-	decode(t, res.body, &jwks)
-	if len(jwks.Keys) == 0 {
+	var jwks struct {
+		Keys []map[string]any `json:"keys"`
+	}
+	decodeWire(t, res.body, &jwks)
+	keys := jwks.Keys
+	if len(keys) == 0 {
 		t.Fatalf("%s contains no public keys", path)
 	}
-	ids := make(map[string]bool, len(jwks.Keys))
-	for i, key := range jwks.Keys {
+	ids := make(map[string]bool, len(keys))
+	for i, key := range keys {
 		if _, private := key["d"]; private || key["kty"] != "EC" || key["crv"] != "P-256" {
 			t.Fatalf("%s key %d must be a public P-256 key", path, i)
 		}
@@ -88,8 +103,11 @@ func (f *fixture) keyIDs(t *testing.T, path, prefix string) map[string]bool {
 func (f *fixture) repo(t *testing.T, id string) string {
 	t.Helper()
 	res := f.call(t, get, projectPath(id), f.member, "", http.StatusOK)
-	var project struct{ ID, Repo string }
-	decode(t, res.body, &project)
+	var project struct {
+		ID   string `json:"id"`
+		Repo string `json:"repo"`
+	}
+	decodeWire(t, res.body, &project)
 	if project.ID != id || project.Repo == "" {
 		t.Fatalf("project %s did not return its ID and repo", id)
 	}
@@ -97,15 +115,15 @@ func (f *fixture) repo(t *testing.T, id string) string {
 }
 
 type signedBundle struct {
-	Version   int
-	Bundle    json.RawMessage
-	Signature string
+	Version   int             `json:"version"`
+	Bundle    json.RawMessage `json:"bundle"`
+	Signature string          `json:"signature"`
 }
 
 func verifyBundle(t *testing.T, res response, keys policy.KeySet, id, repo string, version int) signedBundle {
 	t.Helper()
 	var signed signedBundle
-	decode(t, res.body, &signed)
+	decodeWire(t, res.body, &signed)
 	verified, err := policy.VerifySignedBundle(signed.Signature, keys)
 	if err != nil {
 		t.Fatalf("policy for %s version %d did not verify", id, version)
@@ -119,6 +137,30 @@ func verifyBundle(t *testing.T, res response, keys policy.KeySet, id, repo strin
 		t.Fatal("policy display bundle does not match the signed canonical payload")
 	}
 	return signed
+}
+
+func TestSignedBundleReplyUsesExactFinalMembers(t *testing.T) {
+	const id = "demo"
+	store := hub.Open(t.TempDir())
+	if err := store.Init(); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddProject(id, seedRepo); err != nil {
+		t.Fatal(err)
+	}
+	signed, err := store.PublishPolicy(id, []byte(bundleJSON(id, seedRepo, 1, "")))
+	if err != nil {
+		t.Fatal(err)
+	}
+	jwks := httptest.NewRecorder()
+	store.Handler().ServeHTTP(jwks, httptest.NewRequest(get, policyKeysPath, nil))
+	keys, err := policy.ParseKeySet(jwks.Body.Bytes())
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := fmt.Appendf(nil, `{"version":1,"bundle":%s,"signature":"obsolete","signature":%s,"SIGNATURE":"ignored"}`,
+		signed.Bundle, jsonString(signed.Signature))
+	verifyBundle(t, response{body: raw}, keys, id, seedRepo, 1)
 }
 
 func (f *fixture) projectsAndPolicy(t *testing.T) {
@@ -180,8 +222,10 @@ func (f *fixture) projectsAndPolicy(t *testing.T) {
 		// Canonical JSON expands 1e-6 to 0.000001, adding four bytes.
 		text := func(version, canonicalSize int) string {
 			const extra = `,"decimal":1e-6,"padding":"%s"`
-			empty := bundleJSON(id, repo, version, fmt.Sprintf(extra, ""))
-			return bundleJSON(id, repo, version, fmt.Sprintf(extra, strings.Repeat("x", canonicalSize-len(empty)-4)))
+			base := strings.TrimSuffix(string(mustCanonical(t, []byte(bundleJSON(id, repo, version, "")))), "}")
+			empty := base + fmt.Sprintf(extra, "") + "}"
+			padding := canonicalSize - len(mustCanonical(t, []byte(empty)))
+			return base + fmt.Sprintf(extra, strings.Repeat("x", padding)) + "}"
 		}
 		tooLarge, exact := text(5, policyLimit+1), text(4, policyLimit)
 		for i, body := range []string{exact, tooLarge} {

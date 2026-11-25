@@ -10,6 +10,13 @@ export interface Env {
   WRAP_KEY_V1?: string;
 }
 
+type RoutingEnv = Pick<Env, "HUB_HOSTNAME" | "TEAM_ID" | "DEV_MODE"> & {
+  TEAM_HUB: {
+    idFromName(name: string): DurableObjectId;
+    get(id: DurableObjectId): { fetch(request: Request): Promise<Response> };
+  };
+};
+
 const jsonHeaders = { "Cache-Control": "no-store" };
 
 function notFound(): Response {
@@ -17,7 +24,7 @@ function notFound(): Response {
 }
 
 export default {
-  fetch(request: Request, env: Env): Response | Promise<Response> {
+  fetch(request: Request, env: RoutingEnv): Response | Promise<Response> {
     const { hostname } = new URL(request.url);
     const local = env.DEV_MODE === "1" && (hostname === "localhost" || hostname === "127.0.0.1");
     if (hostname !== env.HUB_HOSTNAME.toLowerCase() && !local) {

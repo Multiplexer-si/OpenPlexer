@@ -35,7 +35,7 @@ func eventFrom(t *testing.T, raw []byte, id string) room.Event {
 		EventID string `json:"event_id"`
 		TS      string `json:"ts"`
 	}
-	decode(t, raw, &wire)
+	decodeWire(t, raw, &wire)
 	if _, err := time.Parse(time.RFC3339Nano, wire.TS); err != nil || wire.TS != event.At() || wire.EventID != event.ID() {
 		t.Fatal("event envelope must carry the payload timestamp and event ID")
 	}
@@ -46,7 +46,7 @@ func (f *fixture) replay(t *testing.T, id, query string) []json.RawMessage {
 	t.Helper()
 	res := f.call(t, get, eventsPath(id)+query, f.member, "", http.StatusOK)
 	var page []json.RawMessage
-	decode(t, res.body, &page)
+	decodeWire(t, res.body, &page)
 	if page == nil {
 		t.Fatal("replay must return a JSON array, including when empty")
 	}
