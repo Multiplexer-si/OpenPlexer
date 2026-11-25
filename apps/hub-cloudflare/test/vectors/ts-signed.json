@@ -1,0 +1,112 @@
+{
+  "warning": "Public fixed TEST KEYS. Never use these private keys outside tests.",
+  "test_keys": {
+    "policy": {
+      "kty": "EC",
+      "crv": "P-256",
+      "d": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAE",
+      "x": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY",
+      "y": "T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU"
+    },
+    "audit": {
+      "kty": "EC",
+      "crv": "P-256",
+      "d": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI",
+      "x": "fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg",
+      "y": "B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E"
+    }
+  },
+  "policy": {
+    "bundle": {
+      "version": 1,
+      "project_id": "prj-shop",
+      "repos": [
+        "api"
+      ],
+      "areas": [],
+      "roles": {},
+      "members": {},
+      "note": "Zoë <&> 日本"
+    },
+    "jwks": {
+      "keys": [
+        {
+          "alg": "ES256",
+          "use": "sig",
+          "kid": "aYvqY9xEo0RmP_FCmuoQhC3ye2uZHvJYZrLGwCzcxb4",
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY",
+          "y": "T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU"
+        }
+      ]
+    },
+    "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImFZdnFZOXhFbzBSbVBfRkNtdW9RaEMzeWUydVpIdkpZWnJMR3dDemN4YjQiLCJ0eXAiOiJtcC1wb2xpY3krandzIn0.eyJhcmVhcyI6W10sIm1lbWJlcnMiOnt9LCJub3RlIjoiWm_DqyA8Jj7igKjml6XmnKwiLCJwcm9qZWN0X2lkIjoicHJqLXNob3AiLCJyZXBvcyI6WyJhcGkiXSwicm9sZXMiOnt9LCJ2ZXJzaW9uIjoxfQ.A0VPPxlKPJHuRZ1qCocdz-GvP7PTupJrK9mJ04ESVLxw4KPdadPNWWcES0_oz6xQmH0D2aZqUuTLekM6DWnUfA"
+  },
+  "audit": {
+    "export": {
+      "entries": [
+        {
+          "workspace_id": "wsp-ts-vectors",
+          "actor_member_id": "mem-zoë",
+          "agent_session_id": null,
+          "reason": null,
+          "flagged": false,
+          "created_at": "2026-11-25T12:00:00.000Z",
+          "id": "2",
+          "action": "policy.updated",
+          "target": "prj-shop",
+          "meta": {
+            "version": 1,
+            "details": {
+              "9": 1e-7,
+              "10": "日本",
+              "😀": "&",
+              "～": "<"
+            }
+          },
+          "prev_hash": "8c7a5021f8eacc08a3e72e9fd5256d60569e6af775a781e2edf2462d230055aa",
+          "hash": "f290286883ee9733f3dfecf17a6051e80ad4e7df506ae04bc76b0543ef843167",
+          "result": "updated"
+        },
+        {
+          "workspace_id": "wsp-ts-vectors",
+          "actor_member_id": "mem-zoë",
+          "agent_session_id": null,
+          "reason": null,
+          "flagged": false,
+          "created_at": "2026-11-25T12:00:00.000Z",
+          "id": "1",
+          "action": "project.added",
+          "target": "prj-shop",
+          "meta": {},
+          "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+          "hash": "8c7a5021f8eacc08a3e72e9fd5256d60569e6af775a781e2edf2462d230055aa",
+          "result": "added"
+        }
+      ],
+      "next_cursor": null
+    },
+    "payload": {
+      "v": 1,
+      "workspace_id": "wsp-ts-vectors",
+      "entries": 2,
+      "tip_hash": "f290286883ee9733f3dfecf17a6051e80ad4e7df506ae04bc76b0543ef843167",
+      "issued_at": "2026-11-25T12:00:00.000Z"
+    },
+    "jwks": {
+      "keys": [
+        {
+          "alg": "ES256",
+          "use": "sig",
+          "kid": "audit-qfMA61lg6JEzr3NiARoeJvDi6i423EAqBK9sGSuJGow",
+          "kty": "EC",
+          "crv": "P-256",
+          "x": "fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg",
+          "y": "B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E"
+        }
+      ]
+    },
+    "signature": "eyJhbGciOiJFUzI1NiIsImtpZCI6ImF1ZGl0LXFmTUE2MWxnNkpFenIzTmlBUm9lSnZEaTZpNDIzRUFxQks5c0dTdUpHb3ciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjoyLCJpc3N1ZWRfYXQiOiIyMDI2LTExLTI1VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6ImYyOTAyODY4ODNlZTk3MzNmM2RmZWNmMTdhNjA1MWU4MGFkNGU3ZGY1MDZhZTA0YmM3NmIwNTQzZWY4NDMxNjciLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtdHMtdmVjdG9ycyJ9.jg3z5BlLsgo2ZhCgYobbmP1GTJ_OExw6Exh9s220gTLKotw52KpM_KvG-fgba1LtMKTZhykX6q9fpTJ05_wLKg"
+  }
+}

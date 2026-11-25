@@ -5,6 +5,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:unit": "vitest run --config vitest.unit.config.ts",
+    "gen:vectors": "node --experimental-strip-types test/gen-vectors.ts",
     "deploy": "wrangler deploy"
   },
   "engines": {

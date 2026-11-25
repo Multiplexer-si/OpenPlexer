@@ -25,12 +25,26 @@ To supply local secrets, copy `.dev.vars.example` to `.dev.vars` and fill in bot
 
 ```sh
 npm run typecheck
+npm run test:unit
 npm test
 npm run deploy -- --dry-run --outdir dist
 ```
 
-The Workers test pool uses local SQLite. It evicts a Durable Object and checks its stored row in a new request.
+The Node suite runs the canonical JSON, policy signature, and audit fixtures.
+The Workers suite runs the same tests in workerd, plus the Durable Object and SQLite tests.
+It checks Web Crypto for signing and wrapping and uses synchronous `node:crypto` to seal records.
+The pinned workerd compatibility date enables Node.js compatibility by default.
 Testing and building the bundle require no Cloudflare account.
+
+Run `npm run gen:vectors` to regenerate the TypeScript-signed bundle and checkpoint
+in `test/vectors/ts-signed.json`. The file marks its fixed private keys as test data.
+The Node and Workers suites verify both signatures and compare the other bytes
+with fresh generator output.
+From the repository root, run `go test ./internal/hub -run TestTypeScriptSignedVectors`
+to check the bundle, sealed chain, and checkpoint with the Go verifiers.
+
+The private-key wrapper uses AES-256-GCM with a fresh 12-byte nonce.
+Its authenticated data is the canonical JSON array of team ID, key purpose, and `kid` in that order.
 
 ## Deploy
 

@@ -35,6 +35,7 @@ jobs:
           node-version: '24'
       - run: npm ci
       - run: npm run typecheck
+      - run: npm run test:unit
       - run: npm test
       - run: npm run deploy -- --dry-run --outdir dist
       - name: Check Wrangler local mode with test bindings

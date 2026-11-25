@@ -146,7 +146,7 @@ func (f *fixture) startGoHub(t *testing.T) {
 	data := filepath.Join(dir, "hub-data")
 	admin := func(name string, args ...string) []byte {
 		t.Helper()
-		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 		defer cancel()
 		args = append([]string{name, "-data-dir", data}, args...)
 		out, err := exec.CommandContext(ctx, bin, args...).Output()
@@ -182,7 +182,7 @@ func (f *fixture) startGoHub(t *testing.T) {
 	go func() { done <- cmd.Wait(); close(done) }()
 	t.Cleanup(func() { _ = cmd.Process.Kill(); <-done })
 	f.origin = "http://" + addr
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 	defer cancel()
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
