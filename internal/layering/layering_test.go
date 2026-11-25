@@ -95,7 +95,7 @@ func directImports(t *testing.T) (graph, external map[string][]string) {
 		}
 		name := d.Name()
 		if d.IsDir() {
-			if path != moduleRoot && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "testdata") {
+			if path != moduleRoot && (strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") || name == "testdata" || name == "node_modules") {
 				return filepath.SkipDir
 			}
 			return nil

@@ -28,7 +28,7 @@ func TestRelativeLinksResolve(t *testing.T) {
 			return err
 		}
 		if d.IsDir() {
-			if path != moduleRoot && strings.HasPrefix(d.Name(), ".") {
+			if path != moduleRoot && (strings.HasPrefix(d.Name(), ".") || d.Name() == "node_modules") {
 				return filepath.SkipDir
 			}
 			return nil

@@ -2,8 +2,10 @@
 
 unexport VERSION
 
+go_files = find . -type d -name node_modules -prune -o -type f -name '*.go' ! -name '.*' -print0
+
 check:
-	@test -z "$$(gofmt -l .)" || { echo "gofmt needed on:"; gofmt -l .; exit 1; }
+	@test -z "$$($(go_files) | xargs -0 gofmt -l)" || { echo "gofmt needed on:"; $(go_files) | xargs -0 gofmt -l; exit 1; }
 	go vet ./...
 	go test -count=1 ./...
 
@@ -15,4 +17,4 @@ release:
 	go run ./tools/release -version "$$RELEASE_VERSION"
 
 fmt:
-	gofmt -w .
+	$(go_files) | xargs -0 gofmt -w
