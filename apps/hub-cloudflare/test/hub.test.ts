@@ -39,12 +39,14 @@ test("returns the Go hub error for unsupported routes and methods", async () => 
 });
 
 test("rejects other hostnames before routing to storage", async () => {
+  const before = (await listDurableObjectIds(env.TEAM_HUB)).length;
   for (const host of [`${env.HUB_HOSTNAME}.example`, "localhost", "127.0.0.1"]) {
     const response = await worker.fetch(new Request(`http://${host}/healthz`), { ...env, DEV_MODE: "" });
     expect(response.status).toBe(404);
     expect(await response.json()).toEqual({ error: "not found" });
   }
-  expect(await listDurableObjectIds(env.TEAM_HUB)).toEqual([]);
+  // Storage is shared across tests in this file, so check that no new object appeared.
+  expect((await listDurableObjectIds(env.TEAM_HUB)).length).toBe(before);
 });
 
 test("allows only localhost and IPv4 loopback in development mode", async () => {
