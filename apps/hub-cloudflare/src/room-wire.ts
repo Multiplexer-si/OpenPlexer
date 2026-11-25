@@ -2,6 +2,7 @@ import { canonicalJSON, hasTrailingText, isJsonObject } from "./canonical";
 import type { JsonObject, JsonValue } from "./canonical";
 
 const decoder = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true });
+const maxJSONDepth = 10_000;
 // An unpaired surrogate cannot occur in a decoded Room string. Mark number
 // tokens so body extensions keep their JSON spelling, even outside double range.
 const numberMarker = "\ud800";
@@ -23,7 +24,7 @@ export function decodeRoomJSON(input: Uint8Array): JsonValue {
         return value.isWellFormed() ? token : JSON.stringify(value.toWellFormed());
       }
       if (token === "{" || token === "[") {
-        if (++depth > 10_000) throw new SyntaxError();
+        if (++depth > maxJSONDepth) throw new SyntaxError();
       } else if (token === "}" || token === "]") {
         depth--;
       } else {
@@ -37,9 +38,16 @@ export function decodeRoomJSON(input: Uint8Array): JsonValue {
   }
 }
 
-export function encodeRoomJSON(value: JsonObject): string {
-  return canonicalJSON(value).replace(/"(?:[^"\\]|\\[^])*"/g, (token) =>
-    token.startsWith('"\\ud800') ? token.slice(7, -1) : token);
+export function encodeRoomJSON(value: JsonObject, outerDepth = 0): string {
+  let depth = outerDepth;
+  return canonicalJSON(value).replace(tokens, (token) => {
+    if (token === "{" || token === "[") {
+      if (++depth > maxJSONDepth) throw new RangeError("Room JSON exceeds 10000 levels");
+    } else if (token === "}" || token === "]") {
+      depth--;
+    }
+    return token.startsWith('"\\ud800') ? token.slice(7, -1) : token;
+  });
 }
 
 type Read<T> = (path: string, value: JsonValue) => T;
@@ -153,9 +161,6 @@ class Reader {
         for (const [name, read, required] of [
           ["thread_id", this.text, false], ["reply_to", this.text, false], ...eventFields(this)[type],
         ] satisfies Field[]) this.field(value, path, name, read, required ?? true);
-        if (type === "claim") {
-          value.ttl_seconds = this.field(value, path, "ttl_seconds", this.integerFrom(1));
-        }
         body = value;
       });
     }
@@ -183,7 +188,7 @@ type EventType = typeof eventTypes[number];
 function eventFields(r: Reader): Record<EventType, Field[]> {
   return {
     status: [["summary", r.text], ["plan_step", r.text, false], ["files", r.list, false]],
-    claim: [["item", r.text], ["paths", r.list], ["intent", r.text]],
+    claim: [["item", r.text], ["paths", r.list], ["intent", r.text], ["ttl_seconds", r.integerFrom(1)]],
     release: [["claim_id", r.text], ["outcome", r.text, false]],
     decision: [["title", r.text], ["detail", r.text], ["scope", r.text, false], ["supersedes", r.text, false]],
     "decision.confirm": [["decision_id", r.text], ["result", r.choice(["confirmed", "rejected"])]],

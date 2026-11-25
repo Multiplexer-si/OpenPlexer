@@ -12,7 +12,7 @@ const idPattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
 const memberInput = "member needs a valid id and role lead or member";
 const projectInput = "project needs a valid id and repository identifier";
 
-function validID(id: unknown): id is string {
+export function validID(id: unknown): id is string {
   return typeof id === "string" && idPattern.test(id);
 }
 

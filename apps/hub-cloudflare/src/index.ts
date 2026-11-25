@@ -1,8 +1,10 @@
 import { DurableObject } from "cloudflare:workers";
 import { activateKey, addMember, addProject, initialize, removeMember, stageKey } from "./admin";
+import { handleClaim } from "./claims";
 import { exportAudit } from "./export";
 import { bearer, HubError, invalid, json, notFound } from "./http";
 import { publishPolicy, readPolicy, readProject } from "./publication";
+import { postEvent, replayEvents } from "./room";
 import { authenticate, publicKeys } from "./state";
 import { HubStorage, migrate } from "./storage";
 
@@ -87,7 +89,28 @@ export class TeamHub extends DurableObject<Env> {
       }
       throw notFound();
     }
-    if (first !== "api" || second !== "v1" || extra.length > 0) throw notFound();
+    if (first !== "api" || second !== "v1") throw notFound();
+    if (collection === "rooms" && target) {
+      if (extra.length === 0 && suffix === "events") {
+        allow(method, ["GET", "HEAD", "POST"]);
+        return method === "POST" ? postEvent(request, this.storage, target) : replayEvents(request, this.storage, target);
+      }
+      if (extra.length === 0 && suffix === "stream" && method === "POST") {
+        throw new HubError(405, "method not allowed", { Allow: "GET" });
+      }
+      if (suffix === "claims") {
+        if (extra.length === 0) {
+          allow(method, ["POST"]);
+          return handleClaim(request, this.storage, target, { action: "create" });
+        }
+        const [claim, action] = extra;
+        if (extra.length === 2 && claim && (action === "renew" || action === "release")) {
+          allow(method, ["POST"]);
+          return handleClaim(request, this.storage, target, { action, claim });
+        }
+      }
+    }
+    if (extra.length > 0) throw notFound();
     if (collection === "projects" && target && target !== "/") {
       if (suffix === "policy") {
         allow(method, ["PUT"]);

@@ -45,5 +45,6 @@ test("keeps deep extension arrays within the Room JSON limit", () => {
   const extension = "[".repeat(n) + "1" + "]".repeat(n);
   const post = parseEventPost(utf8.encode(body + extension + "}}"));
   expect(encodeRoomJSON(post.body)).toBe('{"extension":' + extension + ',"summary":""}');
+  expect(() => encodeRoomJSON({ body: post.body }, 2)).toThrow("Room JSON exceeds 10000 levels");
   expect(() => parseEventPost(utf8.encode(body + "[[" + extension + "]]}}"))).toThrow("is not valid JSON");
 });
