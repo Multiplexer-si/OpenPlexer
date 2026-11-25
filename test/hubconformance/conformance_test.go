@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -28,7 +29,7 @@ import (
 
 var (
 	hubURL           = flag.String("hub-url", "", "origin of a seeded hub (default: start a Go hub)")
-	wranglerDev      = flag.Bool("wrangler-dev", false, "use small bodies for early bearer rejections against Wrangler dev")
+	wranglerDev      = flag.Bool("wrangler-dev", false, "use small bodies for early bearer rejections against Wrangler dev (requires -hub-url)")
 	leadTokenFile    = flag.String("lead-token-file", "", "file containing the lead token")
 	memberTokenFile  = flag.String("member-token-file", "", "file containing the member token")
 	revokedTokenFile = flag.String("revoked-token-file", "", "optional file containing a previously revoked token")
@@ -54,8 +55,37 @@ type fixture struct {
 	client                                 *http.Client
 }
 
+func validateTarget(origin string, wrangler bool) error {
+	if wrangler && origin == "" {
+		return errors.New("-wrangler-dev requires -hub-url")
+	}
+	return nil
+}
+
+func TestValidateTarget(t *testing.T) {
+	for _, tc := range []struct {
+		name, origin string
+		wrangler     bool
+		wantError    bool
+	}{
+		{name: "built-in-go"},
+		{name: "external", origin: "https://hub.example.test"},
+		{name: "wrangler-with-origin", origin: "https://hub.example.test", wrangler: true},
+		{name: "wrangler-without-origin", wrangler: true, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := validateTarget(tc.origin, tc.wrangler); (err != nil) != tc.wantError {
+				t.Fatalf("validateTarget returned %v, want error: %t", err, tc.wantError)
+			}
+		})
+	}
+}
+
 func setup(t *testing.T) *fixture {
 	t.Helper()
+	if err := validateTarget(*hubURL, *wranglerDev); err != nil {
+		t.Fatal(err)
+	}
 	id := regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]{0,127}$`)
 	if !id.MatchString(*project) || !id.MatchString(*secondProject) || *project == *secondProject {
 		t.Fatal("-project and -second-project must be distinct hub IDs")
