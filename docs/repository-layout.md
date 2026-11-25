@@ -5,7 +5,7 @@ This page lists the directories, binaries, packages, dependency rules, make targ
 ## Directories
 
 ```
-apps/                    one directory per binary
+apps/                    Go commands and the Cloudflare Worker
 internal/                Go packages, one per domain
 spec/                    language-independent contracts
 tools/                   generators, checks, and release packaging
@@ -20,7 +20,7 @@ To list every Go package, run `go list ./...`.
 
 ## Binaries
 
-Each directory under `apps/` builds one binary. `make build` writes the binaries to `bin/`. Each binary prints its version with `--version`. [Install OpenPlexer](install.md)
+The three Go command directories under `apps/` each build one binary. `make build` writes the binaries to `bin/`. Each binary prints its version with `--version`. [Install OpenPlexer](install.md)
 
 | Directory | Binary | Role |
 |---|---|---|
@@ -29,6 +29,10 @@ Each directory under `apps/` builds one binary. `make build` writes the binaries
 | `apps/openplexer-verify` | `openplexer-verify` | The standalone verifier for audit logs |
 
 `openplexer` configures the local gate, loads a signed policy bundle, reports the state of the policy, and checks one action. [Local policy gate](local-policy.md) lists those commands. It also installs and removes the hook of Claude Code and Codex, and it is the command that each hook runs. [Claude Code hooks](hooks-claude-code.md) and [Codex hooks](hooks-codex.md) give those commands. `openplexer-hub` manages members, projects, and signed policies. It serves the Room HTTP API and exports the team audit log. [Run the single-team hub](hub.md) gives the commands and endpoints. `openplexer-verify` checks a JSON export and signed checkpoints offline. [Export and verify an audit log](audit.md).
+
+## Cloudflare Worker
+
+`apps/hub-cloudflare` builds a TypeScript Worker with Wrangler. It serves the health check and initializes SQLite storage in one Durable Object per team. [Run the Cloudflare hub](../apps/hub-cloudflare/README.md).
 
 ## Packages
 
@@ -102,14 +106,16 @@ Set `OPENPLEXER_BIN_DIR` to an absolute path to test prebuilt binaries. The shar
 
 | Target | Action |
 |---|---|
-| `make check` | Fails if `gofmt -l .` lists a file. Then runs `go vet ./...` and `go test -count=1 ./...`. |
-| `make build` | Builds every binary under `apps/` into `bin/`. |
+| `make check` | Checks Go formatting outside `node_modules`. Then runs `go vet ./...` and `go test -count=1 ./...`. |
+| `make build` | Builds the Go binaries under `apps/` into `bin/`. |
 | `make release VERSION=v0.1.0` | Builds platform archives and `SHA256SUMS` in a new `dist/release/v0.1.0/` directory. |
-| `make fmt` | Runs `gofmt -w .`. |
+| `make fmt` | Formats Go files outside `node_modules`. |
 
 ## CI
 
 The workflow in `.github/workflows/ci.yml` runs on every pull request and on every push to `main`. It installs the Go version that `go.mod` names, then runs `make check` and `make build` in one job named `check`. `main` requires that job before a pull request can merge. [Run the checks](../CONTRIBUTING.md#run-the-checks) lists the same commands to run locally, and names the tests that run the fixtures.
+
+The `hub-cloudflare` job uses Node 24 and npm 11. It installs the locked dependencies, checks TypeScript, runs the Workers tests, and builds the Wrangler deployment bundle in dry-run mode. It also checks local health with dummy secret bindings.
 
 Pushing a `v*` tag starts `.github/workflows/release.yml`. Publication requires a pushed tag that matches `^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$`. A successful manual run uploads the archives and checksums as workflow artifacts. [Cut a release](release.md)
 

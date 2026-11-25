@@ -10,10 +10,10 @@ Other requests return `{"error":"not found"}` with status 404.
 From this directory, use Node 24 and npm 11.
 
 ```sh
-npm ci
 export WRANGLER_SEND_METRICS=false
 export XDG_CONFIG_HOME="$PWD/.wrangler-home"
 export npm_config_cache="$PWD/.npm-cache"
+npm ci
 npx wrangler dev --local --var DEV_MODE:1
 ```
 
