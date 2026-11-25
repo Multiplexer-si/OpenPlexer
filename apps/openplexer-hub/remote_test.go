@@ -115,6 +115,36 @@ func TestRemoteAdminWorkflow(t *testing.T) {
 	command(0, "", leadToken, "remove-member", "--token-file", "-", "--id", "ana")
 }
 
+func TestRemoteAddMemberTokenResponse(t *testing.T) {
+	lead, issued, other := testToken("lead"), testToken("issued"), testToken("other")
+	for _, tc := range []struct {
+		name, body, token string
+	}{
+		{name: "wrong case", body: `{"Token":"` + issued + `"}`},
+		{name: "final null", body: `{"token":"` + issued + `","token":null}`},
+		{name: "wrong type", body: `{"token":42}`},
+		{name: "invalid syntax", body: `{"token":"` + issued[:42] + `+"}`},
+		{name: "valid", body: `{"token":"` + issued + `"}`, token: issued},
+		{name: "final exact name", body: `{"token":null,"token":"` + issued + `","Token":"` + other + `"}`, token: issued},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			transport := adminHandler(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				_, _ = io.WriteString(w, tc.body)
+			}))
+			var out, stderr bytes.Buffer
+			code := runWithInput([]string{"add-member", "--hub", "https://hub.example.test", "--id", "ana"},
+				strings.NewReader(lead), &out, &stderr, transport)
+			if tc.token != "" {
+				if code != 0 || out.String() != tc.token+"\n" || stderr.Len() != 0 {
+					t.Fatalf("exit %d or unexpected output for a valid response", code)
+				}
+			} else if code != 1 || out.Len() != 0 || stderr.String() != "openplexer-hub add-member: invalid token response from hub\n" {
+				t.Fatalf("exit %d or unexpected output for an invalid response", code)
+			}
+		})
+	}
+}
+
 func TestRemoteAdminRejectsUnsafeInputsAndRedactsErrors(t *testing.T) {
 	token := testToken("lead fixture")
 	private := filepath.Join(t.TempDir(), "public.token")

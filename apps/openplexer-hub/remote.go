@@ -198,13 +198,13 @@ func (h remoteAdmin) addMember(id, role string, stdout io.Writer) error {
 	}
 	defer res.Body.Close()
 	data, err := io.ReadAll(io.LimitReader(res.Body, credentialLimit+1))
-	var reply struct {
-		Token string `json:"token"`
-	}
-	if err != nil || len(data) > credentialLimit || json.Unmarshal(data, &reply) != nil || !validMemberToken(reply.Token) {
+	var reply map[string]json.RawMessage
+	var token *string
+	if err != nil || len(data) > credentialLimit || json.Unmarshal(data, &reply) != nil ||
+		json.Unmarshal(reply["token"], &token) != nil || token == nil || !validMemberToken(*token) {
 		return errors.New("invalid token response from hub")
 	}
-	_, err = fmt.Fprintln(stdout, reply.Token)
+	_, err = fmt.Fprintln(stdout, *token)
 	if err != nil {
 		return errors.New("could not write the new member token")
 	}
