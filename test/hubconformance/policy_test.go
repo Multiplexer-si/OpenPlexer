@@ -180,8 +180,10 @@ func (f *fixture) projectsAndPolicy(t *testing.T) {
 		// Canonical JSON expands 1e-6 to 0.000001, adding four bytes.
 		text := func(version, canonicalSize int) string {
 			const extra = `,"decimal":1e-6,"padding":"%s"`
-			empty := bundleJSON(id, repo, version, fmt.Sprintf(extra, ""))
-			return bundleJSON(id, repo, version, fmt.Sprintf(extra, strings.Repeat("x", canonicalSize-len(empty)-4)))
+			base := strings.TrimSuffix(string(mustCanonical(t, []byte(bundleJSON(id, repo, version, "")))), "}")
+			empty := base + fmt.Sprintf(extra, "") + "}"
+			padding := canonicalSize - len(mustCanonical(t, []byte(empty)))
+			return base + fmt.Sprintf(extra, strings.Repeat("x", padding)) + "}"
 		}
 		tooLarge, exact := text(5, policyLimit+1), text(4, policyLimit)
 		for i, body := range []string{exact, tooLarge} {

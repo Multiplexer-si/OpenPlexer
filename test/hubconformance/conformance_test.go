@@ -40,7 +40,7 @@ const (
 	checkpoint     = "OpenPlexer-Audit-Checkpoint"
 	policyLimit    = 1 << 20
 	roomLimit      = 64 << 10
-	seedRepo       = "conformance-repo"
+	seedRepo       = "R&D"
 )
 
 type fixture struct {
