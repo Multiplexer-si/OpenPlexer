@@ -94,7 +94,9 @@ test("bootstraps once, provisions both wrapped keys, and recognizes only the fir
   await runInDurableObject(stub(), (_hub, ctx) => {
     const sql = ctx.storage.sql;
     const team = sql.exec("SELECT * FROM team").one();
-    const keyRows = sql.exec("SELECT * FROM signing_keys ORDER BY purpose").toArray();
+    const keyRows = sql.exec<{ wrapped_pkcs8: ArrayBuffer; nonce: ArrayBuffer; public_jwk: string }>(
+      "SELECT * FROM signing_keys ORDER BY purpose",
+    ).toArray();
     expect(keyRows).toMatchObject([
       { kid: team.audit_kid, purpose: "audit", status: "active", wrap_key_id: "v1" },
       { kid: team.policy_kid, purpose: "policy", status: "active", wrap_key_id: "v1" },
@@ -106,7 +108,7 @@ test("bootstraps once, provisions both wrapped keys, and recognizes only the fir
       expect(typeof key.public_jwk).toBe("string");
       expect(JSON.parse(String(key.public_jwk))).not.toHaveProperty("d");
     }
-    expect(keyRows[0].nonce).not.toEqual(keyRows[1].nonce);
+    expect(new Uint8Array(keyRows[0].nonce)).not.toEqual(new Uint8Array(keyRows[1].nonce));
     expect(sql.exec("SELECT hex(token_hash) AS hash FROM members WHERE member_id = 'lee'").one().hash)
       .toBe(hexHash(lead).toUpperCase());
     expect(team.audit_seq).toBe(2);
@@ -253,18 +255,21 @@ test("compares bootstrap and roster credentials as fixed-size hashes", async () 
   if (!bootstrap) throw new Error("Missing test bootstrap binding");
   await runInDurableObject(stub(), async (hub) => {
     const compare = vi.spyOn(crypto.subtle, "timingSafeEqual");
+    const comparedHashes = () => compare.mock.calls.map((args) =>
+      args.map((arg) => arg instanceof ArrayBuffer ? Buffer.from(arg).toString("hex") : arg),
+    );
     try {
       const init = JSON.stringify({ member_id: "lee", token_hash: hexHash(token) });
       await error(await hub.fetch(incoming(admin + "/init", "POST", "different-bootstrap", init)), 401, "invalid bearer token");
-      expect(compare).toHaveBeenCalledWith(tokenHash("different-bootstrap"), tokenHash(bootstrap));
+      expect(comparedHashes()).toContainEqual([hexHash("different-bootstrap"), hexHash(bootstrap)]);
       await check(await hub.fetch(incoming(admin + "/init", "POST", bootstrap, init)), 200, {});
       compare.mockClear();
       await error(await hub.fetch(incoming(project, "GET", token)), 404, "not found");
-      expect(compare).toHaveBeenCalledWith(tokenHash(token), tokenHash(token));
+      expect(comparedHashes()).toContainEqual([hexHash(token), hexHash(token)]);
       compare.mockClear();
       const unknown = newToken();
       await error(await hub.fetch(incoming(project, "GET", unknown)), 401, "invalid bearer token");
-      expect(compare).toHaveBeenCalledWith(tokenHash(unknown), tokenHash(token));
+      expect(comparedHashes()).toContainEqual([hexHash(unknown), hexHash(token)]);
     } finally {
       compare.mockRestore();
     }
