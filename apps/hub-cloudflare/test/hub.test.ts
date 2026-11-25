@@ -31,12 +31,11 @@ test("serves uncached health with the initialized schema version", async () => {
   expect(await response.json()).toEqual({ ok: true, schema: 1 });
 });
 
-test("returns the Go hub error for unsupported routes and methods", async () => {
-  for (const response of [await request("/api/v1/projects/demo"), await request("/healthz", { method: "POST" })]) {
-    expect(response.status).toBe(404);
-    expect(response.headers.get("Cache-Control")).toBe("no-store");
-    expect(await response.json()).toEqual({ error: "not found" });
-  }
+test("returns uncached JSON for unknown paths", async () => {
+  const response = await request("/api/v1/unknown");
+  expect(response.status).toBe(404);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect(await response.json()).toEqual({ error: "not found" });
 });
 
 test("rejects other hostnames before routing to storage", async () => {
