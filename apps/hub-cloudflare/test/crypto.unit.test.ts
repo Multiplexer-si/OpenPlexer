@@ -66,6 +66,17 @@ for (const [name, source] of [
   });
 }
 
+test("policy verification rejects overflowing numbers anywhere in a trusted JWKS", async () => {
+  const { shared, cases } = fixture(policyFixtures);
+  const signature = string(cases[0].input.signature);
+  const keys = canonicalJSON(object(shared).jwks);
+  const withMetadata = (metadata: string) => `{${metadata},${keys.slice(1)}`;
+  await expect(verifyPolicyBundle(signature, withMetadata('"observation":"1e400","tiny":1e-400'))).resolves.toHaveProperty("bundle");
+  for (const metadata of ['"observation":1e400', '"observation":{"sample":-1e400,"sample":0}']) {
+    await expect(verifyPolicyBundle(signature, withMetadata(metadata))).rejects.toMatchObject({ stage: "key" });
+  }
+});
+
 describe("verify-chain.json", () => {
   test.each(fixture(chainFixtures).cases)("$name", ({ input, expected }) => {
     expect(verifyChain(list(input.records).map(object))).toEqual(expected);

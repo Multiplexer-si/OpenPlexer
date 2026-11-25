@@ -130,7 +130,9 @@ export function parseCanonicalObject(bytes: Uint8Array): JsonObject {
 
 async function selectKey(jwks: string, header: JsonObject, purpose: SigningPurpose): Promise<CryptoKey> {
   const duplicates = new WeakSet<JsonObject>();
-  const doc = parseJSON(jwks, purpose === "audit" ? { duplicates } : { loneSurrogates: "replace" });
+  const doc = parseJSON(jwks, purpose === "audit" ? { duplicates } : {
+    loneSurrogates: "replace", rejectNumberOverflow: true,
+  });
   if (!isJsonObject(doc) || !Array.isArray(doc.keys) || !doc.keys.every(isJsonObject)
       || hasDuplicateMembers(doc, duplicates)) {
     throw new Error("Invalid JWKS");
