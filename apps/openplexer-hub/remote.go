@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -23,8 +24,10 @@ import (
 
 const adminPath = "/api/v1/admin"
 const credentialLimit = 4096
+const remoteAdminLimit = 64 << 10
 
 var remoteID = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
+var compactJWS = regexp.MustCompile(`^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$`)
 
 type remoteAdmin struct {
 	origin, token string
@@ -145,7 +148,9 @@ func (h remoteAdmin) request(method, path string, body []byte) (*http.Response, 
 		return nil, errors.New("could not create the hub request")
 	}
 	req.Close = true
-	req.Header.Set("Authorization", "Bearer "+h.token)
+	if h.token != "" {
+		req.Header.Set("Authorization", "Bearer "+h.token)
+	}
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
@@ -236,4 +241,87 @@ func (h remoteAdmin) publishPolicy(project, path string) error {
 		return err
 	}
 	return h.send(http.MethodPut, "/api/v1/projects/"+project+"/policy", text)
+}
+
+func keyPath(purpose string) (string, error) {
+	if purpose != "policy" && purpose != "audit" {
+		return "", errors.New("--purpose must be policy or audit")
+	}
+	return adminPath + "/keys/" + purpose, nil
+}
+
+func (h remoteAdmin) stageKey(purpose string, stdout io.Writer) error {
+	path, err := keyPath(purpose)
+	if err != nil {
+		return err
+	}
+	res, err := h.request(http.MethodPost, path, nil)
+	if err != nil {
+		return err
+	}
+	defer res.Body.Close()
+	data, err := io.ReadAll(io.LimitReader(res.Body, remoteAdminLimit+1))
+	var jwk struct {
+		Kid string `json:"kid"`
+	}
+	if err != nil || len(data) > remoteAdminLimit || jsonv2.Unmarshal(data, &jwk) != nil || !remoteID.MatchString(jwk.Kid) {
+		return errors.New("invalid staged key response from hub")
+	}
+	_, err = fmt.Fprintln(stdout, jwk.Kid)
+	return err
+}
+
+func (h remoteAdmin) activateKey(purpose, kid string) error {
+	path, err := keyPath(purpose)
+	if err != nil {
+		return err
+	}
+	if !remoteID.MatchString(kid) {
+		return errors.New("activate-key requires a valid --kid")
+	}
+	body, err := json.Marshal(map[string]string{"kid": kid})
+	if err != nil {
+		return err
+	}
+	return h.send(http.MethodPut, path+"/active", body)
+}
+
+func (h remoteAdmin) exportAudit(out string) error {
+	if out == "" {
+		return errors.New("--out is required")
+	}
+	return publishAuditFiles(out, func(stage string) error {
+		res, err := h.request(http.MethodGet, "/api/v1/audit/export", nil)
+		if err != nil {
+			return err
+		}
+		defer res.Body.Close()
+		checkpoints := res.Header.Values("OpenPlexer-Audit-Checkpoint")
+		if len(checkpoints) != 1 || !compactJWS.MatchString(checkpoints[0]) {
+			return errors.New("invalid or missing audit checkpoint header")
+		}
+		if err := savePrivate(filepath.Join(stage, "export.json"), res.Body); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(stage, "checkpoint.jws"), []byte(checkpoints[0]), 0600); err != nil {
+			return err
+		}
+
+		h.token = ""
+		keys, err := h.request(http.MethodGet, "/.well-known/audit-jwks.json", nil)
+		if err != nil {
+			return err
+		}
+		defer keys.Body.Close()
+		return savePrivate(filepath.Join(stage, "jwks.json"), keys.Body)
+	})
+}
+
+func savePrivate(path string, body io.Reader) error {
+	file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	_, err = io.Copy(file, body)
+	return errors.Join(err, file.Close())
 }

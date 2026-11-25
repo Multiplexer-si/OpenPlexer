@@ -22,7 +22,9 @@ Commands:
   remove-member   Revoke a member's bearer token
   add-project     Scope a project to one repository
   publish-policy  Publish a JSON policy bundle
-  export-audit    Write the audit export, checkpoint, and public keys
+  export-audit    Write the audit export, checkpoint, and public keys (alias: export)
+  stage-key       Stage a Worker signing key and print its ID
+  activate-key    Activate a staged Worker signing key
   serve           Start the HTTP server
 Use <command> -h for command flags.
 `
@@ -88,9 +90,17 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer, tran
 		path := flags.String("file", "", "Path to the JSON policy bundle")
 		action = func(s *hub.Store) error { return publish(s, *project, *path) }
 		remoteAction = func(h remoteAdmin) error { return h.publishPolicy(*project, *path) }
-	case "export-audit":
+	case "export", "export-audit":
 		out := flags.String("out", "", "Output directory for the three audit files")
 		action = func(s *hub.Store) error { return exportAudit(s, *out) }
+		remoteAction = func(h remoteAdmin) error { return h.exportAudit(*out) }
+	case "stage-key":
+		purpose := flags.String("purpose", "", "Signing key purpose (policy or audit)")
+		remoteAction = func(h remoteAdmin) error { return h.stageKey(*purpose, stdout) }
+	case "activate-key":
+		purpose := flags.String("purpose", "", "Signing key purpose (policy or audit)")
+		kid := flags.String("kid", "", "Staged signing key ID")
+		remoteAction = func(h remoteAdmin) error { return h.activateKey(*purpose, *kid) }
 	case "serve":
 		listen := flags.String("listen", "127.0.0.1:8787", "HTTP listen address")
 		action = func(s *hub.Store) error { return serve(s, *listen) }
@@ -123,6 +133,10 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer, tran
 		}
 		err = runRemote(address, tokenFile, command, stdin, transport, remoteAction)
 	} else {
+		if action == nil {
+			fmt.Fprintf(stderr, "%s requires --hub\n", command)
+			return 2
+		}
 		if used["token-file"] || (command == "init" && (used["id"] || used["lead-token-file"])) {
 			fmt.Fprintln(stderr, "Worker credentials and first lead flags require --hub")
 			return 2
@@ -144,6 +158,19 @@ func exportAudit(s *hub.Store, out string) error {
 	if err != nil {
 		return err
 	}
+	return publishAuditFiles(out, func(stage string) error {
+		for name, data := range map[string][]byte{
+			"jwks.json": snapshot.JWKS, "checkpoint.jws": []byte(snapshot.Checkpoint), "export.json": snapshot.Export,
+		} {
+			if err := os.WriteFile(filepath.Join(stage, name), data, 0600); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+func publishAuditFiles(out string, write func(stage string) error) error {
 	if err := os.MkdirAll(out, 0700); err != nil {
 		return err
 	}
@@ -152,24 +179,15 @@ func exportAudit(s *hub.Store, out string) error {
 		return err
 	}
 	defer os.RemoveAll(stage)
-	files := []struct {
-		name string
-		data []byte
-	}{
-		{"jwks.json", snapshot.JWKS},
-		{"checkpoint.jws", []byte(snapshot.Checkpoint)},
-		{"export.json", snapshot.Export},
-	}
-	for _, file := range files {
-		if err := os.WriteFile(filepath.Join(stage, file.name), file.data, 0600); err != nil {
-			return err
-		}
+	if err := write(stage); err != nil {
+		return err
 	}
 	// Link without overwriting. Publish the log after its key set and checkpoint.
-	for i, file := range files {
-		if err := os.Link(filepath.Join(stage, file.name), filepath.Join(out, file.name)); err != nil {
+	files := []string{"jwks.json", "checkpoint.jws", "export.json"}
+	for i, name := range files {
+		if err := os.Link(filepath.Join(stage, name), filepath.Join(out, name)); err != nil {
 			for _, published := range files[:i] {
-				err = errors.Join(err, os.Remove(filepath.Join(out, published.name)))
+				err = errors.Join(err, os.Remove(filepath.Join(out, published)))
 			}
 			return fmt.Errorf("publish audit files: %w", err)
 		}
