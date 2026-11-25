@@ -3,9 +3,11 @@
 This Worker routes requests for one team to one SQLite-backed Durable Object.
 On startup, the object applies any pending schema migrations.
 `GET /healthz` returns `{"ok":true,"schema":1}` on a fresh object.
-The Worker serves team setup, member and project administration, signed policies, and signed audit exports.
+The Worker serves team setup, member and project administration, signed policies, Room events, claims, and signed audit exports.
 
-On authenticated routes, the Worker rejects bearer tokens containing a comma with 401 before reading the body. On policy publication, the Go hub applies the body cap before rejecting a single 43-byte comma bearer. The public JWKS routes check no bearer.
+On authenticated routes, the Worker rejects bearer tokens containing a comma with 401 before reading the body. On capped routes, the Go hub applies the body cap before rejecting a single 43-byte comma bearer. The public JWKS routes check no bearer.
+
+Use the Room events endpoint to post and replay events, and the claim endpoints to create, renew, and release leases. The Worker returns 405 for POST to the stream route. [Hub HTTP API](../../docs/hub.md#http-api)
 
 ## Run locally
 
@@ -34,7 +36,7 @@ npm test
 npm run deploy -- --dry-run --outdir dist
 ```
 
-The Node suite runs the canonical JSON, policy signature, and audit fixtures.
+The Node suite runs the canonical JSON, policy signature, audit, Room event, envelope, and claim overlap fixtures.
 The Workers suite runs the same tests in workerd, plus the Durable Object and SQLite tests.
 It checks Web Crypto for signing and wrapping and uses synchronous `node:crypto` to seal records.
 The export load test drains 250,001 sealed records and reports the byte count and elapsed time.
@@ -43,8 +45,8 @@ Testing and building the bundle require no Cloudflare account.
 
 Run `./scripts/conformance.sh` from this directory with Go, Node, curl, and OpenSSL installed.
 The script starts Wrangler on port 8787 with fresh SQLite state and disposable credentials.
-It checks auth, methods, both JWKS endpoints, projects and policies, and audit export.
-It verifies the remote export with `openplexer-verify` and checks that changing a record fails with rule A3.
+It seeds the hub with remote admin commands and checks auth, methods, both JWKS endpoints, projects and policies, audit export, Room events, claims, and concurrent writes.
+It verifies the export with `openplexer-verify`, checks for Room denials and claim records, and confirms that changing a record fails with rule A3.
 It also runs `openplexer policy sync`.
 The run ends with `policy: verified`.
 
@@ -106,7 +108,8 @@ Fetch the policy keys from `/.well-known/jwks.json` over your trusted HTTPS orig
 Follow the [agent setup](../../docs/local-policy.md#connect-to-a-team-hub) to pin the keys and sync policy.
 
 `GET /api/v1/audit/export` requires a lead token. It returns the full team chain and a signed checkpoint.
+The chain includes Room policy denials and claim creation, renewal, release, and expiry recorded by this Worker.
 `GET /.well-known/audit-jwks.json` publishes all checkpoint keys, including retired keys.
-Use a lead token to export the log or rotate either signing key. [Hub admin commands](../../docs/hub.md#administer-a-cloudflare-team).
+Use a lead token to export the log or rotate either signing key. [Hub admin commands](../../docs/hub.md#administer-a-cloudflare-team)
 
 See the [Cloudflare hub design](../../docs/cloudflare-hub-design.md) for the storage and deployment model.
