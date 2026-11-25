@@ -183,7 +183,8 @@ func (f *fixture) startGoHub(t *testing.T) {
 	go func() { done <- cmd.Wait(); close(done) }()
 	t.Cleanup(func() { _ = cmd.Process.Kill(); <-done })
 	f.origin = "http://" + addr
-	ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+	const startupSeconds = 60
+	ctx, cancel := context.WithTimeout(t.Context(), startupSeconds*time.Second)
 	defer cancel()
 	ticker := time.NewTicker(20 * time.Millisecond)
 	defer ticker.Stop()
@@ -196,7 +197,7 @@ func (f *fixture) startGoHub(t *testing.T) {
 		case err := <-done:
 			t.Fatalf("openplexer-hub exited while starting on %s: %v\n%s", addr, err, f.redact(stderr.String()))
 		case <-ctx.Done():
-			t.Fatalf("openplexer-hub did not answer on %s within 5 seconds", addr)
+			t.Fatalf("openplexer-hub did not answer on %s within %d seconds", addr, startupSeconds)
 		case <-ticker.C:
 		}
 	}
