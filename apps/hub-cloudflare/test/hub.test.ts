@@ -1,6 +1,6 @@
 import { evictDurableObject, listDurableObjectIds, reset, runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
-import { beforeEach, expect, test } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import worker, { type Env as HubEnv } from "../src/index";
 import { HubStorage, migrate, schemaMigrations } from "../src/storage";
 
@@ -64,10 +64,22 @@ test("allows only localhost and IPv4 loopback in development mode", async () => 
 });
 
 test("routes all accepted paths to the same named team object", async () => {
-  for (const path of ["/.well-known/jwks.json", "/.well-known/audit-jwks.json", "/healthz"]) {
-    const response = await request(path);
+  const idFromName = vi.fn((name: string) => env.TEAM_HUB.idFromName(name));
+  const forward = vi.fn((id: DurableObjectId, req: Request) => env.TEAM_HUB.get(id).fetch(req));
+  const get = vi.fn((id: DurableObjectId) => ({ fetch: (req: Request) => forward(id, req) }));
+  const routingEnv = { ...env, TEAM_HUB: { idFromName, get } };
+  const paths = ["/.well-known/jwks.json", "/.well-known/audit-jwks.json", "/healthz"];
+  const id = teamId();
+  for (const [i, path] of paths.entries()) {
+    const incoming = new Request(`https://${env.HUB_HOSTNAME}${path}`);
+    const response = await worker.fetch(incoming, routingEnv);
     await response.json();
-    expect((await listDurableObjectIds(env.TEAM_HUB)).map(String)).toEqual([teamId().toString()]);
+    expect(idFromName).toHaveBeenCalledTimes(i + 1);
+    expect(idFromName).toHaveBeenLastCalledWith(`team:${env.TEAM_ID}`);
+    expect(get).toHaveBeenCalledTimes(i + 1);
+    expect(get.mock.calls[i][0].equals(id)).toBe(true);
+    expect(forward).toHaveBeenCalledTimes(i + 1);
+    expect(forward.mock.calls[i][1]).toBe(incoming);
   }
 });
 
