@@ -9,7 +9,7 @@ apps/                    one directory per binary
 internal/                Go packages, one per domain
 spec/                    language-independent contracts
 tools/                   generators, checks, and release packaging
-test/                    audit, release, and agent test harnesses
+test/                    audit, hub conformance, release, and agent tests
 docs/                    documentation
 docs/releases/           release checks, support, and limits
 .github/workflows/       CI and releases
@@ -94,6 +94,7 @@ Set `OPENPLEXER_BIN_DIR` to an absolute path to test prebuilt binaries. The shar
 | Harness | What it runs |
 |---|---|
 | [`test/audit`](../test/audit/README.md) | Audit fixtures, guide examples, and tamper cases. |
+| [`test/hubconformance`](../test/hubconformance/README.md) | Shared HTTP contract checks against a local Go hub or a seeded hub URL. |
 | [`test/release`](../test/release/README.md) | Archive and install guide checks. |
 | [`test/multiagent`](../test/multiagent/README.md) | Two agents connected through a local hub. The Go tests substitute processes and HTTP responses. |
 | [`test/realagent`](../test/realagent/README.md) | Real Claude Code and Codex sessions using installed hooks. |
