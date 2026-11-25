@@ -35,7 +35,22 @@ go test -count=1 ./test/hubconformance -args \
 
 If the fixture uses other project IDs, pass `-project` and `-second-project` after `-args`.
 
-When testing against `wrangler dev`, pass `-wrangler-dev` after `-args`. The `auth-and-body-order` cases send small bodies for requests the Worker rejects before reading the body. Wrangler dev can truncate the 401 response while a large upload is still in flight. The well-formed unknown token still gets an oversized body because the Worker reads through the first byte over the limit before returning 413. The Workers-pool tests verify the full 401 response to oversized uploads.
+When testing against `wrangler dev`, pass `-hub-url` and `-wrangler-dev` after `-args`. The suite rejects `-wrangler-dev` without `-hub-url` before it starts a hub.
+
+## Checks by target
+
+On every target, `auth-and-body-order` requires 413 for a well-formed unknown bearer with an oversized body. It also requires 401 for a single 43-byte comma bearer with a small body.
+
+- With the built-in Go hub or an external hub without `-wrangler-dev`, the suite also requires 413 for that 43-byte comma bearer with an oversized body. It uses oversized bodies for 401 checks with a short bearer, Basic auth, multiple `Authorization` fields, and a short comma bearer.
+- With `-wrangler-dev`, the suite uses small bodies for all of these 401 checks. Wrangler dev can truncate a 401 while a large upload is still in flight. The Workers-pool tests verify the full 401 response to oversized uploads.
+
+The built-in Go hub and `-wrangler-dev` each require the exact escaped-path status listed for that target. An external hub without `-wrangler-dev` can return either listed status because its backend is unknown. All other escaped-path cases require the same status on every target.
+
+| Project ID in the request path | Built-in Go hub | `-wrangler-dev` |
+| --- | --- | --- |
+| `%FF` with a member bearer | 404 | 400 |
+| `.` or `..` | 307 | 404 |
+| `%2E` or `.%2e` | 401 | 404 |
 
 ## Coverage limits
 
