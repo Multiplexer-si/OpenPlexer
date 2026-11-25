@@ -12,6 +12,7 @@ const algorithm = { name: "ECDSA", namedCurve: "P-256" };
 const signatureAlgorithm = { name: "ECDSA", hash: "SHA-256" };
 const utf8 = new TextEncoder();
 const maxBundleBytes = 1 << 20;
+const policyJSONOptions = { loneSurrogates: "replace", rejectNumberOverflow: true } as const;
 
 export type JWSStage = "compact" | "header" | "key" | "signature" | "payload";
 
@@ -130,9 +131,7 @@ export function parseCanonicalObject(bytes: Uint8Array): JsonObject {
 
 async function selectKey(jwks: string, header: JsonObject, purpose: SigningPurpose): Promise<CryptoKey> {
   const duplicates = new WeakSet<JsonObject>();
-  const doc = parseJSON(jwks, purpose === "audit" ? { duplicates } : {
-    loneSurrogates: "replace", rejectNumberOverflow: true,
-  });
+  const doc = parseJSON(jwks, purpose === "audit" ? { duplicates } : policyJSONOptions);
   if (!isJsonObject(doc) || !Array.isArray(doc.keys) || !doc.keys.every(isJsonObject)
       || hasDuplicateMembers(doc, duplicates)) {
     throw new Error("Invalid JWKS");
@@ -176,7 +175,7 @@ export async function verifyJWS(token: string, jwks: string, purpose: SigningPur
       }
     } else {
       const text = new TextDecoder("utf-8", { fatal: true, ignoreBOM: false }).decode(policySegment(head));
-      const value = parseJSON(text, { loneSurrogates: "replace" });
+      const value = parseJSON(text, policyJSONOptions);
       if (!isJsonObject(value)) throw new Error("Expected a policy header object");
       header = value;
       if (Object.hasOwn(header, "crit")) {
