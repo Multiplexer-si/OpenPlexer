@@ -77,13 +77,33 @@ export async function newSigningKey(teamID: string, purpose: SigningPurpose, wra
   };
 }
 
+export function insertSigningKey(sql: TransactionSQL, row: Awaited<ReturnType<typeof newSigningKey>>, status: "active" | "staged") {
+  sql.exec(`INSERT INTO signing_keys (kid, purpose, public_jwk, status, wrapped_pkcs8, nonce, wrap_key_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  row.kid, row.purpose, row.public_jwk, status, row.wrapped_pkcs8, row.nonce, row.wrap_key_id);
+}
+
+export function publicKeys(sql: TransactionSQL, purpose: SigningPurpose) {
+  activeTeam(sql);
+  const keys = sql.exec<{ public_jwk: string }>("SELECT public_jwk FROM signing_keys WHERE purpose = ? ORDER BY kid", purpose);
+  if (!keys.length) throw new Error("Missing signing keys");
+  return { keys: keys.map((row) => JSON.parse(row.public_jwk)) };
+}
+
 export type SigningKeyRow = {
-  kid: string; wrapped_pkcs8: ArrayBuffer; nonce: ArrayBuffer; wrap_key_id: string;
+  kid: string; purpose: SigningPurpose; wrapped_pkcs8: ArrayBuffer; nonce: ArrayBuffer; wrap_key_id: string;
 };
+
+export function activeSigningKey(sql: TransactionSQL, purpose: SigningPurpose, kid: string): SigningKeyRow {
+  const [key] = sql.exec<SigningKeyRow>(`SELECT kid, purpose, wrapped_pkcs8, nonce, wrap_key_id FROM signing_keys
+    WHERE kid = ? AND purpose = ? AND status = 'active'`, kid, purpose);
+  if (!key?.wrapped_pkcs8 || !key.nonce || !key.wrap_key_id) throw new Error("Missing active signing key");
+  return key;
+}
 
 export async function signingKey(row: SigningKeyRow, teamID: string, secret: string | undefined): Promise<CryptoKey> {
   if (row.wrap_key_id !== "v1") throw new Error("Unknown wrapping key ID");
   const bytes = await unwrapPKCS8({ ciphertext: row.wrapped_pkcs8, nonce: new Uint8Array(row.nonce) },
-    wrappingKey(secret), { team: teamID, purpose: "policy", kid: row.kid });
+    wrappingKey(secret), { team: teamID, purpose: row.purpose, kid: row.kid });
   return importPKCS8(bytes);
 }

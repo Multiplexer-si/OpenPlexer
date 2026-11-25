@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 
 const utf8 = new TextEncoder();
-const jsonHeaders = { "Content-Type": "application/json", "Cache-Control": "no-store" };
+export const jsonHeaders = { "Content-Type": "application/json", "Cache-Control": "no-store" };
 
 export class HubError extends Error {
   constructor(readonly status: number, message: string, readonly headers?: HeadersInit) {

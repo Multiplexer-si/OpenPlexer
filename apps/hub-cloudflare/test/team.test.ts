@@ -2,16 +2,22 @@ import { Buffer } from "node:buffer";
 import { reset, runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { beforeEach, expect, test, vi } from "vitest";
-import { verifyChain } from "../src/audit";
+import { verifyChain, verifyCheckpoint } from "../src/audit";
+import { hasDuplicateMembers, isJsonObject, parseJSON } from "../src/canonical";
+import type { JsonObject } from "../src/canonical";
 import { tokenHash } from "../src/http";
 import { verifyPolicyBundle } from "../src/policy";
-import { newSigningKey, newToken, wrappingKey } from "../src/state";
+import { appendAudit, newSigningKey, newToken, wrappingKey } from "../src/state";
+import { HubStorage } from "../src/storage";
 
 beforeEach(reset);
 
 const admin = "/api/v1/admin";
 const project = "/api/v1/projects/demo";
 const keys = "/.well-known/jwks.json";
+const auditKeys = "/.well-known/audit-jwks.json";
+const auditPath = "/api/v1/audit/export";
+const checkpointHeader = "OpenPlexer-Audit-Checkpoint";
 const repo = "team/demo";
 const hexHash = (token: string) => Buffer.from(tokenHash(token)).toString("hex");
 
@@ -78,6 +84,216 @@ async function signed(response: Response, version: number) {
   }
   return value.signature;
 }
+
+function checkpoint(response: Response): string {
+  const token = response.headers.get(checkpointHeader);
+  if (!token) throw new Error("Missing audit checkpoint");
+  return token;
+}
+
+async function readAudit(response: Response) {
+  expect(response.status).toBe(200);
+  expect(response.headers.get("Cache-Control")).toBe("no-store");
+  expect(response.headers.get("Content-Type")).toBe("application/json");
+  const text = await response.text();
+  const duplicates = new WeakSet<JsonObject>();
+  const body = parseJSON(text, { duplicates });
+  if (!isJsonObject(body) || body.next_cursor !== null || !Array.isArray(body.entries)
+      || !body.entries.every(isJsonObject) || hasDuplicateMembers(body, duplicates)) {
+    throw new Error("Invalid audit export");
+  }
+  expect(verifyChain(body.entries.toReversed())).toEqual({ ok: true, entries: body.entries.length });
+  return { entries: body.entries, token: checkpoint(response), text };
+}
+
+async function seedAudit(count: number) {
+  const actor = "m".repeat(128);
+  const target = "project:" + "p".repeat(128);
+  for (let i = 0; i < count; i += 5000) {
+    await runInDurableObject(stub(), (_hub, ctx) => {
+      new HubStorage(ctx.storage).transaction((sql) => {
+        for (let j = i; j < Math.min(count, i + 5000); j++) {
+          appendAudit(sql, { action: "project.added", target, actor_member_id: actor });
+        }
+      });
+    });
+  }
+}
+
+test("serves a public audit JWKS and requires a current lead for export", async () => {
+  const { lead } = await setup();
+  const member = await addMember(lead, "ana");
+  for (const [token, status, message] of [
+    [undefined, 401, "invalid bearer token"],
+    [newToken(), 401, "invalid bearer token"],
+    [member, 403, "forbidden"],
+  ] as const) {
+    const response = await call(auditPath, "GET", token);
+    expect(response.headers.get(checkpointHeader)).toBeNull();
+    await error(response, status, message);
+  }
+  await check(await call(admin + "/members/ana", "DELETE", lead), 200, {});
+  await error(await call(auditPath, "GET", member), 401, "invalid bearer token");
+
+  const { entries, token, text } = await readAudit(await call(auditPath + "?cursor=1&limit=1", "GET", lead));
+  expect(entries.map(({ id, action, result, meta, actor_member_id }) => [id, action, result, meta, actor_member_id])).toEqual([
+    ["3", "member.removed", "removed", {}, "lee"],
+    ["2", "member.added", "added", { role: "member" }, "lee"],
+    ["1", "member.added", "added", { role: "lead" }, null],
+  ]);
+  expect(entries.every((entry) => entry.workspace_id === entries[0].workspace_id)).toBe(true);
+  for (const credential of [lead, member]) {
+    expect(text).not.toContain(credential);
+    expect(text).not.toContain(hexHash(credential));
+  }
+  const jwksResponse = await call(auditKeys, "GET", "irrelevant");
+  expect(jwksResponse.status).toBe(200);
+  expect(jwksResponse.headers.get("Content-Type")).toBe("application/json");
+  expect(jwksResponse.headers.get("Cache-Control")).toBe("no-store");
+  const jwks = await jwksResponse.text();
+  expect(await verifyCheckpoint(token, jwks)).toMatchObject({
+    workspace_id: entries[0].workspace_id, entries: entries.length, tip_hash: entries[0].hash,
+  });
+  await expect(verifyCheckpoint(token, await (await call(keys)).text())).rejects.toThrow();
+
+  const head = await call(auditPath, "HEAD", lead);
+  expect(head.status).toBe(200);
+  expect(await head.text()).toBe("");
+  expect((await verifyCheckpoint(checkpoint(head), jwks)).tip_hash).toBe(entries[0].hash);
+  expect(await (await call(auditKeys, "HEAD")).text()).toBe("");
+  for (const path of [auditKeys, auditPath]) {
+    const wrong = await call(path, "POST");
+    expect(wrong.headers.get("Allow")).toBe("GET, HEAD");
+    await error(wrong, 405, "method not allowed");
+  }
+});
+
+test("exports the captured tip while a new record is appended", async () => {
+  const { lead } = await setup();
+  await seedAudit(300);
+  const response = await call(auditPath, "GET", lead);
+  await check(await addProject(lead), 200, {});
+  const { entries, token } = await readAudit(response);
+  expect(entries.map(({ id }) => id)).toEqual(Array.from({ length: 301 }, (_, i) => String(301 - i)));
+  const jwks = await (await call(auditKeys)).text();
+  expect(await verifyCheckpoint(token, jwks)).toMatchObject({ entries: 301, tip_hash: entries[0].hash });
+
+  const newer = await readAudit(await call(auditPath, "GET", lead));
+  expect(newer.entries[0]).toMatchObject({ id: "302", target: "project:demo", prev_hash: entries[0].hash });
+  expect(newer.entries.slice(1)).toEqual(entries);
+  expect(await verifyCheckpoint(newer.token, jwks)).toMatchObject({ entries: 302, tip_hash: newer.entries[0].hash });
+});
+
+test.each(["policy", "audit"] as const)("stages and activates a %s key once and keeps the previous key public", async (purpose) => {
+  const { lead } = await setup();
+  const member = await addMember(lead, "ana");
+  await check(await addProject(lead), 200, {});
+  const oldPolicy = await signed(await call(project + "/policy", "PUT", lead, bundle(1)), 1);
+  const oldAudit = await readAudit(await call(auditPath, "GET", lead));
+  const path = admin + "/keys/" + purpose;
+  const jwksPath = purpose === "policy" ? keys : auditKeys;
+  const oldKeys = parseJSON(await (await call(jwksPath)).text());
+  if (!isJsonObject(oldKeys) || !Array.isArray(oldKeys.keys) || !isJsonObject(oldKeys.keys[0])
+      || typeof oldKeys.keys[0].kid !== "string") throw new Error("Missing old key");
+  const oldKid = oldKeys.keys[0].kid;
+
+  const stage = (token: string) => call(path, "POST", token);
+  const activate = (kid: string, token = lead) => call(path + "/active", "PUT", token, JSON.stringify({ kid }));
+  await error(await stage(member), 403, "forbidden");
+  await error(await activate(oldKid, member), 403, "forbidden");
+  await error(await call(path, "POST"), 401, "invalid bearer token");
+  await error(await call(admin + "/keys/unknown", "POST", lead), 404, "not found");
+  await error(await call(admin + "/keys/unknown/active", "PUT", lead, "{}"), 404, "not found");
+  await error(await activate("missing"), 404, "not found");
+  expect((await call(path)).headers.get("Allow")).toBe("POST");
+  expect((await call(path + "/active")).headers.get("Allow")).toBe("PUT");
+  await error(await call(path + "/active", "PUT", lead, '{"Kid":"wrong-case"}'), 400, "invalid input: activation needs a kid");
+  await error(await call(path + "/active", "PUT", lead, '{"kid":"one","kid":"two"}'), 400, "invalid input: body must be a JSON object");
+  await error(await call(path, "POST", lead, " ".repeat((64 << 10) + 1)), 413, "request body is too large");
+
+  const [one, two] = await Promise.all([stage(lead), stage(lead)]);
+  expect(one.status).toBe(200);
+  const staged = parseJSON(await one.text());
+  await check(two, 200, staged);
+  await check(await stage(lead), 200, staged);
+  if (!isJsonObject(staged) || typeof staged.kid !== "string") {
+    throw new Error("Missing staged key");
+  }
+  expect(staged).not.toHaveProperty("d");
+  expect(staged.kid).not.toBe(oldKid);
+  const stagedKeys = await (await call(jwksPath)).text();
+  expect(parseJSON(stagedKeys)).toEqual({ keys: expect.arrayContaining([oldKeys.keys[0], staged]) });
+  expect(await signed(await call(project + "/policy", "PUT", lead, bundle(1)), 1)).toBe(oldPolicy);
+  const stagedAudit = await readAudit(await call(auditPath, "GET", lead));
+  expect(await verifyCheckpoint(stagedAudit.token, await (await call(auditKeys)).text()))
+    .toMatchObject({ entries: oldAudit.entries.length + 1, tip_hash: stagedAudit.entries[0].hash });
+
+  await check(await activate(staged.kid), 200, {});
+  await check(await activate(staged.kid), 200, {});
+  await error(await activate(oldKid), 409, "already exists or conflicts with current state: key is retired");
+  expect(await (await call(jwksPath)).text()).toBe(stagedKeys);
+  await runInDurableObject(stub(), (_hub, ctx) => {
+    expect(ctx.storage.sql.exec("SELECT status, wrapped_pkcs8, nonce, wrap_key_id FROM signing_keys WHERE kid = ?", oldKid).one())
+      .toEqual({ status: "retired", wrapped_pkcs8: null, nonce: null, wrap_key_id: null });
+  });
+
+  const after = await readAudit(await call(auditPath, "GET", lead));
+  expect(after.entries.slice(2)).toEqual(oldAudit.entries);
+  expect(after.entries.slice(0, 2)).toMatchObject([
+    { action: "key.activated", target: "key:" + staged.kid, actor_member_id: "lee", meta: { purpose, previous_kid: oldKid } },
+    { action: "key.staged", target: "key:" + staged.kid, actor_member_id: "lee", meta: { purpose } },
+  ]);
+  const freshAuditKeys = await (await call(auditKeys)).text();
+  expect(await verifyCheckpoint(oldAudit.token, freshAuditKeys))
+    .toMatchObject({ entries: oldAudit.entries.length, tip_hash: oldAudit.entries[0].hash });
+  expect(await verifyCheckpoint(after.token, freshAuditKeys))
+    .toMatchObject({ entries: after.entries.length, tip_hash: after.entries[0].hash });
+  if (purpose === "audit") {
+    await expect(verifyCheckpoint(after.token, JSON.stringify(oldKeys))).rejects.toThrow();
+    await expect(verifyCheckpoint(stagedAudit.token, JSON.stringify(oldKeys))).resolves.toMatchObject({ entries: stagedAudit.entries.length });
+    await expect(verifyCheckpoint(after.token, JSON.stringify({ keys: [staged] }))).resolves.toMatchObject({ entries: after.entries.length });
+  } else {
+    expect(await signed(await call(project + "/policy.bundle", "GET", member), 1)).toBe(oldPolicy);
+    const nextPolicy = await signed(await call(project + "/policy", "PUT", lead, bundle(2)), 2);
+    await expect(verifyPolicyBundle(oldPolicy, stagedKeys)).resolves.toMatchObject({ bundle: { version: 1 } });
+    await expect(verifyPolicyBundle(nextPolicy, JSON.stringify({ keys: [staged] }))).resolves.toMatchObject({ bundle: { version: 2 } });
+    await expect(verifyPolicyBundle(nextPolicy, JSON.stringify(oldKeys))).rejects.toThrow();
+  }
+});
+
+test("streams 250,001 audit records within the local export budget", async () => {
+  const { lead } = await setup();
+  const count = 250_001;
+  await seedAudit(count - 1);
+  const started = performance.now();
+  const response = await call(auditPath, "GET", lead);
+  expect(response.status).toBe(200);
+  if (!response.body) throw new Error("Missing export stream");
+  const decoder = new TextDecoder();
+  let tail = "";
+  let bytes = 0;
+  let expectedID = count;
+  for await (const chunk of response.body) {
+    bytes += chunk.byteLength;
+    const records = (tail + decoder.decode(chunk, { stream: true })).split(',{"id":"');
+    tail = records.pop() ?? "";
+    for (const record of records) {
+      const prefix = expectedID === count ? '{"entries":[{"id":"' : "";
+      if (!record.startsWith(prefix + expectedID + '"')) throw new Error("Unexpected streamed audit ID " + expectedID);
+      expectedID--;
+    }
+  }
+  const elapsed = performance.now() - started;
+  expect(expectedID).toBe(1);
+  expect(tail + decoder.decode()).toMatch(/^1".*\],"next_cursor":null\}\n$/);
+  expect(bytes).toBeGreaterThan(128 << 20);
+  expect(elapsed).toBeLessThan(30_000);
+  const tip = await runInDurableObject(stub(), (_hub, ctx) =>
+    ctx.storage.sql.exec("SELECT audit_tip FROM team").one().audit_tip);
+  expect(await verifyCheckpoint(checkpoint(response), await (await call(auditKeys)).text()))
+    .toMatchObject({ entries: count, tip_hash: tip });
+  console.info(`Audit export drained ${count} records, ${bytes} bytes, in ${Math.round(elapsed)} ms`);
+}, 120_000);
 
 test("bootstraps once, provisions both wrapped keys, and recognizes only the first lead's retry", async () => {
   const { lead, bootstrap, init } = await setup();

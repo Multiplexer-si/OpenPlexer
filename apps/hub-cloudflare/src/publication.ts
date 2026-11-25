@@ -3,21 +3,13 @@ import { canonicalJSON } from "./canonical";
 import { bearer, cappedBody, conflict, invalid, jsonText, notFound } from "./http";
 import { maxBundleBytes, signCanonicalJWS } from "./jws";
 import { parsePolicyBundle } from "./policy";
-import { activeTeam, appendAudit, authenticate, signingKey } from "./state";
-import type { SigningKeyRow } from "./state";
+import { activeSigningKey, activeTeam, appendAudit, authenticate, signingKey } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
 
 type Project = { id: string; repo: string };
 type SignedPolicy = {
   version: number; bundle_json: string; jws_header: string; jws_signature: string;
 };
-
-export function publicKeys(sql: TransactionSQL) {
-  activeTeam(sql);
-  const keys = sql.exec<{ public_jwk: string }>("SELECT public_jwk FROM signing_keys WHERE purpose = 'policy' ORDER BY kid");
-  if (!keys.length) throw new Error("Missing policy keys");
-  return { keys: keys.map((row) => JSON.parse(row.public_jwk)) };
-}
 
 export function readProject(sql: TransactionSQL, id: string): Project {
   const [project] = sql.exec<Project>("SELECT project_id AS id, repo FROM projects WHERE project_id = ?", id);
@@ -94,9 +86,7 @@ export async function publishPolicy(request: Request, storage: HubStorage, id: s
     if (parsed.grantMembers.some((member) => !roster.has(member))) {
       throw invalid("temporary_grants member_id references an unknown member");
     }
-    const [key] = sql.exec<SigningKeyRow>(`SELECT kid, wrapped_pkcs8, nonce, wrap_key_id FROM signing_keys
-      WHERE kid = ? AND purpose = 'policy' AND status = 'active'`, activeTeam(sql).policy_kid);
-    if (!key?.wrapped_pkcs8 || !key.nonce || !key.wrap_key_id) throw new Error("Missing active policy key");
+    const key = activeSigningKey(sql, "policy", activeTeam(sql).policy_kid);
     return { kind: "publish", actor, key, parsed, canonical } as const;
   }
 
