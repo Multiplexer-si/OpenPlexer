@@ -31,9 +31,14 @@ function adminJSON(body: Uint8Array) {
 
 function alreadyInitialized(sql: TransactionSQL, memberID: string, hash: ArrayBuffer): boolean {
   if (!team(sql)) return false;
+  // A membership's credential is immutable. A removal ends that membership even if its ID is reused.
   const [lead] = sql.exec<{ token_hash: ArrayBuffer }>(`SELECT token_hash FROM members
-    JOIN audit_records ON seq = 1 AND action = 'member.added' AND target = 'member:' || member_id
-    WHERE member_id = ? AND role = 'lead'`, memberID);
+    JOIN audit_records AS genesis ON genesis.seq = 1 AND genesis.action = 'member.added'
+      AND genesis.target = 'member:' || member_id
+    WHERE member_id = ? AND role = 'lead' AND NOT EXISTS (
+      SELECT 1 FROM audit_records AS removal
+      WHERE removal.seq > genesis.seq AND removal.action = 'member.removed' AND removal.target = genesis.target
+    )`, memberID);
   if (!lead || !crypto.subtle.timingSafeEqual(hash, lead.token_hash)) throw conflict("hub already initialized");
   return true;
 }

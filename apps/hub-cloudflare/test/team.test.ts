@@ -115,6 +115,20 @@ test("bootstraps once, provisions both wrapped keys, and recognizes only the fir
   });
 });
 
+test("rejects bootstrap retries after the first lead is removed and the ID is reused", async () => {
+  const { lead, bootstrap, init } = await setup();
+  const backup = await addMember(lead, "backup", "lead");
+  const retry = (body: string) => call(admin + "/init", "POST", bootstrap, body);
+  const initialized = "already exists or conflicts with current state: hub already initialized";
+  await check(await retry(init), 200, {});
+
+  await check(await call(admin + "/members/lee", "DELETE", backup), 200, {});
+  await error(await retry(init), 409, initialized);
+  const replacement = await addMember(backup, "lee", "lead");
+  await error(await retry(JSON.stringify({ member_id: "lee", token_hash: hexHash(replacement) })), 409, initialized);
+  await error(await retry(init), 409, initialized);
+});
+
 test("provisions projects and members, signs policy, and seals each action with the Go fields", async () => {
   const { lead } = await setup();
   const member = await addMember(lead, "ana");
