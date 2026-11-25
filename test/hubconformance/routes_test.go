@@ -82,6 +82,10 @@ func (f *fixture) auth(t *testing.T) {
 					oversized := pad(r.body, r.limit+1)
 					f.call(t, r.method, r.path, "short", oversized, http.StatusUnauthorized)
 					f.call(t, r.method, r.path, f.unknown, oversized, http.StatusRequestEntityTooLarge)
+					commaToken := strings.Repeat("a", 21) + "," + strings.Repeat("a", 21)
+					f.call(t, r.method, r.path, commaToken[1:], oversized, http.StatusUnauthorized)
+					f.call(t, r.method, r.path, commaToken, oversized, http.StatusRequestEntityTooLarge)
+					f.call(t, r.method, r.path, commaToken, r.body, http.StatusUnauthorized)
 				})
 			}
 		})

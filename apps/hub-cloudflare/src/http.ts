@@ -35,9 +35,9 @@ export function tokenHash(token: string): ArrayBuffer {
 
 export function bearer(request: Request, bootstrap = false): ArrayBuffer {
   const auth = request.headers.get("Authorization") ?? "";
+  if (!/^Bearer /i.test(auth)) throw unauthorized();
   const token = auth.slice(7);
-  if (!/^Bearer /i.test(auth) || !token || token.includes(",")
-      || (bootstrap ? /\s/u.test(token) : utf8.encode(token).length !== 43)) throw unauthorized();
+  if (bootstrap ? !token || /[\s,]/u.test(token) : utf8.encode(token).length !== 43) throw unauthorized();
   return tokenHash(token);
 }
 

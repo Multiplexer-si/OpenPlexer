@@ -233,6 +233,7 @@ test("unescapes route segments without turning escaped slashes into separators",
 test("checks bearer syntax before body limits and membership after", async () => {
   const { lead } = await setup();
   await check(await addProject(lead), 200, {});
+  const commaToken = "a".repeat(21) + "," + "a".repeat(21);
   for (const [path, method, limit, json] of [
     [project + "/policy", "PUT", 1 << 20, bundle(1)],
     [admin + "/projects", "POST", 64 << 10, '{"id":"exact","repo":"team/demo"}'],
@@ -240,6 +241,9 @@ test("checks bearer syntax before body limits and membership after", async () =>
     const oversized = json.padEnd(limit + 1);
     await error(await call(path, method, "short", oversized), 401, "invalid bearer token");
     await error(await call(path, method, newToken(), oversized), 413, "request body is too large");
+    await error(await call(path, method, commaToken.slice(1), oversized), 401, "invalid bearer token");
+    await error(await call(path, method, commaToken, oversized), 413, "request body is too large");
+    await error(await call(path, method, commaToken, json), 401, "invalid bearer token");
     await check(await call(path, method, lead, json.padEnd(limit)), 200);
   }
   // Call the object directly so the failing stream is not consumed by service routing.
