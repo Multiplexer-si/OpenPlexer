@@ -1,7 +1,6 @@
 package hubconformance
 
 import (
-	"bytes"
 	"net/http"
 	"slices"
 	"strings"
@@ -125,15 +124,6 @@ func (f *fixture) methods(t *testing.T) {
 			}
 		})
 	}
-	t.Run("method-error-envelope", func(t *testing.T) {
-		path := projectPath(*project)
-		res := f.call(t, http.MethodDelete, path, f.lead, "", http.StatusMethodNotAllowed)
-		if bytes.Equal(res.body, []byte("Method Not Allowed\n")) &&
-			res.header.Get("Content-Type") == "text/plain; charset=utf-8" && res.header.Get("Cache-Control") == "" {
-			t.Skip("Go ServeMux 405 uses plain text and omits Cache-Control: no-store")
-		}
-		res.expectJSON(t, http.MethodDelete, path)
-	})
 }
 
 func pad(body string, size int) string { return body + strings.Repeat(" ", size-len(body)) }

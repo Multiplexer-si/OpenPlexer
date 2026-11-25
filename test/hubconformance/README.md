@@ -40,4 +40,4 @@ If the fixture uses other project IDs, pass `-project` and `-second-project` aft
 - Live streaming waits for [issue #87](https://github.com/Multiplexer-si/OpenPlexer/issues/87).
 - Admin routes, key rotation, and storage fault injection are outside the shared suite.
 - Expiry uses a one-second lease. The expiry cases skip if an external hub rejects that TTL.
-- The Go router's 405 response is plain text and omits `Cache-Control: no-store`. The JSON error check skips that response. The status and `Allow` checks still run for every shared path.
+- Every wrong-method check requires 405 and the expected `Allow` methods. The response must have a JSON error envelope and `Cache-Control: no-store`, or exactly the Go router's `Method Not Allowed\n` body with `Content-Type: text/plain; charset=utf-8` and no `Cache-Control` header.

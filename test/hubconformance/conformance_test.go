@@ -274,7 +274,16 @@ func (res response) expect(t *testing.T, method, path string, want int) {
 		t.Fatalf("%s %s: status %d, want %d", method, path, res.status, want)
 	}
 	if want == http.StatusMethodNotAllowed {
-		return
+		contentType := res.header.Values("Content-Type")
+		if len(contentType) == 1 && contentType[0] == "text/plain; charset=utf-8" &&
+			string(res.body) == "Method Not Allowed\n" {
+			for name := range res.header {
+				if strings.EqualFold(name, "Cache-Control") {
+					t.Fatalf("%s %s: plain-text 405 must omit Cache-Control", method, path)
+				}
+			}
+			return
+		}
 	}
 	res.expectJSON(t, method, path)
 	if want == http.StatusUnauthorized && res.header.Get("WWW-Authenticate") != "Bearer" {
