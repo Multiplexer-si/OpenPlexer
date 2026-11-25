@@ -8,9 +8,10 @@ import checkpointFixtures from "../../../spec/audit/v1/fixtures/checkpoint.json?
 import { seal, verifyChain } from "../src/audit";
 import { canonicalJSON, canonicalize, isJsonObject, parseJSON } from "../src/canonical";
 import type { JsonObject, JsonValue } from "../src/canonical";
-import { exportPKCS8, exportPrivateJWK, exportPublicJWK, generateSigningKey, importPKCS8, importPrivateJWK, signJWS, verifyJWS } from "../src/jws";
+import { exportPKCS8, exportPrivateJWK, exportPublicJWK, generateSigningKey, importPKCS8, importPrivateJWK, JWSError, signJWS, verifyJWS } from "../src/jws";
+import { verifyPolicyBundle } from "../src/policy";
 import { unwrapPKCS8, wrapPKCS8 } from "../src/wrap";
-import { verifyBundleFixture, verifyExportFixture } from "./fixture-verifiers";
+import { verifyExportFixture } from "./fixture-verifiers";
 
 function object(value: JsonValue): JsonObject {
   if (!isJsonObject(value)) throw new Error("Fixture must supply an object");
@@ -54,7 +55,13 @@ for (const [name, source] of [
     const { shared, cases } = fixture(source);
     const jwks = canonicalJSON(object(shared).jwks);
     test.each(cases)("$name", async ({ input, expected }) => {
-      expect(await verifyBundleFixture(string(input.signature), jwks)).toEqual(expected);
+      const verification = verifyPolicyBundle(string(input.signature), jwks);
+      if (object(expected).ok === true) {
+        const { bundle } = await verification;
+        expect({ ok: true, bundle }).toEqual(expected);
+      } else {
+        await expect(verification).rejects.toBeInstanceOf(JWSError);
+      }
     });
   });
 }
