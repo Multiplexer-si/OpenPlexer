@@ -132,6 +132,7 @@ func (f *fixture) concurrentWrites(t *testing.T) {
 		}
 	}
 	retry := f.call(t, post, eventsPath(id), f.member, denialPost, http.StatusOK, "race-0")
+	eventFrom(t, retry.body, id)
 	if !sameJSON(t, retry.body, posts[0].res.body) {
 		t.Fatal("denial retry returned a different envelope")
 	}

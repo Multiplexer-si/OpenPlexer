@@ -13,29 +13,38 @@ import (
 )
 
 type lease struct {
-	ID, Room, Intent, Mode string
-	Member                 string `json:"on_behalf_of"`
-	Agent                  room.Agent
-	Paths                  []string
-	Expires                time.Time `json:"expires_at"`
+	ID      string    `json:"id"`
+	Room    string    `json:"room"`
+	Intent  string    `json:"intent"`
+	Mode    string    `json:"mode"`
+	Member  string    `json:"on_behalf_of"`
+	Agent   wireAgent `json:"agent"`
+	Paths   []string  `json:"paths"`
+	Expires time.Time `json:"expires_at"`
+}
+
+type wireAgent struct {
+	ID     string `json:"id"`
+	Vendor string `json:"vendor"`
+	Parent string `json:"parent"`
 }
 
 func claimReply(t *testing.T, res response, id string, ttl int64, mode string) (lease, room.Event, []lease) {
 	t.Helper()
 	var reply struct {
-		Granted   lease
-		Conflicts []lease
-		Event     json.RawMessage
+		Granted   lease           `json:"granted"`
+		Conflicts []lease         `json:"conflicts"`
+		Event     json.RawMessage `json:"event"`
 	}
-	decode(t, res.body, &reply)
+	decodeWire(t, res.body, &reply)
 	event := eventFrom(t, reply.Event, id)
 	claim := reply.Granted
 	body, ok := event.Body().(*room.Claim)
 	if !ok || claim.ID == "" || body.ClaimID != claim.ID || body.TTLSeconds != ttl || body.Item != "work" ||
 		body.Intent != "edit" || !slices.Equal(body.Paths, []string{"src/main.go"}) || reply.Conflicts == nil ||
 		claim.Room != id || claim.Mode != mode || !slices.Equal(claim.Paths, body.Paths) || claim.Intent != body.Intent ||
-		claim.Member != event.OnBehalfOf() || claim.Agent != event.Agent() ||
-		claim.Agent != (room.Agent{ID: claim.Member + "/session", Vendor: "codex"}) {
+		claim.Member != event.OnBehalfOf() || room.Agent(claim.Agent) != event.Agent() ||
+		claim.Agent != (wireAgent{ID: claim.Member + "/session", Vendor: "codex"}) {
 		t.Fatal("claim response did not return the lease, conflicts, and matching claim event")
 	}
 	at, err := time.Parse(time.RFC3339Nano, event.At())
@@ -53,7 +62,7 @@ func (f *fixture) requireRelease(t *testing.T, claim lease, after int64, outcome
 	}
 	event := eventFrom(t, page[0], claim.Room)
 	body, ok := event.Body().(*room.Release)
-	if !ok || body.ClaimID != claim.ID || body.Outcome != outcome || event.Agent() != claim.Agent ||
+	if !ok || body.ClaimID != claim.ID || body.Outcome != outcome || event.Agent() != room.Agent(claim.Agent) ||
 		event.OnBehalfOf() != claim.Member || event.Seq() != after+1 {
 		t.Fatalf("release event did not match the claim, its owner, or outcome %s", outcome)
 	}
@@ -93,7 +102,7 @@ func (f *fixture) claims(t *testing.T) {
 		otherPath := claimsPath(second)
 		res = f.call(t, post, otherPath, f.lead, claimPost, http.StatusOK)
 		other, _, conflicts := claimReply(t, res, second, 3600, "shared")
-		if len(conflicts) != 1 || conflicts[0].ID != first.ID || conflicts[0].Room != id || other.Member == first.Member {
+		if len(conflicts) != 1 || !reflect.DeepEqual(conflicts[0], first) || other.Member == first.Member {
 			t.Fatal("second project did not grant an advisory conflict with the first project's claim")
 		}
 		f.call(t, post, path+"/"+first.ID+"/release", f.member, releasePost, http.StatusOK)
@@ -114,7 +123,7 @@ func (f *fixture) claims(t *testing.T) {
 		}
 		f.call(t, post, prefix+"/release", f.member, strings.Replace(releasePost, "done", "expired", 1), http.StatusBadRequest)
 		var renewed lease
-		decode(t, f.call(t, post, prefix+"/renew", f.member, pad(renewal, roomLimit), http.StatusOK).body, &renewed)
+		decodeWire(t, f.call(t, post, prefix+"/renew", f.member, pad(renewal, roomLimit), http.StatusOK).body, &renewed)
 		initialExpiry := claim.Expires
 		claim.Expires = renewed.Expires
 		if !reflect.DeepEqual(renewed, claim) || !renewed.Expires.Before(initialExpiry) ||
@@ -125,7 +134,7 @@ func (f *fixture) claims(t *testing.T) {
 			t.Fatal("renew or a refused action appended a Room event")
 		}
 		var released lease
-		decode(t, f.call(t, post, prefix+"/release", f.member, pad(releasePost, roomLimit), http.StatusOK).body, &released)
+		decodeWire(t, f.call(t, post, prefix+"/release", f.member, pad(releasePost, roomLimit), http.StatusOK).body, &released)
 		if !reflect.DeepEqual(released, renewed) {
 			t.Fatal("release did not return the renewed lease")
 		}

@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"flag"
 	"fmt"
 	"io"
@@ -305,7 +306,7 @@ func (res response) expectJSON(t *testing.T, method, path string) {
 		}
 	} else if res.status >= 400 {
 		var body map[string]string
-		decode(t, res.body, &body)
+		decodeWire(t, res.body, &body)
 		if len(body) != 1 || strings.TrimSpace(body["error"]) == "" {
 			t.Errorf("%s %s: expected an error envelope", method, path)
 		}
@@ -315,6 +316,14 @@ func (res response) expectJSON(t *testing.T, method, path string) {
 func decode(t *testing.T, data []byte, dst any) {
 	t.Helper()
 	if err := json.Unmarshal(data, dst); err != nil {
+		t.Fatalf("invalid %T response (%T)", dst, err)
+	}
+}
+
+func decodeWire(t *testing.T, data []byte, dst any) {
+	t.Helper()
+	// Match wire field names exactly and reject duplicate response members.
+	if err := jsonv2.Unmarshal(data, dst); err != nil {
 		t.Fatalf("invalid %T response (%T)", dst, err)
 	}
 }
