@@ -1,4 +1,4 @@
-import { isJsonObject, LoneSurrogateError, parseJSON } from "./canonical.ts";
+import { hasTrailingText, isJsonObject, LoneSurrogateError, parseJSON } from "./canonical.ts";
 import type { JsonObject, JsonValue } from "./canonical.ts";
 import { JWSError, verifyJWS } from "./jws.ts";
 
@@ -12,35 +12,6 @@ type PolicyBundle = {
 };
 
 const decoder = new TextDecoder("utf-8", { fatal: false, ignoreBOM: true });
-
-// Go's JSON decoder distinguishes a malformed first value from trailing text.
-function hasTrailingText(text: string): boolean {
-  const start = text.replace(/^[ \t\r\n]+/, "");
-  const tokens = /"(?:[^"\\]|\\[^])*"|[{}\[\]]/g;
-  let end = 0;
-  if (start[0] === "{" || start[0] === "[") {
-    let depth = 0;
-    for (const { 0: token, index } of start.matchAll(tokens)) {
-      if (token === "{" || token === "[") depth++;
-      if ((token === "}" || token === "]") && --depth === 0) {
-        end = index + 1;
-        break;
-      }
-    }
-  } else {
-    end = /^(?:true|false|null|-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?|"(?:[^"\\]|\\[^])*")/
-      .exec(start)?.[0].length ?? 0;
-    // A partial fraction or exponent is a malformed number.
-    if (/^[-0-9]/.test(start) && /[.eE]/.test(start.charAt(end))) return false;
-  }
-  if (!end || !/[^ \t\r\n]/.test(start.slice(end))) return false;
-  try {
-    parseJSON(start.slice(0, end));
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 function compareMemberNames(left: string, right: string): number {
   // Go sorts dictionary names by UTF-8, which preserves code point order.
