@@ -20,19 +20,30 @@ export WRANGLER_SEND_METRICS=false
 export XDG_CONFIG_HOME="$PWD/.wrangler-home"
 export npm_config_cache="$PWD/.npm-cache"
 npm ci
+```
+
+Create `.dev.vars` with mode `0600` before adding local secrets. The command stops if `.dev.vars` already exists.
+
+```sh
+(
+  set -e
+  umask 077
+  credentials=$(mktemp -d .dev.vars.XXXXXX)
+  trap 'rm -f "$credentials/.dev.vars" && rmdir "$credentials"' EXIT
+  cat .dev.vars.example > "$credentials/.dev.vars"
+  ln "$credentials/.dev.vars" .
+)
+```
+
+After the command succeeds, edit `.dev.vars` in place. Set `BOOTSTRAP_TOKEN` to a random bootstrap bearer and `WRAP_KEY_V1` to 64 hex digits from `openssl rand -hex 32`.
+Keep a private file with the bootstrap bearer for the one-time initialization.
+
+```sh
 npx wrangler dev --local --var DEV_MODE:1
 ```
 
 In another terminal, run `curl -i http://127.0.0.1:8787/healthz`.
 Local development uses `.wrangler/state` for SQLite data. Keep that directory to reuse the database after a restart.
-Create `.dev.vars` with mode `0600` before adding local secrets. The command stops if `.dev.vars` already exists.
-
-```sh
-(umask 077 && set -C && cat .dev.vars.example > .dev.vars)
-```
-
-After the command succeeds, edit `.dev.vars` in place. Set `BOOTSTRAP_TOKEN` to a random bootstrap bearer and `WRAP_KEY_V1` to 64 hex digits from `openssl rand -hex 32`.
-Keep a private file with the bootstrap bearer for the one-time initialization.
 
 ## Test
 
@@ -75,14 +86,25 @@ In `wrangler.toml`, set `TEAM_ID` to a stable team ID and set `HUB_HOSTNAME` to 
 Use the Worker's `workers.dev` hostname or configure a Cloudflare Custom Domain.
 Keep `DEV_MODE` empty on the deployed Worker.
 
-The block creates `.wrangler/bootstrap.token` with mode `0600`. It stops if the file already exists.
+For a new Worker, create `.wrangler/bootstrap.token` with mode `0600`. The command stops if that name is taken.
 
 ```sh
 (
-  set -eC
+  set -e
   umask 077
   mkdir -p .wrangler
-  openssl rand -hex 32 > .wrangler/bootstrap.token
+  credentials=$(mktemp -d .wrangler/bootstrap.XXXXXX)
+  trap 'rm -f "$credentials/bootstrap.token" && rmdir "$credentials"' EXIT
+  openssl rand -hex 32 > "$credentials/bootstrap.token"
+  ln "$credentials/bootstrap.token" .wrangler
+)
+```
+
+After the bootstrap file is ready, log in and deploy. If login fails, fix the login error and rerun this block from `npx wrangler login`. Use the bootstrap file you already saved.
+
+```sh
+(
+  set -e -o pipefail
   npx wrangler login
   npm run deploy
   npx wrangler secret put BOOTSTRAP_TOKEN < .wrangler/bootstrap.token
@@ -94,23 +116,24 @@ Keep the wrapping secret for policy and audit signing. Check `/healthz` on the c
 
 ## Set up a team
 
-From the repository root, run `make build`. In these examples, use the path to the private bootstrap file created above.
-For Wrangler on your machine, use `http://127.0.0.1:8787` as the origin.
+From the repository root, run `make build`. Use the path to your private bootstrap file. For local Wrangler, set `bootstrap_file` to the local bootstrap file and use `http://127.0.0.1:8787` as the origin.
+The block saves the member tokens in a fresh private directory.
 
 ```sh
 hub=https://hub.example.com
-tokens=apps/hub-cloudflare/.wrangler
+bootstrap_file=apps/hub-cloudflare/.wrangler/bootstrap.token
+umask 077
+tokens=$(mktemp -d "$HOME/openplexer-team.XXXXXX") &&
 (
-  set -eC
-  umask 077
-  bin/openplexer-hub init --hub "$hub" --token-file "$tokens/bootstrap.token" \
+  set -e
+  bin/openplexer-hub init --hub "$hub" --token-file "$bootstrap_file" \
     --id mem-lee --lead-token-file "$tokens/lee.token"
   bin/openplexer-hub add-member --hub "$hub" --token-file "$tokens/lee.token" --id mem-ana > "$tokens/ana.token"
   bin/openplexer-hub add-project --hub "$hub" --token-file "$tokens/lee.token" --id prj-shop --repo api
 )
 ```
 
-If initialization fails, rerun it with the same `lee.token` file.
+If initialization fails, rerun just the `init` command with the same `lee.token` path. Then continue with `add-member` and `add-project`.
 After using the lead token successfully against a deployed Worker, run `npx wrangler secret delete BOOTSTRAP_TOKEN` from this directory.
 Give `ana.token` to its member through a private channel.
 
