@@ -2,11 +2,13 @@ import { DurableObject } from "cloudflare:workers";
 import { activateKey, addMember, addProject, initialize, removeMember, stageKey } from "./admin";
 import { handleClaim } from "./claims";
 import { exportAudit } from "./export";
-import { bearer, HubError, invalid, json, notFound } from "./http";
+import { bearer, HubError, invalid, json, notFound, unauthorized } from "./http";
 import { publishPolicy, readPolicy, readProject } from "./publication";
-import { postEvent, replayEvents } from "./room";
+import { eventPage, postEvent, replayCursor, replayEvents } from "./room";
 import { authenticate, publicKeys } from "./state";
 import { HubStorage, migrate } from "./storage";
+import { roomStream, streamHeaders, streamLimits } from "./stream";
+import type { RoomPage, RoomRead } from "./stream";
 
 export interface Env {
   HUB_HOSTNAME: string;
@@ -20,28 +22,48 @@ export interface Env {
 type RoutingEnv = Pick<Env, "HUB_HOSTNAME" | "TEAM_ID" | "DEV_MODE"> & {
   TEAM_HUB: {
     idFromName(name: string): DurableObjectId;
-    get(id: DurableObjectId): { fetch(request: Request): Promise<Response> };
+    get(id: DurableObjectId): Pick<DurableObjectStub<TeamHub>, "fetch" | "readRoomPage">;
   };
 };
 
 const jsonHeaders = { "Cache-Control": "no-store" };
 
-export default {
-  fetch(request: Request, env: RoutingEnv): Response | Promise<Response> {
-    const { hostname } = new URL(request.url);
-    const local = env.DEV_MODE === "1" && (hostname === "localhost" || hostname === "127.0.0.1");
-    if (hostname !== env.HUB_HOSTNAME.toLowerCase() && !local) {
-      return notFound().response();
+export default { fetch: (request: Request, env: RoutingEnv) => fetchHub(request, env) } satisfies ExportedHandler<Env>;
+
+export async function fetchHub(request: Request, env: RoutingEnv, limits = streamLimits): Promise<Response> {
+  const { hostname } = new URL(request.url);
+  const local = env.DEV_MODE === "1" && (hostname === "localhost" || hostname === "127.0.0.1");
+  if (hostname !== env.HUB_HOSTNAME.toLowerCase() && !local) {
+    return notFound().response();
+  }
+
+  // Check the original path before forwarding can normalize dot segments.
+  const segments = pathSegments(request.url);
+  if (segments instanceof HubError) return headResponse(request, segments.response());
+
+  const id = env.TEAM_HUB.idFromName(`team:${env.TEAM_ID}`);
+  const stub = env.TEAM_HUB.get(id);
+  const [, api, version, collection, room, suffix] = segments;
+  if (segments.length !== 6 || api !== "api" || version !== "v1" || collection !== "rooms" || !room || suffix !== "stream") {
+    return stub.fetch(request);
+  }
+
+  try {
+    allow(request.method, ["GET", "HEAD"]);
+    const started = Date.now();
+    const hash = bearer(request);
+    const read = (after: RoomRead["after"]) => stub.readRoomPage({ hash, room, after });
+    const initial = await read(request.url);
+    if (!initial.ok) {
+      throw initial.status === 401 ? unauthorized() : new HubError(initial.status, initial.message);
     }
-
-    // Check the original path before forwarding can normalize dot segments.
-    const segments = pathSegments(request.url);
-    if (segments instanceof HubError) return headResponse(request, segments.response());
-
-    const id = env.TEAM_HUB.idFromName(`team:${env.TEAM_ID}`);
-    return env.TEAM_HUB.get(id).fetch(request);
-  },
-} satisfies ExportedHandler<Env>;
+    const body = request.method === "HEAD" ? null : roomStream(request.signal, room, initial, read, limits, started);
+    return new Response(body, { headers: streamHeaders });
+  } catch (error) {
+    const failure = error instanceof HubError ? error : new HubError(500, "hub state unavailable");
+    return headResponse(request, failure.response());
+  }
+}
 
 export class TeamHub extends DurableObject<Env> {
   private readonly schemaVersion: Promise<number>;
@@ -51,6 +73,21 @@ export class TeamHub extends DurableObject<Env> {
     super(ctx, env);
     this.storage = new HubStorage(ctx.storage);
     this.schemaVersion = ctx.blockConcurrencyWhile(async () => migrate(this.storage));
+  }
+
+  async readRoomPage({ room, hash, after }: RoomRead): Promise<RoomPage> {
+    await this.schemaVersion;
+    try {
+      return this.storage.transaction((sql) => {
+        authenticate(sql, hash);
+        readProject(sql, room);
+        const cursor = typeof after === "string" ? replayCursor(after) : after;
+        return { ok: true, cursor, frames: eventPage(sql, room, cursor) };
+      });
+    } catch (error) {
+      if (error instanceof HubError) return { ok: false, status: error.status, message: error.message };
+      throw error;
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
@@ -94,9 +131,6 @@ export class TeamHub extends DurableObject<Env> {
       if (extra.length === 0 && suffix === "events") {
         allow(method, ["GET", "HEAD", "POST"]);
         return method === "POST" ? postEvent(request, this.storage, target) : replayEvents(request, this.storage, target);
-      }
-      if (extra.length === 0 && suffix === "stream" && method === "POST") {
-        throw new HubError(405, "method not allowed", { Allow: "GET" });
       }
       if (suffix === "claims") {
         if (extra.length === 0) {

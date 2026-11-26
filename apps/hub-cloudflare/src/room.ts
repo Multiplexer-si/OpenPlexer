@@ -146,9 +146,13 @@ export function replayCursor(url: string): number {
 
 export function replayEvents(request: Request, storage: HubStorage, room: string): Promise<Response> {
   return roomEndpoint(request, storage, room, (sql) => {
-    const after = replayCursor(request.url);
-    const page = sql.exec<EventRow>("SELECT event_json FROM room_events WHERE room_id = ? AND seq > ?" +
-      " ORDER BY seq LIMIT ?", room, after, replayPage);
-    return jsonText("[" + page.map(storedEnvelope).join(",") + "]\n");
+    const page = eventPage(sql, room, replayCursor(request.url));
+    return jsonText("[" + page.map(({ line }) => line).join(",") + "]\n");
   });
+}
+
+export function eventPage(sql: TransactionSQL, room: string, after: number) {
+  const rows = sql.exec<EventRow & { seq: number }>("SELECT seq, event_json FROM room_events WHERE room_id = ? AND seq > ?" +
+    " ORDER BY seq LIMIT ?", room, after, replayPage);
+  return rows.map((row) => ({ seq: row.seq, line: storedEnvelope(row) }));
 }

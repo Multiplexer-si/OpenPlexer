@@ -78,7 +78,10 @@ test("allows only localhost and IPv4 loopback in development mode", async () => 
 test("routes all accepted paths to the same named team object", async () => {
   const idFromName = vi.fn((name: string) => env.TEAM_HUB.idFromName(name));
   const forward = vi.fn((id: DurableObjectId, req: Request) => env.TEAM_HUB.get(id).fetch(req));
-  const get = vi.fn((id: DurableObjectId) => ({ fetch: (req: Request) => forward(id, req) }));
+  const get = vi.fn((id: DurableObjectId) => ({
+    fetch: (req: Request) => forward(id, req),
+    readRoomPage: env.TEAM_HUB.get(id).readRoomPage,
+  }));
   const routingEnv = { ...env, TEAM_HUB: { idFromName, get } };
   const paths = ["/.well-known/jwks.json", "/.well-known/audit-jwks.json", "/healthz"];
   const id = teamId();
