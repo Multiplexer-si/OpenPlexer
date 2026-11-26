@@ -96,16 +96,21 @@ Store a protected copy of `wrap-key-v1` separately from your audit exports. Wrap
 
 Use `mem-lee` as the first lead in this example. The command saves its token in the private file you name. Retry with that same file if the init request is interrupted.
 
+The `add-member` commands use `noclobber` so a retry cannot overwrite an existing token file.
+
 ```sh
 openplexer-hub init --hub "$hub" --token-file "$credentials/bootstrap.token" \
   --id mem-lee --lead-token-file "$credentials/lee.token"
 
-openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
-  --id mem-sam --role lead > "$credentials/sam.token"
-openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
-  --id mem-claude > "$credentials/claude.token"
-openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
-  --id mem-codex > "$credentials/codex.token"
+(
+  set -o noclobber
+  openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
+    --id mem-sam --role lead > "$credentials/sam.token"
+  openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
+    --id mem-claude > "$credentials/claude.token"
+  openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
+    --id mem-codex > "$credentials/codex.token"
+)
 openplexer-hub add-project --hub "$hub" --token-file "$credentials/lee.token" \
   --id prj-demo --repo demo
 ```
@@ -286,7 +291,7 @@ To run the API and edge checks instead of initializing the team by hand, stop af
 
 On a team you already initialized, pass its lead token file and omit `--bootstrap-token-file`. Run with the same Wrangler configuration and account you deployed. The script creates test members and projects and redeploys the Worker. Its disconnect check uses Wrangler tail. It reports one result per check and exits nonzero if a check fails. Omit `--budget` to skip both stream budget checks.
 
-To run both agents by hand after the script initializes the team, use `remote-lead.token` in place of `lee.token` and start with the `add-member` command in step 4. After the second lead test, remove the bootstrap secret as shown there.
+To run both agents by hand after the script initializes the team, use `remote-lead.token` in place of `lee.token` and start with the `noclobber` block in step 4. After the second lead test, remove the bootstrap secret as shown there.
 
 ## Delete a test deployment
 
