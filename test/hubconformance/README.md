@@ -62,9 +62,16 @@ The built-in Go hub and `-wrangler-dev` each require the exact escaped-path stat
 | `.` or `..` | 307 | 404 |
 | `%2E` or `.%2e` | 401 | 404 |
 
+## Live streams
+
+Select the section with `go test -count=1 ./test/hubconformance -run '^TestHub$/^live-stream$'`. For a seeded hub, add the flags above after `-args`.
+
+Every target must reject invalid credentials and cursors before starting the GET stream. The suite checks the response headers, ordered replay across page boundaries, a write during replay, blank heartbeats, a live write, and a missed event after reconnect. An ahead cursor starts with a heartbeat. The built-in Go hub must still return a legacy POST stream. Wrangler dev must return 405 for POST. An external hub may use either POST behavior.
+
+The Wrangler run uses requests without upload bodies and checks the same GET frames as the Go run. The suite checks the frames that arrive over local HTTP. Flush latency, disconnect propagation, and write timeouts over the Cloudflare edge are tracked in [issue #88](https://github.com/Multiplexer-si/OpenPlexer/issues/88).
+
 ## Coverage limits
 
-- Live streaming waits for [issue #87](https://github.com/Multiplexer-si/OpenPlexer/issues/87).
 - Admin routes, key rotation, and storage fault injection are outside the shared suite.
 - Expiry uses a one-second lease. The expiry cases skip if an external hub rejects that TTL.
 - Every wrong-method check requires 405 and the expected `Allow` methods. The response must have a JSON error envelope and `Cache-Control: no-store`, or exactly the Go router's `Method Not Allowed\n` body with `Content-Type: text/plain; charset=utf-8` and no `Cache-Control` header.

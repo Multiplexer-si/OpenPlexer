@@ -243,8 +243,5 @@ func TestHub(t *testing.T) {
 	t.Run("claims", f.claims)
 	t.Run("audit-export", f.auditExport)
 	t.Run("concurrency", f.concurrentWrites)
-}
-
-func TestHubLiveStream(t *testing.T) {
-	t.Skip("#87 adds the shared GET /api/v1/rooms/{room}/stream route")
+	t.Run("live-stream", f.liveStream)
 }

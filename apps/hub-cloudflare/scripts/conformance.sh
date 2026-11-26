@@ -69,7 +69,7 @@ cat > "$state/policy.json" <<'JSON'
 JSON
 admin publish-policy --project conformance --file "$state/policy.json"
 
-sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|room-events|claims|concurrency)$'
+sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|room-events|claims|concurrency|live-stream)$'
 go test -count=1 -v ./test/hubconformance -run "$sections" -args \
   -hub-url "$origin" -wrangler-dev -lead-token-file "$state/lead.token" -member-token-file "$state/member.token" \
   -revoked-token-file "$state/revoked.token"
