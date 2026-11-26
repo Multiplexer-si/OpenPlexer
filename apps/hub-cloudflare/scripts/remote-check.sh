@@ -45,6 +45,7 @@ const leadFile = options["lead-token-file"];
 const bootstrapFile = options["bootstrap-token-file"];
 const bootstrapID = "remote-check-lead";
 const policyKeys = "/.well-known/jwks.json";
+const tailDeliveryTimeout = 60_000;
 const runID = randomUUID();
 const project = "conformance-" + runID;
 const second = "conformance-other-" + runID;
@@ -281,14 +282,15 @@ async function flush(tail) {
   await check("edge disconnect", async () => {
     requireCheck(disconnectAt !== undefined, "flush probe did not reach the disconnect step");
     requireCheck(tail?.ready, "Wrangler tail unavailable");
-    // Wrangler tail can deliver completion events tens of seconds late.
-    const finished = await endSeen(tail, path, 60_000);
-    requireCheck(finished.at >= disconnectAt && ["canceled", "ok"].includes(finished.outcome),
-      "expected a canceled or clean invocation after disconnect");
-    const maxWallTime = Math.floor(disconnectAt - startedAt) + 5_000;
-    requireCheck(Number.isFinite(finished.wallTime) && finished.wallTime >= 0 && finished.wallTime <= maxWallTime,
-      `expected invocation wall time up to ${maxWallTime} ms, got ${finished.wallTime} ms`);
-    return `wall time=${finished.wallTime} ms tail completion=${Math.round(finished.at - disconnectAt)} ms`;
+    const finished = await endSeen(tail, path, tailDeliveryTimeout);
+    requireCheck(finished.outcome !== "ok", "server ended the stream normally");
+    requireCheck(finished.outcome === "canceled" && finished.at >= disconnectAt,
+      "expected a canceled invocation after the client disconnected");
+    const clientDuration = Math.round(disconnectAt - startedAt);
+    requireCheck(Number.isFinite(finished.wallTime) && finished.wallTime >= 0 &&
+      Math.abs(finished.wallTime - clientDuration) <= 1_000,
+      `invocation wall time ${finished.wallTime} ms was not within 1,000 ms of disconnect at ${clientDuration} ms`);
+    return `wall time=${finished.wallTime} ms client disconnect=${clientDuration} ms`;
   });
   return event;
 }
