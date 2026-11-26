@@ -418,7 +418,7 @@ async function main() {
 
   await check("external hub conformance", () => {
     run("go", ["test", "-json", "-count=1", "./test/hubconformance", "-args",
-      "-hub-url", origin, "-lead-token-file", resolve(leadFile), "-member-token-file", file("member.token"),
+      "-hub-url", origin, "-cloudflare-edge", "-lead-token-file", resolve(leadFile), "-member-token-file", file("member.token"),
       "-revoked-token-file", file("revoked.token"), "-project", project, "-second-project", second],
       { label: "go test" });
   });
@@ -444,15 +444,23 @@ async function main() {
   });
 
   await check("foreign Host", async () => {
-    const status = await new Promise((resolveStatus, reject) => {
+    const response = await new Promise((resolveResponse, reject) => {
       const req = httpsRequest(origin + "/healthz", {
         headers: { Host: "foreign.invalid" }, servername: new URL(origin).hostname,
         signal: AbortSignal.timeout(10_000),
-      }, (res) => { res.resume(); resolveStatus(res.statusCode); });
+      }, resolveResponse);
       req.on("error", reject);
       req.end();
     });
-    requireCheck(status === 404, `expected HTTP 404, got ${status}`);
+    let text = "";
+    for await (const chunk of response.setEncoding("utf8")) text += chunk;
+    let body;
+    try { body = JSON.parse(text); } catch { /* The edge can return an HTML error page. */ }
+    const status = response.statusCode;
+    requireCheck(status >= 400 && status < 500 && body?.ok !== true,
+      `expected a 4xx rejection without hub health success, got HTTP ${status}`);
+    const layer = status === 404 && body?.error === "not found" ? "Worker" : "edge";
+    return `HTTP ${status} (${layer})`;
   });
 
   const redeployed = await check("redeploy preserves state and secret bindings", async () => {

@@ -38,6 +38,8 @@ If the fixture uses other project IDs, pass `-project` and `-second-project` aft
 When testing against `wrangler dev`, pass `-hub-url` and `-wrangler-dev` after `-args`. The suite rejects `-wrangler-dev` without `-hub-url` before it starts a hub.
 The race checks the audit chain and its earlier checkpoint on both the Go hub and Wrangler. The Worker's `scripts/conformance.sh` then runs `openplexer-verify` on an export that includes Room denials and claim records.
 
+For a deployed Cloudflare Worker, add `-cloudflare-edge` after `-args` with `-hub-url`. The Worker's `scripts/remote-check.sh` sets the flag. Use one of `-cloudflare-edge` or `-wrangler-dev` per run.
+
 ## Checks by target
 
 On every target, `auth-and-body-order` requires 413 for a well-formed unknown bearer with an oversized body.
@@ -53,6 +55,8 @@ The suite checks a single `Authorization` field with a 43-byte comma bearer.
 The suite checks the full error envelope for each accepted status. The built-in Go hub and external hubs also require 401 for a small body with the same bearer.
 
 The suite uses oversized bodies for the 401 checks with a short bearer, Basic auth, multiple `Authorization` fields, and a short comma bearer. With `-wrangler-dev`, it uses small bodies for those checks because Wrangler dev can truncate a 401 while a large upload is still in flight. The Workers-pool tests verify the full 401 response to oversized uploads.
+
+Cloudflare's edge can reject multiple `Authorization` fields before the Worker runs. With `-cloudflare-edge`, the duplicate-field checks also accept Cloudflare's HTML 400 error page. A single field, including Basic auth or a comma bearer, still follows the usual external-hub checks.
 
 The built-in Go hub and `-wrangler-dev` each require the exact escaped-path status listed for that target. An external hub without `-wrangler-dev` can return either listed status because its backend is unknown. All other escaped-path cases require the same status on every target.
 
