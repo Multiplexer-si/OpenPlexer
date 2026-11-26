@@ -3,13 +3,14 @@ package daemon
 import (
 	"bufio"
 	"context"
-	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/room"
@@ -23,6 +24,8 @@ const (
 type roomCursor struct {
 	LastSeq int64 `json:"last_seq"`
 }
+
+var errRoomBehind = errors.New("hub reported behind")
 
 // Run keeps policy fresh and delivers Room events until ctx is canceled.
 // A local delivery or cursor write failure stops the process. An unavailable
@@ -90,6 +93,9 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 			break
 		}
 		report(fmt.Errorf("Room stream: %w", err))
+		if errors.Is(err, errRoomBehind) {
+			continue
+		}
 		select {
 		case <-time.After(time.Second):
 		case <-ctx.Done():
@@ -130,25 +136,19 @@ func pollHub(ctx context.Context, home string, now func() time.Time, report func
 type deliveryError struct{ error }
 
 func (h hubClient) followRoom(ctx context.Context, now func() time.Time, receiver *room.Receiver, save func(room.Step, int64) error) (err error) {
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
+	ctx, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
 	const idleTimeout = 10 * time.Second
-	idle := time.AfterFunc(idleTimeout, cancel)
+	idle := time.AfterFunc(idleTimeout, func() { cancel(context.DeadlineExceeded) })
 	defer idle.Stop()
 
-	requestBody, resumes := io.Pipe()
-	defer requestBody.Close()
-	defer resumes.Close()
-	from := room.Sender{ID: h.member, Kind: room.Daemon}
-	initial := room.ResumeMessage(from, h.project, receiver.LastSeq(h.project))
-	go func() { _ = json.NewEncoder(resumes).Encode(initial) }()
-	response, err := h.request(ctx, http.MethodPost, h.roomPath("stream"), requestBody, roomStreamType, "")
+	path := h.roomPath("stream") + "?last_seq=" + strconv.FormatInt(receiver.LastSeq(h.project), 10)
+	response, err := h.request(ctx, http.MethodGet, path, nil, "", "")
 	if err != nil {
 		return err
 	}
 	defer func() {
-		cancel()
-		requestBody.Close()
+		cancel(nil)
 		response.Body.Close()
 	}()
 	if response.Header.Get("Content-Type") != roomStreamType {
@@ -166,7 +166,7 @@ func (h hubClient) followRoom(ctx context.Context, now func() time.Time, receive
 	for scanner.Scan() {
 		idle.Reset(idleTimeout)
 		frame := scanner.Bytes()
-		if len(frame) == 0 {
+		if len(frame) == 0 || !jsontext.Value(frame).IsValid() {
 			continue
 		}
 		before := receiver.LastSeq(h.project)
@@ -183,9 +183,7 @@ func (h hubClient) followRoom(ctx context.Context, now func() time.Time, receive
 		}
 		switch step := step.(type) {
 		case room.SendResume:
-			if err := json.NewEncoder(resumes).Encode(room.ResumeMessage(from, step.Room, step.LastSeq)); err != nil {
-				return err
-			}
+			return errRoomBehind
 		case room.Unhandled:
 			if payload, ok := step.Message.Payload().(room.Error); ok && payload.Code.CloseCode() != 0 {
 				return fmt.Errorf("hub reported %s", payload.Code)
