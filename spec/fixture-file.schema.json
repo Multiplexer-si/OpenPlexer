@@ -211,6 +211,67 @@
       "if": {
         "properties": {
           "operation": {
+            "const": "validate-denial-time"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Validate input.post as a Room denial received at input.at.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "valid": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "valid"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "at": {
+                      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$",
+                      "type": "string"
+                    },
+                    "post": {
+                      "type": "object"
+                    }
+                  },
+                  "required": [
+                    "post",
+                    "at"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "room"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
             "const": "patterns-overlap"
           }
         },
@@ -1245,7 +1306,10 @@
       "if": {
         "properties": {
           "operation": {
-            "const": "verify-checkpoints"
+            "enum": [
+              "verify-checkpoints",
+              "validate-denial-time"
+            ]
           }
         }
       },
@@ -1284,6 +1348,7 @@
       "enum": [
         "evaluate",
         "validate",
+        "validate-denial-time",
         "patterns-overlap",
         "path-sets-overlap",
         "deliver",

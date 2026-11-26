@@ -5,6 +5,8 @@ type Schema = Record<string, Json>;
 
 const DRAFT = "https://json-schema.org/draft/2020-12/schema";
 
+export const ROOM_TIMESTAMP_PATTERN = "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\\.[0-9]{3}Z$";
+
 /** The Room event types that the v1 contract defines. The reference defines more; `spec/room/README.md` lists them. */
 export const ROOM_EVENT_TYPES = [
   "status",
@@ -392,6 +394,14 @@ function roomSchemas(reference: Reference): Document[] {
   describe(bodies.answer!, { question_id: "The id of the question event.", text: "The answer.", ...threading });
   describe(bodies.blocked!, { reason: "Why the agent cannot continue.", needs: "What would unblock the agent.", ...threading });
   describe(bodies.human!, { text: "A message that a person wrote.", mentions: "The members that the message mentions.", ...threading });
+  (bodies["policy.denied"]!.properties as Schema).decided_at = {
+    type: "string",
+    pattern: ROOM_TIMESTAMP_PATTERN,
+    format: "date-time",
+    minLength: 24,
+    maxLength: 24,
+    description: "The UTC time when the hook denied the action, with milliseconds. The hub stores it as sent.",
+  };
   describe(bodies["policy.denied"]!, {
     action: "The action that the gate denied.",
     path: "The denied path or an omission marker. OpenPlexer omits command text and absolute local paths.",
@@ -481,7 +491,7 @@ function auditSchemas(reference: Reference): Document[] {
     action: "What happened, as a stable token such as `override.granted`. Hashed.",
     target: "What the action was applied to. Hashed.",
     reason: "The reason that the actor gave, or null. Hashed.",
-    meta: "More data about the action. Hashed.",
+    meta: "More data about the action. Hashed. A Room denial can include decided_at, the time the hook denied the action.",
     flagged: "True if `reason` or `meta` quote text that moderation flagged. Hashed.",
     created_at: "The time of the record, in UTC with milliseconds, such as `2026-01-15T12:00:00.000Z`. Hashed as this exact string.",
     prev_hash: "The `hash` of the record before this one. The first record has 64 zeros.",

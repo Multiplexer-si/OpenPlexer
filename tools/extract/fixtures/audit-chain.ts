@@ -28,6 +28,12 @@ function hashInput(reference: Reference, record: AuditRecord): string {
 
 export function auditChainFixtures(reference: Reference): [string, FixtureFile][] {
   const chain = buildChain(reference, ENTRIES);
+  const delayedDenial = buildChain(reference, [{
+    workspace_id: ws, actor_member_id: "mem-ana", agent_session_id: "mem-ana/session",
+    action: "event.policy-denied", target: "event:evt-0010", reason: null, flagged: false,
+    created_at: "2026-01-15T12:00:00.000Z",
+    meta: { room_id: "prj-shop", seq: 10, event_id: "evt-0010", decided_at: "2026-01-15T11:00:00.000Z" },
+  }]);
   const at = (id: string): number => chain.findIndex((r) => r.id === id);
   const change = (id: string, fields: Partial<AuditRecord>): AuditRecord[] => chain.map((r) => (r.id === id ? { ...r, ...fields } : r));
   /** Links the records again from `first` to the end, as someone who can rewrite the log would. */
@@ -46,6 +52,10 @@ export function auditChainFixtures(reference: Reference): [string, FixtureFile][
 
   const authored: [name: string, why: string, records: AuditRecord[]][] = [
     ["a chain of six records is valid", "Each record carries the hash of the record before it, and the first record carries 64 zeros.", chain],
+    ["a queued Room denial keeps both times", "An optional decision time in metadata uses the same hash rule as other metadata.", delayedDenial],
+    ["an edited decision time breaks the chain", "The hash covers the decision time in metadata.", delayedDenial.map((r) => ({
+      ...r, meta: { ...r.meta, decided_at: "2026-01-15T11:00:00.001Z" },
+    }))],
     ["an empty list is valid", "A log with no records verifies, with a count of zero.", []],
     ["a changed field breaks the chain at that record", "The hash covers `target`, so the stored hash no longer matches.", edited],
     ["a cleared flagged bit breaks the chain at that record", "The hash covers `flagged`, so the moderation bit cannot be removed.", change("4", { flagged: false })],

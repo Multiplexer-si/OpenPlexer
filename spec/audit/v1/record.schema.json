@@ -39,7 +39,7 @@
     },
     "meta": {
       "additionalProperties": {},
-      "description": "More data about the action. Hashed.",
+      "description": "More data about the action. Hashed. A Room denial can include decided_at, the time the hook denied the action.",
       "propertyNames": {
         "type": "string"
       },

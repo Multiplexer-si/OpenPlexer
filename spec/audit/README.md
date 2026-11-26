@@ -150,6 +150,12 @@ These parts may change: the storage of the log, the routes that serve it, and an
 
 `meta` accepts any fields, and all of them are hashed. A record and an export entry accept unknown fields, and an unknown field is not hashed.
 
+### Room denials
+
+The hub writes an `event.policy-denied` record that links to the Room event through `meta.room_id`, `meta.seq`, and `meta.event_id`. The record's `created_at` is the event's hub receipt time, `at`. If the [Room denial](../room/README.md#denial-time) carries `body.decided_at`, the hub copies it to `meta.decided_at` as sent. The key is absent for older hooks.
+
+The record format stays at v1. Existing verifiers, including `openplexer-verify`, hash all of `meta` and verify the new key with the same rules. The `verify-chain` fixture covers a queued denial and an edit to its decision time.
+
 ## Generated and authored parts
 
 The reference is at commit `7d80045a`.
