@@ -69,6 +69,65 @@ func TestDownloadRoom(t *testing.T) {
 	}
 }
 
+func TestRoomReplaysLegacyDenialTimeAfterUpgrade(t *testing.T) {
+	const legacyTime = "2026-01-15T11:00:00Z"
+	const key = "legacy-denial"
+	store, token := roomStore(t, "demo", "member")
+	// The base hub treated decided_at as a body extension and stored it as sent.
+	legacyEvent := json.RawMessage(`{
+		"id":"legacy","seq":1,"mission":"demo","type":"policy.denied",
+		"agent":{"id":"member/session","vendor":"codex"},"on_behalf_of":"member",
+		"at":"2026-01-15T12:00:00.000Z",
+		"body":{"action":"write","path":"src/main.go","rule":"locked","decided_at":"` + legacyTime + `"}
+	}`)
+	if err := store.update(func(st *state) error {
+		st.Rooms["demo"] = []eventRecord{{Event: legacyEvent, Key: key, Member: "member"}}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	upgraded := Open(store.dir)
+	upgraded.now = func() time.Time { return time.Date(2026, 1, 15, 12, 0, 0, 0, time.UTC) }
+	h, path := upgraded.Handler(), eventsURL("demo")
+	post := func(decidedAt string) []byte {
+		return fmt.Appendf(nil, `{"type":"policy.denied","agent":{"id":"session","vendor":"codex"},"body":{"action":"write","path":"src/main.go","rule":"locked","decided_at":%q}}`, decidedAt)
+	}
+	wantStatus(t, call(h, http.MethodPost, path, token, post(legacyTime), "fresh"), http.StatusBadRequest)
+	current := eventResponse(t, call(h, http.MethodPost, path, token, post("2026-01-15T11:00:00.000Z"), "fresh"))
+	if current.Seq() != 2 {
+		t.Fatalf("new event sequence = %d, want 2", current.Seq())
+	}
+
+	res := call(h, http.MethodGet, path, token, nil, "")
+	wantStatus(t, res, http.StatusOK)
+	var page []json.RawMessage
+	decode(t, res.Body.Bytes(), &page)
+	if len(page) != 2 {
+		t.Fatalf("replay returned %d events, want 2", len(page))
+	}
+	legacy := parseEventMessage(t, page[0])
+	if legacy.ID() != "legacy" || legacy.Seq() != 1 || parseEventMessage(t, page[1]).ID() != current.ID() {
+		t.Fatalf("unexpected replay: %s", res.Body.Bytes())
+	}
+	if legacy.Body().(*room.PolicyDenied).DecidedAt != "" {
+		t.Fatal("typed body exposed a decision time it could not parse")
+	}
+	var got, want map[string]any
+	decode(t, encode(t, legacy), &got)
+	decode(t, legacyEvent, &want)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("replayed payload = %v, want %v", got, want)
+	}
+
+	future := post("2026-01-16T12:00:00.000Z")
+	wantStatus(t, call(h, http.MethodPost, path, token, future, "unknown"), http.StatusBadRequest)
+	retry := call(h, http.MethodPost, path, token, future, key)
+	wantStatus(t, retry, http.StatusOK)
+	if !bytes.Equal(bytes.TrimSpace(retry.Body.Bytes()), page[0]) {
+		t.Fatalf("retry = %s, want %s", retry.Body.Bytes(), page[0])
+	}
+}
+
 type streamRecorder struct {
 	*httptest.ResponseRecorder
 	flush func()

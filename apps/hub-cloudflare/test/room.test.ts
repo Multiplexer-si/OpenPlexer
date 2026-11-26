@@ -427,6 +427,24 @@ test("posts, retries, and replays exact payloads with server-owned fields", asyn
   expect(elsewhere).toMatchObject({ seq: 1, room: "other" });
 });
 
+test("replays a denial stored before decision times were validated", async () => {
+  const { member } = await setup();
+  const key = "legacy-denial";
+  const original = eventReply(await check(await call(events, "POST", member, denial, key)));
+  const body = { ...object(original.payload.body), decided_at: "2026-01-15T11:00:00Z" };
+  const legacy = { ...original, payload: { ...original.payload, body } };
+  await runInDurableObject(stub(), (_hub, ctx) => {
+    ctx.storage.sql.exec("UPDATE room_events SET event_json = ? WHERE event_id = ?",
+      JSON.stringify(legacy.payload), legacy.event_id);
+  });
+
+  await check(await call(events, "POST", member, JSON.stringify({ type: "policy.denied", agent, body })), 400);
+  const later = eventReply(await check(await call(events, "POST", member, status)));
+  expect(later.seq).toBe(2);
+  expect(await check(await call(events, "GET", member))).toEqual([legacy, later]);
+  expect(await check(await call(events, "POST", member, denial, key))).toEqual(legacy);
+});
+
 test("keeps a queued denial's decision time in replay, the stream, and the audit export", async () => {
   const { lead, member } = await setup();
   const now = Date.now();
