@@ -2,6 +2,7 @@ package hub
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -16,6 +17,69 @@ import (
 
 	"github.com/multiplexer-si/openplexer/internal/room"
 )
+
+func TestDownloadRoom(t *testing.T) {
+	const id = "demo"
+	store, token := roomStore(t, id, "member")
+	handler := store.Handler()
+	path := "/api/v1/rooms/" + id + "/stream"
+	for _, query := range []string{"?last_seq=", "?last_seq=-1", "?last_seq=0&last_seq=1", "?last_seq=9007199254740992", "?bad=%ZZ"} {
+		wantStatus(t, call(handler, http.MethodGet, path+query, token, nil, ""), http.StatusBadRequest)
+	}
+	wantStatus(t, call(handler, http.MethodGet, path, "", nil, ""), http.StatusUnauthorized)
+	wantStatus(t, call(handler, http.MethodGet, "/api/v1/rooms/missing/stream", token, nil, ""), http.StatusNotFound)
+
+	post := func() {
+		t.Helper()
+		body := []byte(`{"type":"human","body":{"text":"hello"}}`)
+		wantStatus(t, call(handler, http.MethodPost, eventsURL(id), token, body, ""), http.StatusOK)
+	}
+	post()
+	post()
+	ctx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
+	defer cancel()
+	request := httptest.NewRequestWithContext(ctx, http.MethodGet, path+"?last_seq=1", nil)
+	request.Header.Set("Authorization", "Bearer "+token)
+	var frames []string
+	w := &streamRecorder{ResponseRecorder: httptest.NewRecorder()}
+	w.flush = func() {
+		frames = append(frames, w.Body.String())
+		w.Body.Reset()
+		if len(frames) == 2 {
+			post()
+		}
+		if len(frames) == 3 {
+			cancel()
+		}
+	}
+	handler.ServeHTTP(w, request)
+	wantStatus(t, w.ResponseRecorder, http.StatusOK)
+	if w.Header().Get("Content-Type") != roomStreamType || w.Header().Get("Cache-Control") != "no-store" {
+		t.Fatalf("stream headers: %v", w.Header())
+	}
+	if len(frames) != 3 || frames[1] != "\n" {
+		t.Fatalf("expected a replay event, a heartbeat, and a live event, got %q", frames)
+	}
+	for i, frame := range []string{frames[0], frames[2]} {
+		message, err := room.ParseMessage([]byte(frame))
+		seq, ok := message.Seq()
+		if err != nil || !ok || seq != int64(i+2) || message.Room() != id {
+			t.Fatalf("unexpected frame: %s (%v)", frame, err)
+		}
+	}
+}
+
+type streamRecorder struct {
+	*httptest.ResponseRecorder
+	flush func()
+}
+
+func (*streamRecorder) SetWriteDeadline(time.Time) error { return nil }
+
+func (w *streamRecorder) Flush() {
+	w.ResponseRecorder.Flush()
+	w.flush()
+}
 
 func TestReadResumesTrailingWhitespace(t *testing.T) {
 	const roomID = "mission"
