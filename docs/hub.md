@@ -53,12 +53,15 @@ Pass a private regular file with `--token-file` or send the credential on stdin.
 
 ```sh
 hub=https://hub.example.com
-umask 077
-bin/openplexer-hub init --hub "$hub" --id mem-lee --lead-token-file lee.token < bootstrap.token
-bin/openplexer-hub add-member --hub "$hub" --token-file lee.token --id mem-ana > ana.token
-bin/openplexer-hub add-project --hub "$hub" --token-file lee.token --id prj-shop --repo api
-bin/openplexer-hub publish-policy --hub "$hub" --token-file lee.token --project prj-shop --file bundle.json
-bin/openplexer-hub remove-member --hub "$hub" --token-file lee.token --id mem-ana
+(
+  set -eC
+  umask 077
+  bin/openplexer-hub init --hub "$hub" --id mem-lee --lead-token-file lee.token < bootstrap.token
+  bin/openplexer-hub add-member --hub "$hub" --token-file lee.token --id mem-ana > ana.token
+  bin/openplexer-hub add-project --hub "$hub" --token-file lee.token --id prj-shop --repo api
+  bin/openplexer-hub publish-policy --hub "$hub" --token-file lee.token --project prj-shop --file bundle.json
+  bin/openplexer-hub remove-member --hub "$hub" --token-file lee.token --id mem-ana
+)
 ```
 
 For `init`, use the bootstrap credential. The command saves the first lead's token in the named private file and sends its SHA-256 hash.

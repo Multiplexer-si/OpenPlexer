@@ -32,19 +32,22 @@ Start with a new data directory. `init` creates `state.json` and generates the s
 
 ```sh
 data_dir="$hub_root/data"
-mkdir -m 700 "$data_dir"
-"$hub" init -data-dir "$data_dir"
-
-"$hub" add-member -data-dir "$data_dir" -id mem-lee -role lead > "$hub_root/mem-lee.token"
-"$hub" add-member -data-dir "$data_dir" -id mem-ana > "$hub_root/mem-ana.token"
-"$hub" add-member -data-dir "$data_dir" -id mem-sam > "$hub_root/mem-sam.token"
-
 project=prj-shop
 repo=api
-"$hub" add-project -data-dir "$data_dir" -id "$project" -repo "$repo"
+
+mkdir -m 700 "$data_dir" &&
+"$hub" init -data-dir "$data_dir" &&
+(
+  umask 077 &&
+  set -C &&
+  "$hub" add-member -data-dir "$data_dir" -id mem-lee -role lead > "$hub_root/mem-lee.token" &&
+  "$hub" add-member -data-dir "$data_dir" -id mem-ana > "$hub_root/mem-ana.token" &&
+  "$hub" add-member -data-dir "$data_dir" -id mem-sam > "$hub_root/mem-sam.token"
+) &&
+"$hub" add-project -data-dir "$data_dir" -id "$project" -repo "$repo" &&
 jq --arg project "$project" --arg repo "$repo" \
 	'.project_id = $project | .repos = [$repo]' \
-	"$hub_root/minimal.json" > "$hub_root/bundle.json"
+	"$hub_root/minimal.json" > "$hub_root/bundle.json" &&
 "$hub" publish-policy -data-dir "$data_dir" -project "$project" -file "$hub_root/bundle.json"
 ```
 
@@ -172,9 +175,8 @@ On the hub host, export the team's audit log so a reviewer can verify it offline
 Stop the hub and pause admin commands before taking a backup. On Linux, use `sudo systemctl stop openplexer-hub`. On macOS, use `sudo launchctl bootout system /Library/LaunchDaemons/com.openplexer.hub.plist`.
 
 ```sh
-umask 077
 backup="$hub_root/openplexer-$(date +%Y%m%d-%H%M%S).tar"
-sudo tar -C /var/lib -cf - openplexer > "$backup"
+(umask 077 && set -C && sudo tar -C /var/lib -cf - openplexer > "$backup")
 ```
 
 Store the archive securely off the hub host. It contains the signing private key, token hashes, the current signed policies, Room history, and active claims. To restore on the same host, stop the service, move the existing data directory aside, and extract with `sudo tar -C /var/lib -xpf "$backup"`. Check that `/var/lib/openplexer` is private and owned by the service account before restarting. Restoring an older backup also rolls back policy versions, membership, and Room sequence numbers.
