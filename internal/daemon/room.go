@@ -21,6 +21,9 @@ const (
 	roomStreamType = "application/x-ndjson"
 )
 
+// RoomOutboxInterval is the time between attempts to flush queued Room posts.
+const RoomOutboxInterval = time.Second
+
 type roomCursor struct {
 	LastSeq int64 `json:"last_seq"`
 }
@@ -108,7 +111,7 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 
 func pollHub(ctx context.Context, home string, now func() time.Time, report func(error)) {
 	policies := time.NewTicker(15 * time.Second)
-	posts := time.NewTicker(time.Second)
+	posts := time.NewTicker(RoomOutboxInterval)
 	defer policies.Stop()
 	defer posts.Stop()
 	syncPolicy := func() {

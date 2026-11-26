@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/audit"
 	"github.com/multiplexer-si/openplexer/internal/policy"
@@ -63,6 +64,34 @@ func (f *fixture) auditExport(t *testing.T) {
 	keys := f.call(t, get, policyKeysPath, "", "", http.StatusOK).body
 	if result := audit.VerifyExport(snap.body, keys, snap.checkpoint); result.Rule != "K3" {
 		t.Fatal("audit checkpoint must require its own JWKS")
+	}
+}
+
+func (f *fixture) queuedDenial(t *testing.T) {
+	id := *project
+	decidedAt := time.Now().UTC().Add(-time.Hour).Format(room.TimestampLayout)
+	body := fmt.Sprintf(`{"type":"policy.denied","agent":{"id":"session","vendor":"codex"},"body":{"action":"write","path":"src/main.go","rule":"locked","decided_at":%q}}`, decidedAt)
+	before := f.readAudit(t)
+	res := f.call(t, post, eventsPath(id), f.member, body, http.StatusOK)
+	event := eventFrom(t, res.body, id)
+	denial, ok := event.Body().(*room.PolicyDenied)
+	if !ok || denial.DecidedAt != decidedAt || event.At() <= decidedAt {
+		t.Fatalf("queued denial has body %+v and receipt time %s, want decision time %s", event.Body(), event.At(), decidedAt)
+	}
+	afterSeq := cursor(event.Seq() - 1)
+	page := f.replay(t, id, afterSeq)
+	if len(page) != 1 || !sameJSON(t, res.body, page[0]) {
+		t.Fatal("replay changed the queued denial")
+	}
+	scan, closeStream := f.openStream(t, streamPath(id)+afterSeq)
+	defer closeStream()
+	expectStreamEvent(t, nextEventLine(t, scan), id, res.body, event.Seq())
+
+	after := f.readAudit(t, before.checkpoint)
+	entry := after.entries[0]
+	if len(after.entries) != len(before.entries)+1 || entry.Action != "event.policy-denied" ||
+		entry.Target != "event:"+event.ID() || entry.CreatedAt != event.At() || entry.Meta["decided_at"] != decidedAt {
+		t.Fatal("verified audit history did not append the denial with both timestamps")
 	}
 }
 

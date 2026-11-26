@@ -14,6 +14,8 @@ The command writes `export.json`, `checkpoint.jws`, and `jwks.json` from one sna
 
 A lead can also call `GET /api/v1/audit/export` with a bearer token. Save the JSON body as `export.json`. Save the `OpenPlexer-Audit-Checkpoint` response header value as `checkpoint.jws`, with no trailing newline. The export holds the full chain, newest first, with `next_cursor` set to null. The public checkpoint keys are at `GET /.well-known/audit-jwks.json`. [Hub HTTP API](hub.md#http-api).
 
+For an `event.policy-denied` record, read `meta.decided_at` for the time the hook denied the action. Read `created_at` for the time the hub received it. An older hook leaves only the receipt time. The new metadata uses the existing v1 record format, and older versions of `openplexer-verify` include it in the hash. [Audit contract](../spec/audit/README.md#room-denials).
+
 ## Verify offline
 
 <!-- audit-example: reviewer -->

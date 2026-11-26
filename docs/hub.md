@@ -104,6 +104,10 @@ Give members a trusted copy of the policy JWKS through an authenticated channel.
 
 For an event post, send `type`, `body`, and `agent` with `id`, `vendor`, and optional `parent`. Omit `agent` for a `human` event. The hub prefixes session and parent IDs with the authenticated member ID and a slash. The hub sets `on_behalf_of`, the event ID, the Room, the timestamp, and the next sequence number. The client can send `Idempotency-Key` with up to 128 bytes. A repeated key for the same member and Room returns the original envelope. The claim endpoints write `claim` and `release` events. The event endpoint reserves `decision.confirm` and the two override event types for future hub services.
 
+A hook includes `body.decided_at` in a `policy.denied` post. It uses UTC with milliseconds. Older hooks can omit it. The hub keeps the posted decision time and sets `at` when it receives the post. A decision time more than 30 seconds ahead of `at` returns HTTP `400`. [Room denial time](../spec/room/README.md#denial-time).
+
+`openplexer daemon` prints Room events as JSON on standard output. Read `body.decided_at` for the decision time, or `at` for an older denial. When the times differ by more than one second, the daemon prints both times and a queued notice on standard error. One second is how often the daemon tries to flush Room posts from its outbox.
+
 Claim creation takes `agent`, `item`, `paths`, and `intent`. Optional `mode` defaults to `shared` and also accepts `exclusive`. Optional `ttl_seconds` defaults to 3,600 seconds, or 600 seconds when `implicit` is true. The lease holds its `id`, `room`, `on_behalf_of`, `agent`, `paths`, `intent`, `mode`, and `expires_at`. Overlapping claims from different sessions conflict when they target the same repository and at least one is exclusive. Conflicts are advisory. Renew and release require the holder's member token, Room, and original unprefixed `session_id`. Renew sets the expiry to the current time plus `ttl_seconds`, which can shorten the lease. Release takes an optional `outcome`, with `expired` reserved for the hub.
 
 Any authenticated claim operation in an existing Room sweeps lapsed claims. The hub appends their releases in the original holders' names. Renew changes the stored lease, so readers of the event log still expire the claim at its original deadline. [Room rules O1, E5, and E8](../spec/room/README.md#order-expiry-reconnection-and-errors) describe these semantics.
@@ -127,7 +131,7 @@ Upgrade each hub to a version that serves the GET stream before upgrading its da
 
 ## Export the audit log
 
-The hub writes one chain for the team. It writes each audit record in the same state update as its action. The log covers `member.added`, `member.removed`, `project.added`, `policy.updated`, and `event.policy-denied`. A denial record links to its Room event. The hub leaves the Room body out of the audit record.
+The hub writes one chain for the team. It writes each audit record in the same state update as its action. The log covers `member.added`, `member.removed`, `project.added`, `policy.updated`, and `event.policy-denied`. A denial record links to its Room event and includes the hook's decision time in `meta.decided_at` when available.
 
 Run `bin/openplexer-hub export-audit --data-dir ./hub-data --out ./audit-export` to write the JSON export, signed checkpoint, and checkpoint JWKS. The command works with the server stopped. The HTTP export requires the `lead` role, which is the single-team hub's admin role. An ordinary member receives `403`. [Export and verify an audit log](audit.md).
 
