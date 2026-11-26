@@ -25,8 +25,13 @@ npx wrangler dev --local --var DEV_MODE:1
 
 In another terminal, run `curl -i http://127.0.0.1:8787/healthz`.
 Local development uses `.wrangler/state` for SQLite data. Keep that directory to reuse the database after a restart.
-To supply local secrets, copy `.dev.vars.example` to `.dev.vars`.
-Set `BOOTSTRAP_TOKEN` to a random bootstrap bearer and `WRAP_KEY_V1` to 64 hex digits from `openssl rand -hex 32`.
+Create `.dev.vars` with mode `0600` before adding local secrets. The command stops if `.dev.vars` already exists.
+
+```sh
+(umask 077 && set -C && cat .dev.vars.example > .dev.vars)
+```
+
+After the command succeeds, edit `.dev.vars` in place. Set `BOOTSTRAP_TOKEN` to a random bootstrap bearer and `WRAP_KEY_V1` to 64 hex digits from `openssl rand -hex 32`.
 Keep a private file with the bootstrap bearer for the one-time initialization.
 
 ## Test
@@ -70,14 +75,19 @@ In `wrangler.toml`, set `TEAM_ID` to a stable team ID and set `HUB_HOSTNAME` to 
 Use the Worker's `workers.dev` hostname or configure a Cloudflare Custom Domain.
 Keep `DEV_MODE` empty on the deployed Worker.
 
+The block creates `.wrangler/bootstrap.token` with mode `0600`. It stops if the file already exists.
+
 ```sh
-npx wrangler login
-npm run deploy
-umask 077
-mkdir -p .wrangler
-openssl rand -hex 32 > .wrangler/bootstrap.token
-npx wrangler secret put BOOTSTRAP_TOKEN < .wrangler/bootstrap.token
-openssl rand -hex 32 | npx wrangler secret put WRAP_KEY_V1
+(
+  set -eC
+  umask 077
+  mkdir -p .wrangler
+  openssl rand -hex 32 > .wrangler/bootstrap.token
+  npx wrangler login
+  npm run deploy
+  npx wrangler secret put BOOTSTRAP_TOKEN < .wrangler/bootstrap.token
+  openssl rand -hex 32 | npx wrangler secret put WRAP_KEY_V1
+)
 ```
 
 Keep the wrapping secret for policy and audit signing. Check `/healthz` on the configured HTTPS hostname.
@@ -90,11 +100,14 @@ For Wrangler on your machine, use `http://127.0.0.1:8787` as the origin.
 ```sh
 hub=https://hub.example.com
 tokens=apps/hub-cloudflare/.wrangler
-umask 077
-bin/openplexer-hub init --hub "$hub" --token-file "$tokens/bootstrap.token" \
-  --id mem-lee --lead-token-file "$tokens/lee.token"
-bin/openplexer-hub add-member --hub "$hub" --token-file "$tokens/lee.token" --id mem-ana > "$tokens/ana.token"
-bin/openplexer-hub add-project --hub "$hub" --token-file "$tokens/lee.token" --id prj-shop --repo api
+(
+  set -eC
+  umask 077
+  bin/openplexer-hub init --hub "$hub" --token-file "$tokens/bootstrap.token" \
+    --id mem-lee --lead-token-file "$tokens/lee.token"
+  bin/openplexer-hub add-member --hub "$hub" --token-file "$tokens/lee.token" --id mem-ana > "$tokens/ana.token"
+  bin/openplexer-hub add-project --hub "$hub" --token-file "$tokens/lee.token" --id prj-shop --repo api
+)
 ```
 
 If initialization fails, rerun it with the same `lee.token` file.
