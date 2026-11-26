@@ -18,6 +18,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/multiplexer-si/openplexer/internal/audit"
 	"github.com/multiplexer-si/openplexer/internal/hub"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 	"github.com/multiplexer-si/openplexer/internal/room"
@@ -369,6 +370,79 @@ func TestHubAgentPolicyAndRoomReconnect(t *testing.T) {
 	receiveSeq(t, ctx, events, 4)
 	stopOnExit = false
 	stopRun(done, stop)
+}
+
+func TestQueuedDenialKeepsDecisionTime(t *testing.T) {
+	_, store, lead, member := startTestHub(t, t.TempDir())
+	ctx, cancel := context.WithTimeout(t.Context(), 8*time.Second)
+	defer cancel()
+	home := t.TempDir()
+	response, err := member.request(ctx, http.MethodGet, "/.well-known/jwks.json", nil, "", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	keys, err := readResponse(response, 64<<10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	configure(t, home, Settings{HubURL: member.origin, ProjectID: member.project, MemberID: member.member, Token: member.token, KeySet: keys})
+	publishTestBundle(t, ctx, lead, 1, false)
+	decision := time.Now().UTC().Add(-time.Hour).Truncate(time.Millisecond)
+	gate := open(t, home, decision)
+	if _, err := gate.Sync(ctx); err != nil {
+		t.Fatal(err)
+	}
+	session := "session"
+	verdict, err := gate.Decide("codex", policy.Query{Action: policy.Write, Path: "src/orders/cart.ts", AgentSessionID: &session})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := gate.QueueDenial(verdict, "codex"); err != nil {
+		t.Fatal(err)
+	}
+	// The daemon starts an hour after the hook's clock.
+	received := make(chan room.Event, 1)
+	done := make(chan error, 1)
+	go func() {
+		done <- Run(ctx, home, time.Now, func(event room.Event) error {
+			received <- event
+			cancel()
+			return nil
+		}, func(err error) { t.Error(err) })
+	}()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	var event room.Event
+	select {
+	case event = <-received:
+	default:
+		t.Fatal("daemon did not deliver the queued denial")
+	}
+	data, err := json.Marshal(event)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var wire struct {
+		Body struct {
+			DecidedAt string `json:"decided_at"`
+		}
+	}
+	decode(t, data, &wire)
+	want := decision.Format(audit.CreatedAtLayout)
+	if wire.Body.DecidedAt != want || event.At() <= want {
+		t.Fatalf("Room decision time = %q, received at = %q, want decision time %q", wire.Body.DecidedAt, event.At(), want)
+	}
+	snapshot, err := store.ExportAudit()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var exported struct{ Entries []audit.Record }
+	decode(t, snapshot.Export, &exported)
+	record := exported.Entries[0]
+	if record.Action != "event.policy-denied" || record.Meta["decided_at"] != want || record.CreatedAt != event.At() {
+		t.Fatalf("exported denial = %+v", record)
+	}
 }
 
 func TestRoomResumeReplacesSubscription(t *testing.T) {
