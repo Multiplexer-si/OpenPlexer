@@ -7,7 +7,7 @@ The Worker serves team setup, member and project administration, signed policies
 
 On authenticated routes, the Worker rejects bearer tokens containing a comma with 401 before reading the body. On capped routes, the Go hub applies the body cap before rejecting a single 43-byte comma bearer. The public JWKS routes check no bearer.
 
-Use the Room events endpoint to post and replay events, and the claim endpoints to create, renew, and release leases. The Worker returns 405 for POST to the stream route. [Hub HTTP API](../../docs/hub.md#http-api)
+Use the Room events endpoint to post and replay events, and the claim endpoints to create, renew, and release leases. To follow a Room, open `GET /api/v1/rooms/{room}/stream?last_seq=0` with a member bearer. The stream sends v1 NDJSON envelopes after the cursor and blank lines while caught up. It checks membership on every page read. It sends `unauthorized` and closes if the member is revoked. The response ends after up to five minutes or 400 Durable Object calls. Open a new GET from the last saved sequence. The Worker returns 405 for POST to the stream route. [Hub HTTP API](../../docs/hub.md#http-api)
 
 ## Run locally
 
@@ -37,7 +37,7 @@ npm run deploy -- --dry-run --outdir dist
 ```
 
 The Node suite runs the canonical JSON, policy signature, audit, Room event, envelope, and claim overlap fixtures.
-The Workers suite runs the same tests in workerd, plus the Durable Object and SQLite tests.
+The Workers suite runs the same tests in workerd, plus the Durable Object and SQLite tests. The live stream cases cover replay, live writes, heartbeats, revocation, disconnect, and the call and time budgets.
 It checks Web Crypto for signing and wrapping and uses synchronous `node:crypto` to seal records.
 The export load test drains 250,001 sealed records and reports the byte count and elapsed time.
 The pinned workerd compatibility date enables Node.js compatibility by default.
@@ -45,10 +45,12 @@ Testing and building the bundle require no Cloudflare account.
 
 Run `./scripts/conformance.sh` from this directory with Go, Node, curl, and OpenSSL installed.
 The script starts Wrangler on port 8787 with fresh SQLite state and disposable credentials.
-It seeds the hub with remote admin commands and checks auth, methods, both JWKS endpoints, projects and policies, audit export, Room events, claims, and concurrent writes.
+It seeds the hub with remote admin commands and checks auth, methods, both JWKS endpoints, projects and policies, audit export, Room events, claims, concurrent writes, and live streams.
 It verifies the export with `openplexer-verify`, checks for Room denials and claim records, and confirms that changing a record fails with rule A3.
 It also runs `openplexer policy sync`.
 The run ends with `policy: verified`.
+
+You can also run the real-agent flow against a separate, freshly initialized Worker. [Run the multi-agent flow](../../test/multiagent/README.md#run-against-a-worker)
 
 Run `npm run gen:vectors` to regenerate the TypeScript-signed bundle and checkpoint
 in `test/vectors/ts-signed.json`. The file marks its fixed private keys as test data.

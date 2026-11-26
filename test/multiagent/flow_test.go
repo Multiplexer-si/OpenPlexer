@@ -17,18 +17,26 @@ import (
 
 func TestFlow(t *testing.T) {
 	for _, tc := range []struct {
-		name string
-		fail int
+		name     string
+		fail     int
+		external bool
 	}{
-		{"pass", 0},
-		{"claim without hook audit", 5},
-		{"denied file on disk", 7},
-		{"duplicate delivery after reconnect", 8},
-		{"missing delivery after reconnect", 8},
+		{name: "pass"},
+		{name: "external hub", external: true},
+		{name: "claim without hook audit", fail: 5},
+		{name: "denied file on disk", fail: 7},
+		{name: "duplicate delivery after reconnect", fail: 8},
+		{name: "missing delivery after reconnect", fail: 8},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &run{dir: t.TempDir(), listen: "127.0.0.1:1", hubBin: "hub", cliBin: "cli",
 				session: "claude-session", deniedPath: "sentinel/decision-target.txt"}
+			if tc.external {
+				r.listen = ""
+				if err := r.parseFlags([]string{"-hub-url", "https://worker.example/", "-lead-token-file", filepath.Join(r.dir, "lead.token")}); err != nil {
+					t.Fatal(err)
+				}
+			}
 			r.a = r.newParticipant("claude", "claude-code", "haiku", "dev-a", "")
 			r.b = r.newParticipant("codex", "codex", "gpt-6-luna", "dev-b", "")
 			for _, p := range []*participant{&r.a, &r.b} {
@@ -39,7 +47,7 @@ func TestFlow(t *testing.T) {
 					t.Fatal(err)
 				}
 			}
-			f := &fakeFlow{t: t, run: r, fault: tc.name}
+			f := &fakeFlow{t: t, run: r, fault: tc.name, up: tc.external}
 			r.agent, r.command, r.start = f.agent, f.command, f.start
 			r.client = &http.Client{Transport: f}
 			defer r.cleanup()
@@ -50,8 +58,15 @@ func TestFlow(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				if !slices.Equal(f.agents, []string{"claude/claim", "claude/allow", "codex/deny"}) || f.hubStarts != 2 {
-					t.Fatalf("agent calls %v, hub starts %d", f.agents, f.hubStarts)
+				if !slices.Equal(f.agents, []string{"claude/claim", "claude/allow", "codex/deny"}) {
+					t.Fatalf("agent calls %v", f.agents)
+				}
+				if tc.external {
+					if f.hubStarts != 0 || !f.reconnected || !slices.Equal(f.admin, []string{"add-member", "add-member", "add-project", "publish-policy"}) {
+						t.Fatalf("external run started the hub %d times, restarted B: %t, admin calls: %v", f.hubStarts, f.reconnected, f.admin)
+					}
+				} else if f.hubStarts != 2 || f.reconnected {
+					t.Fatalf("local run started the hub %d times, restarted B: %t", f.hubStarts, f.reconnected)
 				}
 			} else if err == nil || !strings.HasPrefix(err.Error(), fmt.Sprintf("step %d: ", tc.fail)) {
 				t.Fatalf("expected failure at step %d, got %v", tc.fail, err)
@@ -84,15 +99,17 @@ func TestFlow(t *testing.T) {
 }
 
 type fakeFlow struct {
-	t         *testing.T
-	run       *run
-	fault     string
-	hubStarts int
-	up        bool
-	agents    []string
-	queued    []byte
-	history   []event
-	paused    bool
+	t           *testing.T
+	run         *run
+	fault       string
+	hubStarts   int
+	up          bool
+	agents      []string
+	admin       []string
+	queued      []byte
+	history     []event
+	paused      bool
+	reconnected bool
 }
 
 func (f *fakeFlow) start(_ context.Context, _ string, _ []string, bin, log string, _ ...string) (*process, error) {
@@ -125,6 +142,9 @@ func (f *fakeFlow) start(_ context.Context, _ string, _ []string, bin, log strin
 				writeFake(f.t, f.run.b.path("room.err"), []byte("Room stream: disconnected\n"))
 			}
 		}
+		if f.run.hubURL != "" && log == f.run.b.path("room") {
+			f.paused = true
+		}
 	}
 	if bin == f.run.hubBin {
 		f.hubStarts++
@@ -135,11 +155,23 @@ func (f *fakeFlow) start(_ context.Context, _ string, _ []string, bin, log strin
 	} else {
 		writeFake(f.t, log+".jsonl", nil)
 		writeFake(f.t, log+".err", nil)
+		if log == f.run.b.path("room-reconnected") {
+			f.reconnected = true
+			f.paused = false
+			f.deliver(f.run.b, f.history[len(f.history)-1])
+		}
 	}
 	return p, nil
 }
 
 func (f *fakeFlow) command(_ context.Context, dir string, _ []string, bin string, input []byte, args ...string) ([]byte, error) {
+	if bin == f.run.hubBin && f.run.hubURL != "" {
+		want := []string{"--hub", "https://worker.example", "--token-file", f.run.leadTokenFile}
+		if len(args) < 5 || !slices.Equal(args[1:5], want) {
+			return nil, fmt.Errorf("unexpected external admin arguments: %v", args)
+		}
+		f.admin = append(f.admin, args[0])
+	}
 	switch args[0] {
 	case "add-member":
 		return []byte("token-" + args[len(args)-1]), nil
@@ -170,6 +202,9 @@ func (f *fakeFlow) command(_ context.Context, dir string, _ []string, bin string
 }
 
 func (f *fakeFlow) RoundTrip(req *http.Request) (*http.Response, error) {
+	if f.run.hubURL != "" && req.URL.Scheme+"://"+req.URL.Host != "https://worker.example" {
+		return nil, fmt.Errorf("unexpected external request origin: %s", req.URL.Host)
+	}
 	path := req.URL.Path
 	var response any
 	switch path {
@@ -229,7 +264,11 @@ func (f *fakeFlow) emit(kind string, p participant, session string, body fields)
 }
 
 func (f *fakeFlow) deliver(p participant, ev event) {
-	appendFake(f.t, p.path("room.jsonl"), ev)
+	log := "room.jsonl"
+	if p.member == f.run.b.member && f.reconnected {
+		log = "room-reconnected.jsonl"
+	}
+	appendFake(f.t, p.path(log), ev)
 	writeFake(f.t, filepath.Join(p.home, "room-cursor.json"), jsonFake(f.t, fields{"last_seq": ev.Seq}))
 }
 
