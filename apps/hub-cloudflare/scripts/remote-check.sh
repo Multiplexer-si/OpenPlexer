@@ -336,7 +336,6 @@ function sync(version) {
 
 async function wallBudget(tail, lastEvent) {
   const daemon = startChild(bin(""), ["daemon"], { env: cliEnv, stdio: ["ignore", "pipe", "pipe"] });
-  const daemonStart = performance.now();
   const delivered = [];
   let daemonError = false;
   daemon.child.stderr.on("data", () => { daemonError = true; });
@@ -358,9 +357,10 @@ async function wallBudget(tail, lastEvent) {
     requireCheck(duration >= 295_000 && duration <= 315_000 && heartbeats > 250,
       `expected clean five-minute EOF, got ${duration} ms and ${heartbeats} heartbeats`);
 
-    const finished = await endSeen(tail, streamPath(edgeRoom, 0), 12_000);
-    const daemonDuration = Math.round(finished.at - daemonStart);
-    requireCheck(finished.outcome === "ok" && daemonDuration >= 295_000 && daemonDuration <= 320_000,
+    const finished = await endSeen(tail, streamPath(edgeRoom, 0), tailDeliveryTimeout);
+    const daemonWallTime = finished.wallTime;
+    requireCheck(finished.outcome === "ok" && Number.isFinite(daemonWallTime) &&
+      daemonWallTime >= 295_000 && daemonWallTime <= 320_000,
       "the daemon's first stream did not finish cleanly at the budget");
     const next = await post(edgeRoom, "after budget");
     await until(() => delivered.includes(next.event_id) || daemonError || daemon.ended, 10_000,
@@ -370,7 +370,7 @@ async function wallBudget(tail, lastEvent) {
       "expected the daemon to continue from its saved cursor without an error or duplicate");
     await until(() => readJSON(file("agent-home/room-cursor.json")).last_seq === next.seq, 2_000,
       "daemon did not save the resumed cursor");
-    return `EOF=${duration} ms heartbeats=${heartbeats} daemon tail=${daemonDuration} ms`;
+    return `EOF=${duration} ms heartbeats=${heartbeats} daemon wall time=${daemonWallTime} ms`;
   } finally {
     daemon.child.kill();
   }
