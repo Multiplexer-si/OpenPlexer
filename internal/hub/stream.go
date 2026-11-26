@@ -56,6 +56,9 @@ func (s *Store) streamRoom(w http.ResponseWriter, r *http.Request) {
 				writeError(w, http.StatusInternalServerError, "full-duplex HTTP is unavailable")
 				return
 			}
+			// The exit deadline can cancel net/http's connection context after body EOF.
+			// Close the connection so the next request gets a fresh context.
+			w.Header().Set("Connection", "close")
 		}
 		if err := controller.SetReadDeadline(time.Time{}); err != nil {
 			writeError(w, http.StatusInternalServerError, "stream read deadline is unavailable")
