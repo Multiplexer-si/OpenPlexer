@@ -165,7 +165,7 @@ Each GET stream follows one Room. The request has no body. The hub authenticates
 
 When a stream reaches its budget or deadline, the hub ends the response with clean EOF. This can be an empty `200` if the deadline arrives before the first frame.
 
-If a page read fails before the response starts, the hub returns an HTTP error status with a JSON error body. If the response has started, the hub aborts the body so the receiver gets a read error. If the bearer token is revoked after streaming starts, the hub sends an `unauthorized` envelope and ends the stream.
+If a page read fails before the response starts, the hub returns an HTTP error status with a JSON error body. If the response has started, the hub aborts the body so the receiver gets a read error. If an in-stream page read detects revocation before the deadline, the hub sends an `unauthorized` envelope and closes the stream. If the revocation goes undetected, the stream ends with clean EOF and the next GET returns HTTP `401`.
 
 The receiver saves the cursor after delivering an event or counting a skip. After the stream ends, it opens a new GET with that cursor. It reports HTTP and stream errors and reconnects quietly after clean EOF. It drops sequences at or below the cursor under O4. If the receiver process stops between delivery and saving the cursor, it may deliver that event again.
 
