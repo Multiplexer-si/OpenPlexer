@@ -202,17 +202,25 @@ async function until(condition, ms, message) {
 }
 
 function startTail() {
-  const tail = startChild(wrangler, ["tail", "--method", "GET", "--format", "pretty", "--config", configPath], {
-    cwd: worker, env: { ...process.env, FORCE_COLOR: "0" },
+  const tail = startChild(wrangler, ["tail", "--method", "GET", "--format", "json", "--config", configPath], {
+    cwd: worker, env: { ...process.env, WRANGLER_LOG: "debug", WRANGLER_WRITE_LOGS: "false" },
   });
   tail.events = new Map();
+  let json = "";
   createInterface({ input: tail.child.stdout }).on("line", (line) => {
-    if (line.startsWith("Connected to ")) tail.ready = true;
-    const [, url, outcome] = /^GET (\S+) - (.+) @ /.exec(line) ?? [];
-    if (url?.startsWith(origin + "/api/v1/rooms/")) {
-      const path = url.slice(origin.length);
-      if (!tail.events.has(path)) tail.events.set(path, []);
-      tail.events.get(path).push({ outcome, at: performance.now() });
+    // Wrangler only announces the connection in pretty mode. Wait for its keep-alive pong in JSON mode.
+    if (line === "Tail: Received pong from tail websocket") tail.ready = true;
+    // Wrangler prints one indented JSON object per event.
+    if (line.startsWith("{")) json = line;
+    else if (json) json += "\n" + line;
+    if (!json || !line.endsWith("}") || line.startsWith(" ")) return;
+    let trace;
+    try { trace = JSON.parse(json); } catch { return; } finally { json = ""; }
+    const request = trace.event?.request;
+    const url = request?.url;
+    if (request?.method === "GET" && typeof url === "string" && url.startsWith(origin + "/api/v1/rooms/")) {
+      if (!tail.events.has(url)) tail.events.set(url, []);
+      tail.events.get(url).push({ outcome: trace.outcome, wallTime: trace.wallTime, at: performance.now() });
     }
   });
   return tail;
@@ -221,21 +229,21 @@ function startTail() {
 function endSeen(tail, path, timeout) {
   return until(() => {
     requireCheck(!tail.ended, "Wrangler tail exited");
-    return tail.events.get(path)?.[0];
+    return tail.events.get(origin + path)?.[0];
   }, timeout, "no matching completion in Wrangler tail");
 }
 
 async function flush(tail) {
-  let event, path, disconnectAt;
+  let event, path, startedAt, disconnectAt;
   await check("edge frame and heartbeat flush", async () => {
     event = await post(edgeRoom, "flush");
     path = streamPath(edgeRoom, event.seq - 1) + "&probe=disconnect";
-    const start = performance.now();
+    startedAt = performance.now();
     const lines = stream(path, AbortSignal.timeout(10_000));
     let receivedHeartbeats = false;
     try {
       const first = await lines.next();
-      const firstMs = elapsed(start);
+      const firstMs = elapsed(startedAt);
       requireCheck(!first.done && JSON.parse(first.value).event_id === event.event_id, "missing first event");
       requireCheck(firstMs <= 5_000, `first frame took ${firstMs} ms`);
       const gaps = [];
@@ -259,10 +267,14 @@ async function flush(tail) {
   await check("edge disconnect", async () => {
     requireCheck(disconnectAt !== undefined, "flush probe did not reach the disconnect step");
     requireCheck(tail?.ready, "Wrangler tail unavailable");
-    const finished = await endSeen(tail, path, 10_000);
-    requireCheck(finished.at >= disconnectAt && ["Canceled", "Ok"].includes(finished.outcome),
+    // Wrangler tail can deliver completion events tens of seconds late.
+    const finished = await endSeen(tail, path, 60_000);
+    requireCheck(finished.at >= disconnectAt && ["canceled", "ok"].includes(finished.outcome),
       "expected a canceled or clean invocation after disconnect");
-    return `tail completion=${Math.round(finished.at - disconnectAt)} ms`;
+    const maxWallTime = Math.floor(disconnectAt - startedAt) + 5_000;
+    requireCheck(Number.isFinite(finished.wallTime) && finished.wallTime >= 0 && finished.wallTime <= maxWallTime,
+      `expected invocation wall time up to ${maxWallTime} ms, got ${finished.wallTime} ms`);
+    return `wall time=${finished.wallTime} ms tail completion=${Math.round(finished.at - disconnectAt)} ms`;
   });
   return event;
 }
@@ -332,7 +344,7 @@ async function wallBudget(tail, lastEvent) {
 
     const finished = await endSeen(tail, streamPath(edgeRoom, 0), 12_000);
     const daemonDuration = Math.round(finished.at - daemonStart);
-    requireCheck(finished.outcome === "Ok" && daemonDuration >= 295_000 && daemonDuration <= 320_000,
+    requireCheck(finished.outcome === "ok" && daemonDuration >= 295_000 && daemonDuration <= 320_000,
       "the daemon's first stream did not finish cleanly at the budget");
     const next = await post(edgeRoom, "after budget");
     await until(() => delivered.includes(next.event_id) || daemonError || daemon.ended, 10_000,
