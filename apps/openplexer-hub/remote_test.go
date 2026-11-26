@@ -12,8 +12,12 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
+
+	"github.com/multiplexer-si/openplexer/internal/audit"
+	"github.com/multiplexer-si/openplexer/internal/hub"
 )
 
 type adminTransport func(*http.Request) (*http.Response, error)
@@ -218,6 +222,172 @@ func TestRemoteAdminRejectsUnsafeInputsAndRedactsErrors(t *testing.T) {
 			}
 			if tc.response != 0 && count != 1 {
 				t.Fatalf("made %d requests, want 1", count)
+			}
+		})
+	}
+}
+
+func TestRemoteKeyCommands(t *testing.T) {
+	token := testToken("lead fixture")
+	const kid = "audit-staged_1"
+	for _, tc := range []struct {
+		name, command, purpose, kid, reply, method, path, body, output string
+		status                                                         int
+	}{
+		{name: "stage", command: "stage-key", purpose: "audit", reply: `{"kty":"EC","kid":"audit-staged_1"}`,
+			method: "POST", path: "/api/v1/admin/keys/audit", output: kid + "\n"},
+		{name: "activate", command: "activate-key", purpose: "policy", kid: "staged_1", reply: "{}",
+			method: "PUT", path: "/api/v1/admin/keys/policy/active", body: `{"kid":"staged_1"}`},
+		{name: "duplicate", command: "stage-key", purpose: "audit", reply: `{"kid":"first","kid":"second"}`,
+			method: "POST", path: "/api/v1/admin/keys/audit", status: 1},
+		{name: "wrong case", command: "stage-key", purpose: "policy", reply: `{"Kid":"other"}`,
+			method: "POST", path: "/api/v1/admin/keys/policy", status: 1},
+		{name: "invalid purpose", command: "stage-key", purpose: "../audit", status: 1},
+		{name: "invalid kid", command: "activate-key", purpose: "audit", kid: "bad/key", status: 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			calls := 0
+			transport := adminHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				calls++
+				if r.Method != tc.method || r.URL.Path != tc.path || r.Header.Get("Authorization") != "Bearer "+token {
+					t.Fatalf("unexpected key request %s %s", r.Method, r.URL.Path)
+				}
+				body, err := io.ReadAll(r.Body)
+				if err != nil || string(body) != tc.body || (tc.body != "" && r.Header.Get("Content-Type") != "application/json") {
+					t.Fatal("unexpected key request body")
+				}
+				_, _ = io.WriteString(w, tc.reply)
+			}))
+			args := []string{tc.command, "--hub", "https://hub.example.test", "--purpose", tc.purpose}
+			if tc.kid != "" {
+				args = append(args, "--kid", tc.kid)
+			}
+			var out, stderr bytes.Buffer
+			code := runWithInput(args, strings.NewReader(token), &out, &stderr, transport)
+			wantCalls := 0
+			if tc.method != "" {
+				wantCalls = 1
+			}
+			if code != tc.status || calls != wantCalls || out.String() != tc.output {
+				t.Fatalf("exit %d, calls %d, stdout %q, stderr %q", code, calls, out.String(), stderr.String())
+			}
+		})
+	}
+	for _, command := range []string{"stage-key", "activate-key"} {
+		var stderr bytes.Buffer
+		if code := runWithInput([]string{command}, nil, io.Discard, &stderr, nil); code != 2 ||
+			!strings.Contains(stderr.String(), "requires --hub") {
+			t.Fatalf("%s without --hub: exit %d, stderr %q", command, code, stderr.String())
+		}
+	}
+}
+
+func TestRemoteAuditExport(t *testing.T) {
+	store := hub.Open(t.TempDir())
+	if err := store.Init(); err != nil {
+		t.Fatal(err)
+	}
+	token, err := store.AddMember("lead", hub.Lead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handler := store.Handler()
+	const exportPath = "/api/v1/audit/export"
+	const keysPath = "/.well-known/audit-jwks.json"
+	for _, tc := range []struct {
+		name, command, wantError string
+		duplicate, keysFailure   bool
+	}{
+		{name: "valid", command: "export"},
+		{name: "existing checkpoint", command: "export-audit", wantError: "publish audit files"},
+		{name: "duplicate header", command: "export", duplicate: true, wantError: "invalid or missing audit checkpoint"},
+		{name: "JWKS failure", command: "export", keysFailure: true, wantError: "HTTP 503"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var paths []string
+			transport := adminHandler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				paths = append(paths, r.URL.Path)
+				auth := r.Header.Get("Authorization")
+				switch r.URL.Path {
+				case exportPath:
+					if auth != "Bearer "+token {
+						t.Fatal("export omitted lead credential")
+					}
+				case keysPath:
+					if auth != "" {
+						t.Fatal("public JWKS request carried the lead credential")
+					}
+					if tc.keysFailure {
+						w.WriteHeader(http.StatusServiceUnavailable)
+						return
+					}
+				}
+				handler.ServeHTTP(w, r)
+			}))
+			if tc.duplicate {
+				base := transport
+				transport = adminTransport(func(r *http.Request) (*http.Response, error) {
+					res, err := base.RoundTrip(r)
+					if err == nil && r.URL.Path == exportPath {
+						res.Header.Add("OpenPlexer-Audit-Checkpoint", "a.b.c")
+					}
+					return res, err
+				})
+			}
+			out := filepath.Join(t.TempDir(), "export")
+			kept := filepath.Join(out, "checkpoint.jws")
+			if tc.name == "existing checkpoint" {
+				if err := os.Mkdir(out, 0700); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(kept, []byte("kept"), 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var stderr bytes.Buffer
+			code := runWithInput([]string{tc.command, "--hub", "https://hub.example.test", "--out", out},
+				strings.NewReader(token), io.Discard, &stderr, transport)
+			wantPaths := []string{exportPath, keysPath}
+			if tc.duplicate {
+				wantPaths = wantPaths[:1]
+			}
+			if !slices.Equal(paths, wantPaths) {
+				t.Fatalf("requested %v, want %v", paths, wantPaths)
+			}
+			files, err := os.ReadDir(out)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tc.wantError != "" {
+				if code != 1 || !strings.Contains(stderr.String(), tc.wantError) {
+					t.Fatalf("exit %d, stderr %q", code, stderr.String())
+				}
+				if tc.name == "existing checkpoint" {
+					if len(files) != 1 || string(readAuditFile(t, kept)) != "kept" {
+						t.Fatal("export changed the existing checkpoint or left other files")
+					}
+				} else if len(files) != 0 {
+					t.Fatal("export left files after an HTTP failure")
+				}
+				return
+			}
+			if code != 0 || len(files) != 3 {
+				t.Fatalf("exit %d, files %v, stderr %q", code, files, stderr.String())
+			}
+			dir, err := os.Stat(out)
+			if err != nil || dir.Mode().Perm() != 0700 {
+				t.Fatal("export directory is not private")
+			}
+			for _, file := range files {
+				info, err := file.Info()
+				if err != nil || info.Mode().Perm() != 0600 {
+					t.Fatalf("%s is not private", file.Name())
+				}
+			}
+			result := audit.VerifyExport(readAuditFile(t, filepath.Join(out, "export.json")),
+				readAuditFile(t, filepath.Join(out, "jwks.json")), string(readAuditFile(t, kept)))
+			if !result.OK || result.CheckpointEntries == nil || *result.CheckpointEntries != result.Entries {
+				t.Fatalf("verification failed: %+v", result)
 			}
 		})
 	}

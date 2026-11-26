@@ -1,8 +1,10 @@
 import { Buffer } from "node:buffer";
-import { isJsonObject, parseJSON } from "./canonical";
+import { hasDuplicateMembers, isJsonObject, parseJSON } from "./canonical";
+import type { JsonObject } from "./canonical";
 import type { Env } from "./index";
 import { bearer, cappedBody, conflict, invalid, notFound, tokenHash, unauthorized } from "./http";
-import { appendAudit, authenticate, newSigningKey, newToken, team, wrappingKey } from "./state";
+import type { SigningPurpose } from "./jws";
+import { activeSigningKey, activeTeam, appendAudit, authenticate, insertSigningKey, newSigningKey, newToken, team, wrappingKey } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
 
 const adminLimit = 64 << 10;
@@ -19,10 +21,10 @@ function validRepo(repo: unknown): repo is string {
     && !/[\p{White_Space}\p{Cc}]/u.test(repo);
 }
 
-function adminJSON(body: Uint8Array) {
+function adminJSON(body: Uint8Array, duplicates?: WeakSet<JsonObject>) {
   try {
-    const value = parseJSON(body, { loneSurrogates: "reject" });
-    if (isJsonObject(value)) return value;
+    const value = parseJSON(body, { loneSurrogates: "reject", duplicates });
+    if (isJsonObject(value) && (!duplicates || !hasDuplicateMembers(value, duplicates))) return value;
   } catch {
     // Use the same error for malformed JSON and non-object bodies.
   }
@@ -61,11 +63,8 @@ export async function initialize(request: Request, storage: HubStorage, env: Pic
   ]);
   return storage.transaction((sql) => {
     if (alreadyInitialized(sql, id, hash)) return {};
-    for (const row of [policy, audit]) {
-      sql.exec(`INSERT INTO signing_keys (kid, purpose, public_jwk, status, wrapped_pkcs8, nonce, wrap_key_id)
-        VALUES (?, ?, ?, 'active', ?, ?, ?)`,
-      row.kid, row.purpose, row.public_jwk, row.wrapped_pkcs8, row.nonce, row.wrap_key_id);
-    }
+    insertSigningKey(sql, policy, "active");
+    insertSigningKey(sql, audit, "active");
     sql.exec("INSERT INTO team (singleton, workspace_id, policy_kid, audit_kid) VALUES (1, ?, ?, ?)",
       crypto.randomUUID(), policy.kid, audit.kid);
     sql.exec("INSERT INTO members (member_id, role, token_hash) VALUES (?, 'lead', ?)", id, hash);
@@ -118,6 +117,58 @@ export async function addProject(request: Request, storage: HubStorage) {
     }
     sql.exec("INSERT INTO projects (project_id, repo) VALUES (?, ?)", id, repo);
     appendAudit(sql, { action: "project.added", target: "project:" + id, actor_member_id: actor });
+    return {};
+  });
+}
+
+export async function stageKey(request: Request, storage: HubStorage, purpose: SigningPurpose,
+  env: Pick<Env, "TEAM_ID" | "WRAP_KEY_V1">) {
+  const hash = bearer(request);
+  await cappedBody(request, adminLimit);
+  function pending(sql: TransactionSQL) {
+    const [row] = sql.exec<{ public_jwk: string }>(
+      "SELECT public_jwk FROM signing_keys WHERE purpose = ? AND status = 'staged'", purpose);
+    return row;
+  }
+
+  const existing = storage.transaction((sql) => {
+    authenticate(sql, hash, true);
+    return pending(sql);
+  });
+  if (existing) return JSON.parse(existing.public_jwk);
+
+  const row = await newSigningKey(env.TEAM_ID, purpose, wrappingKey(env.WRAP_KEY_V1));
+  return storage.transaction((sql) => {
+    const actor = authenticate(sql, hash, true);
+    const staged = pending(sql);
+    if (staged) return JSON.parse(staged.public_jwk);
+    insertSigningKey(sql, row, "staged");
+    appendAudit(sql, { action: "key.staged", target: "key:" + row.kid, actor_member_id: actor, meta: { purpose } });
+    return JSON.parse(row.public_jwk);
+  });
+}
+
+export async function activateKey(request: Request, storage: HubStorage, purpose: SigningPurpose) {
+  const hash = bearer(request);
+  const body = await cappedBody(request, adminLimit);
+  return storage.transaction((sql) => {
+    const actor = authenticate(sql, hash, true);
+    const { kid } = adminJSON(body, new WeakSet());
+    if (typeof kid !== "string" || !kid) throw invalid("activation needs a kid");
+    const [key] = sql.exec<{ status: "staged" | "active" | "retired" }>(
+      "SELECT status FROM signing_keys WHERE kid = ? AND purpose = ?", kid, purpose);
+    if (!key) throw notFound();
+    if (key.status === "retired") throw conflict("key is retired");
+    if (key.status === "active") return {};
+
+    const column = purpose === "policy" ? "policy_kid" : "audit_kid";
+    const previous = activeSigningKey(sql, purpose, activeTeam(sql)[column]);
+    sql.exec(`UPDATE signing_keys SET status = 'retired', wrapped_pkcs8 = NULL, nonce = NULL, wrap_key_id = NULL
+      WHERE kid = ?`, previous.kid);
+    sql.exec("UPDATE signing_keys SET status = 'active' WHERE kid = ?", kid);
+    sql.exec(`UPDATE team SET ${column} = ? WHERE singleton = 1`, kid);
+    appendAudit(sql, { action: "key.activated", target: "key:" + kid, actor_member_id: actor,
+      meta: { purpose, previous_kid: previous.kid } });
     return {};
   });
 }

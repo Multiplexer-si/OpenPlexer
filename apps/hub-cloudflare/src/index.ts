@@ -1,8 +1,9 @@
 import { DurableObject } from "cloudflare:workers";
-import { addMember, addProject, initialize, removeMember } from "./admin";
+import { activateKey, addMember, addProject, initialize, removeMember, stageKey } from "./admin";
+import { exportAudit } from "./export";
 import { bearer, HubError, invalid, json, notFound } from "./http";
-import { publicKeys, publishPolicy, readPolicy, readProject } from "./publication";
-import { authenticate } from "./state";
+import { publishPolicy, readPolicy, readProject } from "./publication";
+import { authenticate, publicKeys } from "./state";
 import { HubStorage, migrate } from "./storage";
 
 export interface Env {
@@ -70,9 +71,21 @@ export class TeamHub extends DurableObject<Env> {
       allow(method, ["GET", "HEAD"]);
       return Response.json({ ok: true, schema: await this.schemaVersion }, { headers: jsonHeaders });
     }
-    if (first === ".well-known" && second === "jwks.json" && collection === undefined) {
+    if (first === ".well-known" && (second === "jwks.json" || second === "audit-jwks.json") && collection === undefined) {
       allow(method, ["GET", "HEAD"]);
-      return json(this.storage.transaction(publicKeys));
+      return json(this.storage.transaction((sql) => publicKeys(sql, second === "jwks.json" ? "policy" : "audit")));
+    }
+    if (first === "api" && second === "v1" && collection === "admin" && target === "keys") {
+      if (suffix !== "policy" && suffix !== "audit") throw notFound();
+      if (extra.length === 0) {
+        allow(method, ["POST"]);
+        return json(await stageKey(request, this.storage, suffix, this.env));
+      }
+      if (extra.length === 1 && extra[0] === "active") {
+        allow(method, ["PUT"]);
+        return json(await activateKey(request, this.storage, suffix));
+      }
+      throw notFound();
     }
     if (first !== "api" || second !== "v1" || extra.length > 0) throw notFound();
     if (collection === "projects" && target && target !== "/") {
@@ -107,6 +120,10 @@ export class TeamHub extends DurableObject<Env> {
         allow(method, ["DELETE"]);
         return json(removeMember(request, this.storage, suffix));
       }
+    }
+    if (collection === "audit" && target === "export" && suffix === undefined) {
+      allow(method, ["GET", "HEAD"]);
+      return exportAudit(request, this.storage, this.env.TEAM_ID, this.env.WRAP_KEY_V1);
     }
     throw notFound();
   }
