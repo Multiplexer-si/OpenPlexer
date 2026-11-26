@@ -101,9 +101,9 @@ Any authenticated claim operation in an existing Room sweeps lapsed claims. The 
 
 For paged replay, pass the highest sequence number received as the next cursor. A cursor at or beyond the latest event returns an empty array.
 
-Open the GET stream with one `last_seq` query parameter and no request body. The same cursor rules apply to replay and streaming. After authentication the hub responds with `Content-Type: application/x-ndjson` and `Cache-Control: no-store`. It sends events after the cursor in order and then sends new events as they arrive. A blank response line is a heartbeat. The daemon opens a new GET from its saved cursor after EOF, timeout, or a `behind` envelope. Disable response buffering for the stream route on your reverse proxy.
+Open the GET stream with one `last_seq` query parameter and no request body. The same cursor rules apply to replay and streaming. The hub authenticates the request before sending any frames. Stream responses use `Content-Type: application/x-ndjson` and `Cache-Control: no-store`. The hub sends events after the cursor in order and then sends new events as they arrive. A blank response line is a heartbeat. The daemon opens a new GET from its saved cursor after EOF, timeout, or a `behind` envelope. Disable response buffering for the stream route on your reverse proxy.
 
-Upgrade the Go hub before upgrading its daemons. Current daemons require GET. On legacy POST streams, older daemons keep the request body open and send a v1 `resume` envelope. A second `resume` replaces the subscription on the same stream. A proxy serving legacy POST must forward the request and response concurrently.
+Upgrade each hub to a version that serves the GET stream before upgrading its daemons. Daemons from this release require the GET stream to receive Room events. On legacy POST streams, older daemons keep the request body open and send a v1 `resume` envelope. A second `resume` replaces the subscription on the same stream. A proxy serving legacy POST must forward the request and response concurrently.
 
 | Error | Meaning |
 |---|---|

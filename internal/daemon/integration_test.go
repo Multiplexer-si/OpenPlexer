@@ -459,6 +459,7 @@ func TestRoomReconnectsFromSavedCursor(t *testing.T) {
 		frames string
 		end    error
 	}{
+		{41, "", io.EOF},
 		{41, event(42) + "\n" + status(43, "{}") + duplicateField, io.EOF},
 		{43, event(42) + event(43) + event(44), os.ErrDeadlineExceeded},
 		{44, fmt.Sprintf(`{"v":1,"type":"error","sender":{"id":"hub","kind":"server"},"room":%q,"payload":%s}`+"\n",
@@ -485,7 +486,7 @@ func TestRoomReconnectsFromSavedCursor(t *testing.T) {
 		stream := io.MultiReader(strings.NewReader(reply.frames), streamEnd{reply.end})
 		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {roomStreamType}}, Body: io.NopCloser(stream)}, nil
 	}))
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Second)
 	defer cancel()
 	var delivered []int64
 	var ended []error
@@ -506,7 +507,7 @@ func TestRoomReconnectsFromSavedCursor(t *testing.T) {
 	if err != nil || requests != len(replies) || !slices.Equal(delivered, []int64{42, 44, 45}) {
 		t.Fatalf("Run = %v, opened %d streams, delivered %v", err, requests, delivered)
 	}
-	if len(ended) != 3 || !errors.Is(ended[0], io.EOF) || !errors.Is(ended[1], os.ErrDeadlineExceeded) || !errors.Is(ended[2], errRoomBehind) {
+	if len(ended) != 2 || !errors.Is(ended[0], os.ErrDeadlineExceeded) || !errors.Is(ended[1], errRoomBehind) {
 		t.Fatalf("stream exits = %v", ended)
 	}
 	var saved roomCursor

@@ -6,6 +6,8 @@ The local gate decides actions from the last verified policy on disk. You can lo
 
 ## Connect to a team hub
 
+The daemon in this release requires a hub that serves `GET /api/v1/rooms/{room}/stream` to receive Room events. Upgrade the hub before upgrading the daemon.
+
 Install `openplexer` on `PATH`. Get the hub URL, project ID, member ID, bearer token, and trusted public key set from the hub operator. Save the token in a private file. Export `OPENPLEXER_HOME` with a separate directory for each project. Use the same value for setup, the agent that runs the hooks, and the daemon. [Install OpenPlexer](install.md)
 
 ```sh

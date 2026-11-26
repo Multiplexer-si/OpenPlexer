@@ -92,7 +92,9 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 		if ctx.Err() != nil {
 			break
 		}
-		report(fmt.Errorf("Room stream: %w", err))
+		if err != io.EOF {
+			report(fmt.Errorf("Room stream: %w", err))
+		}
 		if errors.Is(err, errRoomBehind) {
 			continue
 		}
