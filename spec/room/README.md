@@ -155,7 +155,7 @@ A receiver builds the claims of a Room from the `claim` and `release` events tha
 
 #### HTTP GET binding
 
-Each GET stream follows one Room. The request has no body. The hub authenticates the request before returning `200` with `Content-Type: application/x-ndjson` and `Cache-Control: no-store`. Each nonempty line holds one v1 envelope. A blank line is a heartbeat.
+Each GET stream follows one Room. The request has no body. The hub authenticates the request before sending any frames. Successful responses use status `200`, `Content-Type: application/x-ndjson`, and `Cache-Control: no-store`. Each nonempty line holds one v1 envelope. A blank line is a heartbeat.
 
 | Rule | HTTP binding |
 | --- | --- |
@@ -163,7 +163,11 @@ Each GET stream follows one Room. The request has no body. The hub authenticates
 | C5 | Close the response and open a new GET to replace the subscription. |
 | C6 | A `behind` envelope ends delivery on that response. Close it and open a new GET at once from the highest saved sequence. |
 
-The receiver saves the cursor after delivering an event or counting a skip. After EOF or a timeout, it opens a new GET with that cursor. It drops sequences at or below the cursor under O4. If the receiver process stops between delivery and saving the cursor, it may deliver that event again.
+When a stream reaches its budget or deadline, the hub ends the response with clean EOF. This can be an empty `200` if the deadline arrives before the first frame.
+
+If a page read fails before the response starts, the hub returns an HTTP error status with a JSON error body. If the response has started, the hub aborts the body so the receiver gets a read error. If the bearer token is revoked after streaming starts, the hub sends an `unauthorized` envelope and ends the stream.
+
+The receiver saves the cursor after delivering an event or counting a skip. After the stream ends, it opens a new GET with that cursor. It reports HTTP and stream errors and reconnects quietly after clean EOF. It drops sequences at or below the cursor under O4. If the receiver process stops between delivery and saving the cursor, it may deliver that event again.
 
 The Go hub also serves the full-duplex POST stream. It follows one Room and accepts the v1 `resume` envelope. A new `resume` replaces the subscription on that stream. [Hub HTTP API](../../docs/hub.md#http-api)
 

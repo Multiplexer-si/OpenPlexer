@@ -177,6 +177,12 @@ async function postStatus(member: string) {
   return response.text();
 }
 
+async function corruptRoomEvent(seq: number) {
+  await runInDurableObject(stub(), (_hub, ctx) => {
+    ctx.storage.sql.exec("UPDATE room_events SET event_json = ? WHERE room_id = ? AND seq = ?", "{", "demo", seq);
+  });
+}
+
 test("streams the backlog, includes a write during replay once, then streams a live write", async () => {
   const { member } = await setup();
   await postStatus(member);
@@ -205,6 +211,26 @@ test("validates credentials, Room, and cursor before the stream starts", async (
   }
   await reject(await call(room + "/stream?last_seq=-1", "GET", newToken()), 401, "invalid bearer token");
   await reject(await call("/api/v1/rooms/missing/stream", "GET", member), 404, "not found");
+});
+
+test("returns a JSON 500 when the first page RPC rejects", async () => {
+  const { member } = await setup();
+  await postStatus(member);
+  await corruptRoomEvent(1);
+  await reject(await call(room + "/stream", "GET", member), 500, "hub state unavailable");
+});
+
+test("aborts the response body when a page RPC rejects after a heartbeat", async () => {
+  const { member } = await setup();
+  const live = await openStream(member);
+  try {
+    expect(await live.next()).toBe("\n");
+    await postStatus(member);
+    await corruptRoomEvent(1);
+    await expect(live.next()).rejects.toThrow("hub state unavailable");
+  } finally {
+    await live.cancel()?.catch(() => {});
+  }
 });
 
 test("rechecks membership and closes the stream on revocation", async () => {
@@ -238,7 +264,7 @@ test("closes a pending poll on request cancellation", async () => {
   }
 });
 
-test("ends the last permitted page cleanly and resumes from its final sequence", async () => {
+test("closes with clean EOF at the call budget and resumes from the last sequence", async () => {
   const { member } = await setup();
   const first = await postStatus(member);
   const live = await openStream(member, { limits: { calls: 2 } });
@@ -290,8 +316,9 @@ test("drops the first page if its read finishes after the request deadline", asy
 });
 
 test.each([
-  { elapsed: 300_500, sendsPage: false },
   { elapsed: 299_999, sendsPage: true },
+  { elapsed: 300_000, sendsPage: false },
+  { elapsed: 300_500, sendsPage: false },
 ])("handles a later page that finishes $elapsed ms into the request", async ({ elapsed, sendsPage }) => {
   const { member } = await setup();
   const first = await postStatus(member);
@@ -312,6 +339,16 @@ test.each([
       expect(await live.next()).toBe(third);
     }
     expect(await live.next()).toBeUndefined();
+    if (!sendsPage) {
+      const resumed = await openStream(member, { query: "?last_seq=1" });
+      try {
+        expect(await resumed.next()).toBe(second);
+        expect(await resumed.next()).toBe(third);
+        expect(await resumed.next()).toBe("\n");
+      } finally {
+        await resumed.cancel();
+      }
+    }
   } finally {
     await live.cancel();
   }

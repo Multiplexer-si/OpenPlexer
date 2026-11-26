@@ -40,6 +40,11 @@ export function roomStream(
     close();
   }
 
+  function fail(controller: ReadableStreamDefaultController<Uint8Array>) {
+    cleanup();
+    controller.error(new Error("hub state unavailable"));
+  }
+
   function isFinished() {
     if (remainingMs() <= 0) finish();
     return stopped;
@@ -77,8 +82,10 @@ export function roomStream(
                 v: 1, type: "error", room, ts: new Date().toISOString(), sender: { id: "hub", kind: "server" },
                 payload: { code: "unauthorized", message: unauthorized().message },
               }) + "\n"));
+              finish();
+            } else {
+              fail(controller);
             }
-            finish();
             return;
           }
           page = next.frames;
@@ -102,7 +109,7 @@ export function roomStream(
         // A pull releases one frame. Close if the runtime stops draining the response.
         writeTimer = setTimeout(finish, limits.writeMs);
       } catch {
-        finish();
+        if (!isFinished()) fail(controller);
       }
     },
     cancel() { cleanup(); },
