@@ -22,6 +22,11 @@ func ParseEventPost(text []byte) (EventPost, error) {
 				post.Agent = &agent
 			}
 			post.Body = r.eventBody(o, post.Type)
+			if post.Type == "policy.denied" {
+				if value, present := post.Body["decided_at"]; present && canonicalTimestamp(value) == "" {
+					r.fail("body.decided_at", "must be a UTC timestamp with milliseconds")
+				}
+			}
 		}
 		return post
 	})

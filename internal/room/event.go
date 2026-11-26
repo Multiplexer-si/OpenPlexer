@@ -9,14 +9,13 @@ import (
 // TimestampLayout is the UTC millisecond format the hub writes in at.
 const TimestampLayout = "2006-01-02T15:04:05.000Z"
 
-func (r *reader) timestamp(path string, value any) string {
+func canonicalTimestamp(value any) string {
 	text, ok := value.(string)
 	if ok && len(text) == len(TimestampLayout) {
 		if at, err := time.Parse(TimestampLayout, text); err == nil && at.Format(TimestampLayout) == text {
 			return text
 		}
 	}
-	r.fail(path, "must be a UTC timestamp with milliseconds")
 	return ""
 }
 
@@ -24,7 +23,7 @@ func (r *reader) timestamp(path string, value any) string {
 // sub-agent.
 type Agent struct{ ID, Vendor, Parent string }
 
-// Event is a stored event that passed room-event.schema.json. It is immutable.
+// Event is an immutable stored Room event.
 // It retains decoded extension fields alongside the validated fields.
 type Event struct {
 	wire       object
@@ -38,8 +37,9 @@ type Event struct {
 	at         string
 }
 
-// ParseEvent reads a stored event and validates it against
-// spec/room/v1/room-event.schema.json. The error is a *ValidationError.
+// ParseEvent reads and validates a stored event. It preserves legacy decided_at
+// values as extensions, with no decision time in the typed body.
+// The error is a *ValidationError.
 func ParseEvent(text []byte) (Event, error) {
 	return parse(text, (*reader).event)
 }
