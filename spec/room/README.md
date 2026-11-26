@@ -11,7 +11,7 @@ The field descriptions are in the schemas. This page gives the rules that a sche
 | File | Content |
 |---|---|
 | `v1/room-event.schema.json` | A stored Room event. `$defs` holds one body schema for each event type. |
-| `v1/envelope.schema.json` | The object that wraps every WebSocket message between a daemon and the hub. |
+| `v1/envelope.schema.json` | The object that wraps each WebSocket or HTTP stream message between a daemon and the hub. |
 | `v1/resume.schema.json` | The payload of a `resume` message. |
 | `v1/error.schema.json` | The payload of an `error` message. |
 | `v1/examples/room-event/` | One valid event for each event type, and one event from a sub-agent. |
@@ -153,7 +153,23 @@ A receiver builds the claims of a Room from the `claim` and `release` events tha
 | C5 | A second `resume` for a Room on one connection replaces the first. | Reference | `apps/hub/src/ws/server.ts` |
 | C6 | An `error` with the code `behind` and a `room` means that the hub has stopped sending the events of that Room on this connection. The receiver sends a `resume` for the Room at once, even if it already sent one. | Reference | `apps/hub/src/ws/server.ts`, `apps/daemon/src/sync/client.ts` |
 
-The single-team hub exchanges the same v1 envelopes over a full-duplex HTTP stream. Each stream follows one Room. It replaces the current subscription when another `resume` arrives. [Hub HTTP API](../../docs/hub.md#http-api).
+#### HTTP GET binding
+
+Each GET stream follows one Room. The request has no body. The hub authenticates the request before sending any frames. Successful responses use status `200`, `Content-Type: application/x-ndjson`, and `Cache-Control: no-store`. Each nonempty line holds one v1 envelope. A blank line is a heartbeat.
+
+| Rule | HTTP binding |
+| --- | --- |
+| C2 | Open `GET /api/v1/rooms/{room}/stream?last_seq=N`. Use the highest saved sequence for that Room, or 0. The replay route's cursor rules apply. |
+| C5 | Close the response and open a new GET to replace the subscription. |
+| C6 | A `behind` envelope ends delivery on that response. Close it and open a new GET at once from the highest saved sequence. |
+
+When a stream reaches its budget or deadline, the hub ends the response with clean EOF. This can be an empty `200` if the deadline arrives before the first frame.
+
+If a page read fails before the response starts, the hub returns an HTTP error status with a JSON error body. If the response has started, the hub aborts the body so the receiver gets a read error. If an in-stream page read detects revocation while the response is writable and before any stream deadline, the hub sends an `unauthorized` envelope and closes the stream. The stream can end with clean EOF before a page read detects revocation. On the next GET with the revoked token, the Go hub returns HTTP `401`. The Worker returns HTTP `401` if its first authenticated page read detects the revocation before that GET's deadline. If the deadline arrives first, the Worker returns an empty HTTP `200`.
+
+The receiver saves the cursor after delivering an event or counting a skip. After the stream ends, it opens a new GET with that cursor. It reports HTTP and stream errors and reconnects quietly after clean EOF. It drops sequences at or below the cursor under O4. If the receiver process stops between delivery and saving the cursor, it may deliver that event again.
+
+The Go hub also serves the full-duplex POST stream. It follows one Room and accepts the v1 `resume` envelope. A new `resume` replaces the subscription on that stream. [Hub HTTP API](../../docs/hub.md#http-api)
 
 How long a receiver waits before it opens a new connection is not part of the contract. The message `snapshot_required` of the reference belongs to retention, which is out of scope.
 

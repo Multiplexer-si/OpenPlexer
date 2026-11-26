@@ -73,7 +73,7 @@ The next audit export uses the new audit key. After policy activation, publish a
 
 ## HTTP API
 
-Use `Authorization: Bearer <token>` on every request except the two public key endpoints. Send JSON for request bodies. Successful requests return `200` and JSON.
+Use `Authorization: Bearer <token>` on every request except the two public key endpoints. Successful requests return `200`. Use JSON for request and response bodies on routes outside the Room streams.
 
 | Method and path | Result |
 |---|---|
@@ -84,7 +84,8 @@ Use `Authorization: Bearer <token>` on every request except the two public key e
 | `GET /api/v1/projects/{project}/policy.bundle` | The latest [signed policy bundle](../spec/policy/v1/signed-bundle.schema.json). |
 | `PUT /api/v1/projects/{project}/policy` | Publish a JSON bundle and return the signed bundle. Requires a lead token. |
 | `POST /api/v1/rooms/{room}/events` | Append an event and return its v1 envelope. |
-| `POST /api/v1/rooms/{room}/stream` | Exchange newline-delimited v1 Room envelopes on a full-duplex HTTP stream. |
+| `GET /api/v1/rooms/{room}/stream?last_seq=0` | Stream replay and live v1 Room envelopes as NDJSON. The cursor defaults to zero. |
+| `POST /api/v1/rooms/{room}/stream` | Exchange v1 Room envelopes on a full-duplex HTTP stream. The Go hub serves this route for older daemons. |
 | `GET /api/v1/rooms/{room}/events?last_seq=0` | Return up to 100 v1 event envelopes after `last_seq`, oldest first. The cursor defaults to zero. |
 | `POST /api/v1/rooms/{room}/claims` | Create a claim and return `granted`, `conflicts`, and the claim's `event` envelope. |
 | `POST /api/v1/rooms/{room}/claims/{claim}/renew` | Recompute a claim's expiry and return the updated lease. |
@@ -100,7 +101,11 @@ Any authenticated claim operation in an existing Room sweeps lapsed claims. The 
 
 For paged replay, pass the highest sequence number received as the next cursor. A cursor at or beyond the latest event returns an empty array.
 
-On the live stream, use `Content-Type: application/x-ndjson` and keep the request body open. Send a v1 `resume` envelope for the Room. The hub replays events after `last_seq` and then streams new events. A second `resume` replaces the subscription on that stream. A blank response line is a heartbeat. The daemon responds to a `behind` envelope with a fresh resume. If you run a reverse proxy, it must forward the request and response concurrently, with buffering disabled for the stream route.
+Open the GET stream with one `last_seq` query parameter and no request body. The same cursor rules apply to replay and streaming. The hub authenticates the request before sending any frames. Stream responses use `Content-Type: application/x-ndjson` and `Cache-Control: no-store`. The hub sends events after the cursor in order and then sends new events as they arrive. A blank response line is a heartbeat. The daemon opens a new GET from its saved cursor after EOF, timeout, or a `behind` envelope. Disable response buffering for the stream route on your reverse proxy.
+
+The Worker ends the response with clean EOF when it reaches its page call budget or stream deadline. The daemon reconnects quietly after clean EOF. A page read failure before streaming starts returns an HTTP error status and a JSON error body. After streaming starts, either hub aborts the response body if a page read fails. The daemon reports either failure and waits one second before trying again. If an in-stream page read detects revocation while the response is writable and before any stream deadline, the hub sends an `unauthorized` envelope and closes the stream. The stream can end with clean EOF before a page read detects revocation. On the next GET with the revoked token, the Go hub returns HTTP `401`. The Worker returns HTTP `401` if its first authenticated page read detects the revocation before that GET's deadline. If the deadline arrives first, the Worker returns an empty HTTP `200`.
+
+Upgrade each hub to a version that serves the GET stream before upgrading its daemons. Daemons from this release require the GET stream to receive Room events. On legacy POST streams, older daemons keep the request body open and send a v1 `resume` envelope. A second `resume` replaces the subscription on the same stream. A proxy serving legacy POST must forward the request and response concurrently.
 
 | Error | Meaning |
 |---|---|

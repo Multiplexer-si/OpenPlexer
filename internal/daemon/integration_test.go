@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -140,9 +141,9 @@ func TestAuditRoomBoundary(t *testing.T) {
 	}
 }
 
-func startTestHub(t *testing.T) (*pipeHub, *hub.Store, hubClient, hubClient) {
+func startTestHub(t *testing.T, dir string) (*pipeHub, *hub.Store, hubClient, hubClient) {
 	t.Helper()
-	store := hub.Open(t.TempDir())
+	store := hub.Open(dir)
 	if err := store.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -253,7 +254,7 @@ func receiveSeq(t *testing.T, ctx context.Context, events <-chan room.Event, wan
 }
 
 func TestHubAgentPolicyAndRoomReconnect(t *testing.T) {
-	wire, store, lead, member := startTestHub(t)
+	wire, store, lead, member := startTestHub(t, t.TempDir())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	home := t.TempDir()
@@ -371,7 +372,7 @@ func TestHubAgentPolicyAndRoomReconnect(t *testing.T) {
 }
 
 func TestRoomResumeReplacesSubscription(t *testing.T) {
-	_, _, _, member := startTestHub(t)
+	_, _, _, member := startTestHub(t, t.TempDir())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	postTestStatus(t, ctx, member, "one")
@@ -431,64 +432,164 @@ func TestHubRoomCursorIsOnDisk(t *testing.T) {
 	}
 }
 
-func TestRoomBehindResendsLastSeqOnSameConnection(t *testing.T) {
-	wire, _, _, member := startTestHub(t)
-	wire.stop()
-	var expected map[string]int64
-	decode(t, readFile(t, filepath.Join(specDir, "room", "v1", "examples", "resume", "after-41.json")), &expected)
-	var payload map[string]string
-	decode(t, readFile(t, filepath.Join(specDir, "room", "v1", "examples", "error", "behind.json")), &payload)
-	resumeSeen := make(chan struct{})
-	wire.start(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctl := http.NewResponseController(w)
-		if err := ctl.EnableFullDuplex(); err != nil {
-			t.Error(err)
-			return
-		}
-		scan := bufio.NewScanner(r.Body)
-		checkResume := func() bool {
-			if !scan.Scan() {
-				t.Errorf("missing resume: %v", scan.Err())
-				return false
-			}
-			message, err := room.ParseMessage(scan.Bytes())
-			resume, ok := message.Payload().(room.Resume)
-			if err != nil || !ok || message.Room() != member.project || resume.LastSeq != expected["last_seq"] {
-				t.Errorf("invalid resume: %s (%v)", scan.Bytes(), err)
-				return false
-			}
-			return true
-		}
-		if !checkResume() {
-			return
-		}
-		w.Header().Set("Content-Type", roomStreamType)
-		message := room.ErrorMessage(room.Sender{ID: "hub", Kind: room.Server}, member.project, time.Now().Format(time.RFC3339),
-			room.Error{Code: room.ErrorCode(payload["code"]), Message: payload["message"]})
-		if err := json.NewEncoder(w).Encode(message); err != nil {
-			t.Error(err)
-			return
-		}
-		if err := ctl.Flush(); err != nil {
-			t.Error(err)
-			return
-		}
-		if checkResume() {
-			close(resumeSeen)
-		}
-	}))
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	receiver := room.NewReceiver()
-	receiver.Restore(member.project, expected["last_seq"])
-	if err := member.followRoom(ctx, time.Now, receiver, func(room.Step, int64) error {
-		return errors.New("behind advanced the cursor")
-	}); !errors.Is(err, io.EOF) {
-		t.Fatalf("room stream returned %v", err)
+func TestRoomReportsUnreadableHubEventOnEveryRetry(t *testing.T) {
+	dir := t.TempDir()
+	_, _, _, member := startTestHub(t, dir)
+	home := t.TempDir()
+	configure(t, home, Settings{
+		HubURL: member.origin, ProjectID: member.project, MemberID: member.member, Token: member.token,
+		KeySet: newSigner(t).keySet(t),
+	})
+
+	// Keep the first page readable. The corrupt event is on the next page
+	// during replay and on the first page after reconnecting.
+	const pageSize = 100
+	for range pageSize {
+		postTestStatus(t, t.Context(), member, "")
 	}
-	select {
-	case <-resumeSeen:
-	default:
-		t.Fatal("fresh resume did not reach the same stream")
+	statePath := filepath.Join(dir, "state.json")
+	var state map[string]json.RawMessage
+	decode(t, readFile(t, statePath), &state)
+	var rooms map[string][]json.RawMessage
+	decode(t, state["rooms"], &rooms)
+	rooms[member.project] = append(rooms[member.project], json.RawMessage(`{"event":{}}`))
+	var err error
+	state["rooms"], err = json.Marshal(rooms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var lastSeq int64
+	var reports []error
+	var lastReport time.Time
+	err = Run(ctx, home, time.Now, func(event room.Event) error {
+		if event.Seq() != lastSeq+1 {
+			return fmt.Errorf("delivered sequence %d after %d", event.Seq(), lastSeq)
+		}
+		lastSeq = event.Seq()
+		return nil
+	}, func(err error) {
+		if !strings.HasPrefix(err.Error(), "Room stream:") {
+			return
+		}
+		now := time.Now()
+		if !lastReport.IsZero() && now.Sub(lastReport) < time.Second {
+			t.Errorf("retried after %v, want at least one second", now.Sub(lastReport))
+		}
+		lastReport = now
+		reports = append(reports, err)
+		if len(reports) == 3 {
+			cancel()
+		}
+	})
+	if err != nil || lastSeq != pageSize {
+		t.Fatalf("Run = %v, delivered through sequence %d, want %d", err, lastSeq, pageSize)
+	}
+	if len(reports) != 3 || !errors.Is(reports[0], io.ErrUnexpectedEOF) ||
+		!errors.Is(reports[1], hubStatus(http.StatusInternalServerError)) || !errors.Is(reports[2], hubStatus(http.StatusInternalServerError)) {
+		t.Fatalf("Room reports = %v, want an aborted stream followed by two HTTP 500s", reports)
+	}
+	var saved roomCursor
+	decode(t, readFile(t, filepath.Join(home, roomCursorFile)), &saved)
+	if saved.LastSeq != pageSize {
+		t.Fatalf("saved cursor = %d, want %d", saved.LastSeq, pageSize)
 	}
 }
+
+func TestRoomReconnectsFromSavedCursor(t *testing.T) {
+	const project = "prj-shop"
+	token := strings.Repeat("A", 43)
+	home := t.TempDir()
+	configure(t, home, Settings{
+		HubURL: testHubOrigin, ProjectID: project, MemberID: "mem-ana", Token: token, KeySet: newSigner(t).keySet(t),
+	})
+	var resume map[string]int64
+	decode(t, readFile(t, filepath.Join(specDir, "room", "v1", "examples", "resume", "after-41.json")), &resume)
+	if err := writeJSON(home, roomCursorFile, roomCursor{LastSeq: resume["last_seq"]}); err != nil {
+		t.Fatal(err)
+	}
+	status := func(seq int, body string) string {
+		return fmt.Sprintf(`{"v":1,"type":"event","sender":{"id":"mem-ana/session","kind":"daemon"},"room":%q,"seq":%d,"payload":{"id":"e%d","seq":%d,"mission":%q,"type":"status","agent":{"id":"mem-ana/session","vendor":"codex"},"on_behalf_of":"mem-ana","at":"t","body":%s}}`+"\n",
+			project, seq, seq, seq, project, body)
+	}
+	event := func(seq int) string { return status(seq, `{"summary":"working"}`) }
+	var behind bytes.Buffer
+	if err := json.Compact(&behind, readFile(t, filepath.Join(specDir, "room", "v1", "examples", "error", "behind.json"))); err != nil {
+		t.Fatal(err)
+	}
+	duplicateField := strings.Replace(event(100), `"seq":100`, `"seq":100,"seq":100`, 1)
+	replies := []struct {
+		cursor int64
+		frames string
+		end    error
+	}{
+		{41, "", io.EOF}, // The deadline arrived before the first frame.
+		{41, event(42) + "\n" + status(43, "{}") + duplicateField, io.EOF}, // The final page used the call budget.
+		{43, event(42) + event(43) + event(44), os.ErrDeadlineExceeded},
+		{44, fmt.Sprintf(`{"v":1,"type":"error","sender":{"id":"hub","kind":"server"},"room":%q,"payload":%s}`+"\n",
+			project, behind.Bytes()) + status(45, `{"summary":"after behind on old response"}`), io.EOF},
+		{44, event(44) + event(45), io.EOF},
+	}
+	var requests int
+	useHubTransport(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if r.URL.Path != "/api/v1/rooms/"+project+"/stream" {
+			return &http.Response{StatusCode: 404, Body: http.NoBody}, nil
+		}
+		if requests >= len(replies) {
+			t.Fatalf("unexpected extra stream with cursor %s", r.URL.RawQuery)
+		}
+		reply := replies[requests]
+		requests++
+		var saved roomCursor
+		decode(t, readFile(t, filepath.Join(home, roomCursorFile)), &saved)
+		if r.Method != http.MethodGet || r.Body != nil || r.Header.Get("Authorization") != "Bearer "+token ||
+			r.URL.RawQuery != fmt.Sprintf("last_seq=%d", reply.cursor) || saved.LastSeq != reply.cursor {
+			t.Fatalf("request %d has method %s, cursor %s and saved cursor %d, want GET with saved cursor %d",
+				requests, r.Method, r.URL.RawQuery, saved.LastSeq, reply.cursor)
+		}
+		stream := io.MultiReader(strings.NewReader(reply.frames), streamEnd{reply.end})
+		return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {roomStreamType}}, Body: io.NopCloser(stream)}, nil
+	}))
+	ctx, cancel := context.WithTimeout(t.Context(), 6*time.Second)
+	defer cancel()
+	var delivered []int64
+	var ended []error
+	err := Run(ctx, home, time.Now, func(event room.Event) error {
+		delivered = append(delivered, event.Seq())
+		if event.Seq() == 45 {
+			if event.Body().(*room.Status).Summary != "working" {
+				return errors.New("delivered a frame after behind on the old response")
+			}
+			cancel()
+		}
+		return nil
+	}, func(err error) {
+		if strings.HasPrefix(err.Error(), "Room stream:") {
+			ended = append(ended, err)
+		}
+	})
+	if err != nil || requests != len(replies) || !slices.Equal(delivered, []int64{42, 44, 45}) {
+		t.Fatalf("Run = %v, opened %d streams, delivered %v", err, requests, delivered)
+	}
+	if len(ended) != 2 || !errors.Is(ended[0], os.ErrDeadlineExceeded) || !errors.Is(ended[1], errRoomBehind) {
+		t.Fatalf("stream exits = %v", ended)
+	}
+	var saved roomCursor
+	decode(t, readFile(t, filepath.Join(home, roomCursorFile)), &saved)
+	if saved.LastSeq != 45 {
+		t.Fatalf("final cursor = %d, want 45", saved.LastSeq)
+	}
+}
+
+type streamEnd struct{ error }
+
+func (e streamEnd) Read([]byte) (int, error) { return 0, e.error }

@@ -1,14 +1,17 @@
-// Command multiagent runs the issue #22 flow against a fresh self-hosted hub.
+// Command multiagent runs the issue #22 flow against a fresh Go or external hub.
 package main
 
 import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
+	"flag"
 	"fmt"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -50,6 +53,7 @@ type participant struct {
 
 type run struct {
 	dir, listen, hubBin, cliBin, session, deniedPath string
+	hubURL, leadTokenFile                            string
 	a, b                                             participant
 	client                                           *http.Client
 	hub, daemonA, daemonB                            *process
@@ -69,6 +73,17 @@ func main() {
 }
 
 func mainExit() int {
+	r := &run{client: &http.Client{
+		Transport: &http.Transport{}, Timeout: 2 * time.Second,
+		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
+	}}
+	if err := r.parseFlags(os.Args[1:]); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0
+		}
+		fmt.Fprintln(os.Stderr, err)
+		return 2
+	}
 	for _, key := range []string{"CLAUDECODE", "CODEX_THREAD_ID"} {
 		if os.Getenv(key) != "" {
 			fmt.Fprintf(os.Stderr, "%s is set. Run from a plain terminal outside Claude Code and Codex.\n", key)
@@ -81,7 +96,6 @@ func mainExit() int {
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
-	r := &run{client: &http.Client{Transport: &http.Transport{}, Timeout: 2 * time.Second}}
 	r.agent, r.command, r.start = r.runAgent, runCommand, startProcess
 	record := newReport()
 	defer r.cleanup()
@@ -97,16 +111,52 @@ func mainExit() int {
 	return 0
 }
 
+func (r *run) parseFlags(args []string) error {
+	flags := flag.NewFlagSet("multiagent", flag.ContinueOnError)
+	flags.StringVar(&r.hubURL, "hub-url", "", "origin of an initialized Worker (default: start a Go hub)")
+	flags.StringVar(&r.leadTokenFile, "lead-token-file", "", "private lead token file for the external hub")
+	if err := flags.Parse(args); err != nil {
+		return err
+	}
+	if flags.NArg() != 0 {
+		return errors.New("unexpected positional arguments")
+	}
+	if (r.hubURL == "") != (r.leadTokenFile == "") {
+		return errors.New("-hub-url and -lead-token-file must be supplied together")
+	}
+	if r.hubURL == "" {
+		return nil
+	}
+	origin, err := url.Parse(r.hubURL)
+	if err != nil || origin.Hostname() == "" || origin.User != nil || origin.ForceQuery || origin.RawQuery != "" ||
+		strings.Contains(r.hubURL, "#") || (origin.EscapedPath() != "" && origin.EscapedPath() != "/") {
+		return errors.New("-hub-url must be a hub origin")
+	}
+	if origin.Scheme != "https" && (origin.Scheme != "http" ||
+		!net.ParseIP(origin.Hostname()).IsLoopback() && !strings.EqualFold(origin.Hostname(), "localhost")) {
+		return errors.New("-hub-url must use HTTPS except on loopback")
+	}
+	r.hubURL = origin.Scheme + "://" + origin.Host
+	r.leadTokenFile, err = filepath.Abs(r.leadTokenFile)
+	return err
+}
+
 func (r *run) steps() []step {
+	setup := "Start and initialize the hub, add members and project"
+	reconnect := "Restart the hub and verify B receives every Room event once"
+	if r.hubURL != "" {
+		setup = "Add members and project on the external hub"
+		reconnect = "Restart B's daemon and verify it receives every Room event once"
+	}
 	return []step{
-		{"Start and initialize the hub, add members and project", r.setupHub},
+		{setup, r.setupHub},
 		{"Publish the policy", r.publish},
 		{"Configure both homes, pin keys and sync policy", r.configure},
 		{"Install both project hooks and start both Room daemons", r.install},
 		{"Claude Code claims a path and B receives the lease event", r.claim},
 		{"A posts a decision and B receives it", r.decide},
 		{"Claude Code writes the allowed file and Codex is denied", r.enforce},
-		{"Restart the hub and verify B receives every Room event once", r.reconnect},
+		{reconnect, r.reconnect},
 	}
 }
 
@@ -122,13 +172,15 @@ func (r *run) prepare(ctx context.Context, record *report) error {
 		}
 		binaries[i] = path
 	}
-	ln, err := net.Listen("tcp4", "127.0.0.1:0")
-	if err != nil {
-		return fmt.Errorf("cannot bind a loopback TCP port on 127.0.0.1: %w", err)
-	}
-	r.listen = ln.Addr().String()
-	if err := ln.Close(); err != nil {
-		return err
+	if r.hubURL == "" {
+		ln, err := net.Listen("tcp4", "127.0.0.1:0")
+		if err != nil {
+			return fmt.Errorf("cannot bind a loopback TCP port on 127.0.0.1: %w", err)
+		}
+		r.listen = ln.Addr().String()
+		if err := ln.Close(); err != nil {
+			return err
+		}
 	}
 	dir, err := os.MkdirTemp("", "openplexer-multiagent-")
 	if err != nil {
@@ -190,11 +242,13 @@ func (r *run) prepare(ctx context.Context, record *report) error {
 }
 
 func (r *run) setupHub(ctx context.Context) error {
-	if _, err := r.hubCLI(ctx, "init"); err != nil {
-		return err
-	}
-	if err := r.startHub(ctx, "hub"); err != nil {
-		return err
+	if r.hubURL == "" {
+		if _, err := r.hubCLI(ctx, "init"); err != nil {
+			return err
+		}
+		if err := r.startHub(ctx, "hub"); err != nil {
+			return err
+		}
 	}
 	for _, p := range []*participant{&r.a, &r.b} {
 		token, err := r.hubCLI(ctx, "add-member", "-id", p.member)
@@ -293,10 +347,12 @@ func (r *run) claim(ctx context.Context) error {
 		return err
 	}
 	var claim struct {
-		Granted struct{ ID string }     `json:"granted"`
-		Event   struct{ Payload event } `json:"event"`
+		Granted struct {
+			ID string `json:"id"`
+		} `json:"granted"`
+		Event eventEnvelope `json:"event"`
 	}
-	if err := json.Unmarshal(raw, &claim); err != nil {
+	if err := jsonv2.Unmarshal(raw, &claim); err != nil {
 		return err
 	}
 	seen, err := r.awaitEvent(ctx, r.b, 1)

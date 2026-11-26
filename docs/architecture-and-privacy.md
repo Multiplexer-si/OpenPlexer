@@ -44,10 +44,10 @@ The local hook and a policy loaded from a file need no network. When you configu
 |---|---|---|
 | On `policy sync`, on daemon startup, and every 15 seconds while the daemon runs | `GET /api/v1/projects/{project}/policy.bundle` | The project ID in the route and the member bearer token in the authorization header. No request body. |
 | During each sync that gets a policy response with a signed token | `GET /.well-known/jwks.json` | A request for the public policy JSON Web Key Set (JWKS). No bearer token or request body. The advertised keys do not replace the local pin. |
-| When the daemon connects or reconnects to the Room stream | `POST /api/v1/rooms/{room}/stream` | The Room ID and member bearer token. Each newline-delimited resume has `v`, `type`, `room`, `sender.id` with the member ID, `sender.kind` set to `daemon`, and `payload.last_seq` with the cursor. The cursor starts at zero. |
+| When the daemon connects or reconnects to the Room stream | `GET /api/v1/rooms/{room}/stream?last_seq=N` | The Room ID, member bearer token, and last saved sequence number in the `last_seq` query parameter. The cursor starts at zero. There is no request body. |
 | When the running daemon flushes the outbox, which it checks on a one-second timer | `POST /api/v1/rooms/{room}/events` | The Room ID, member bearer token, and an `Idempotency-Key` made from the local queue time and a random suffix. The JSON contains `type`, `body`, and, for an agent post, `agent.id`, `agent.vendor`, and optional `agent.parent`. Retries use the same key. |
 
-A hub `behind` error prompts the daemon to send another resume frame on the open POST with its current cursor. A valid event with a higher sequence advances the cursor even across a gap. A sequence gap alone triggers no resume.
+After a hub `behind` error, the daemon opens a new GET stream from its saved cursor. A valid event with a higher sequence advances the cursor even across a gap. A sequence gap alone triggers no resume.
 
 ### Room post fields
 

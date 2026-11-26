@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	jsonv2 "encoding/json/v2"
 	"errors"
 	"fmt"
 	"io"
@@ -26,8 +27,16 @@ type event struct {
 	Type    string `json:"type"`
 	Member  string `json:"on_behalf_of"`
 	At      string `json:"at"`
-	Agent   struct{ ID, Vendor, Parent string }
-	Body    fields
+	Agent   struct {
+		ID     string `json:"id"`
+		Vendor string `json:"vendor"`
+		Parent string `json:"parent,omitempty"`
+	} `json:"agent"`
+	Body fields `json:"body"`
+}
+
+type eventEnvelope struct {
+	Payload event `json:"payload"`
 }
 
 func (e event) equal(other event) bool {
@@ -48,7 +57,12 @@ func (e event) matches(kind string, p participant, session string, body fields) 
 	return true
 }
 
-func (r *run) origin() string { return "http://" + r.listen }
+func (r *run) origin() string {
+	if r.hubURL != "" {
+		return r.hubURL
+	}
+	return "http://" + r.listen
+}
 
 func (r *run) request(ctx context.Context, token, endpoint string, input []byte) ([]byte, error) {
 	path := endpoint
@@ -90,8 +104,11 @@ func (r *run) post(ctx context.Context, kind string, body fields) error {
 }
 
 func (r *run) hubCLI(ctx context.Context, command string, args ...string) ([]byte, error) {
-	args = append([]string{command, "-data-dir", filepath.Join(r.dir, "hub-data")}, args...)
-	return r.command(ctx, r.dir, serviceEnv(r.a), r.hubBin, nil, args...)
+	flags := []string{command, "-data-dir", filepath.Join(r.dir, "hub-data")}
+	if r.hubURL != "" {
+		flags = []string{command, "--hub", r.hubURL, "--token-file", r.leadTokenFile}
+	}
+	return r.command(ctx, r.dir, serviceEnv(r.a), r.hubBin, nil, append(flags, args...)...)
 }
 
 func (r *run) cli(ctx context.Context, p participant, input []byte, args ...string) ([]byte, error) {
@@ -142,35 +159,22 @@ func (r *run) reconnect(ctx context.Context) error {
 	if err := awaitCursor(ctx, r.b, before.Seq); err != nil {
 		return err
 	}
-	streamErrors := func() (int, error) {
-		data, err := os.ReadFile(r.b.path("room.err"))
-		return bytes.Count(data, []byte("Room stream:")), err
-	}
-	previous, err := streamErrors()
-	if err != nil {
-		return err
-	}
-	r.hub.stop()
-	if err := waitFor(ctx, "B to observe the hub disconnect", func(context.Context) (bool, error) {
-		if err := r.daemonB.running(); err != nil {
-			return false, err
-		}
-		count, err := streamErrors()
-		return count > previous, err
-	}); err != nil {
-		return err
-	}
-	// Hold B at its existing cursor until the hub has stored a new event.
-	// B must replay that event on the same daemon process after it resumes.
-	if err := r.daemonB.signal(syscall.SIGSTOP); err != nil {
-		return err
-	}
 	queued := fields{"summary": "Queued while the hub was down"}
+	if r.hubURL == "" {
+		if err := r.pauseForHubRestart(ctx); err != nil {
+			return err
+		}
+	} else {
+		r.daemonB.stop()
+		queued["summary"] = "Posted while B was disconnected"
+	}
 	if err := r.post(ctx, "status", queued); err != nil {
 		return err
 	}
-	if err := r.startHub(ctx, "hub-restarted"); err != nil {
-		return err
+	if r.hubURL == "" {
+		if err := r.startHub(ctx, "hub-restarted"); err != nil {
+			return err
+		}
 	}
 	missed, err := r.awaitEvent(ctx, r.a, before.Seq+1)
 	if err != nil {
@@ -184,9 +188,14 @@ func (r *run) reconnect(ctx context.Context) error {
 		return err
 	}
 	if len(events) != before.Seq {
-		return fmt.Errorf("B received %d events while paused at %d", len(events), before.Seq)
+		return fmt.Errorf("B received %d events while held at %d", len(events), before.Seq)
 	}
-	if err := r.daemonB.signal(syscall.SIGCONT); err != nil {
+	if r.hubURL == "" {
+		err = r.daemonB.signal(syscall.SIGCONT)
+	} else {
+		r.daemonB, err = r.start(ctx, r.b.project, serviceEnv(r.b), r.cliBin, r.b.path("room-reconnected"), "daemon")
+	}
+	if err != nil {
 		return err
 	}
 	replayed, err := r.awaitEvent(ctx, r.b, missed.Seq)
@@ -213,13 +222,35 @@ func (r *run) reconnect(ctx context.Context) error {
 	return r.compareHistory(ctx, before.Seq+2)
 }
 
+func (r *run) pauseForHubRestart(ctx context.Context) error {
+	streamErrors := func() (int, error) {
+		data, err := os.ReadFile(r.b.path("room.err"))
+		return bytes.Count(data, []byte("Room stream:")), err
+	}
+	previous, err := streamErrors()
+	if err != nil {
+		return err
+	}
+	r.hub.stop()
+	if err := waitFor(ctx, "B to observe the hub disconnect", func(context.Context) (bool, error) {
+		if err := r.daemonB.running(); err != nil {
+			return false, err
+		}
+		count, err := streamErrors()
+		return count > previous, err
+	}); err != nil {
+		return err
+	}
+	return r.daemonB.signal(syscall.SIGSTOP)
+}
+
 func (r *run) compareHistory(ctx context.Context, count int) error {
 	raw, err := r.request(ctx, r.b.token, "/events?last_seq=0", nil)
 	if err != nil {
 		return err
 	}
-	var replay []struct{ Payload event }
-	if err := json.Unmarshal(raw, &replay); err != nil {
+	var replay []eventEnvelope
+	if err := jsonv2.Unmarshal(raw, &replay); err != nil {
 		return err
 	}
 	events, err := roomEvents(r.b)
@@ -240,6 +271,9 @@ func (r *run) compareHistory(ctx context.Context, count int) error {
 func roomEvents(p participant) ([]event, error) {
 	var events []event
 	if err := readLines(p.path("room.jsonl"), &events); err != nil {
+		return nil, err
+	}
+	if err := readLines(p.path("room-reconnected.jsonl"), &events); err != nil && !os.IsNotExist(err) {
 		return nil, err
 	}
 	seen := make(map[string]bool)
@@ -264,7 +298,7 @@ func awaitCursor(ctx context.Context, p participant, seq int) error {
 		var cursor struct {
 			Seq int `json:"last_seq"`
 		}
-		err = json.Unmarshal(raw, &cursor)
+		err = jsonv2.Unmarshal(raw, &cursor)
 		return cursor.Seq == seq, err
 	})
 }
@@ -280,7 +314,7 @@ func readLines[T any](path string, result *[]T) error {
 			return nil
 		}
 		var value T
-		if err := json.Unmarshal(line, &value); err != nil {
+		if err := jsonv2.Unmarshal(line, &value); err != nil {
 			return fmt.Errorf("%s: %w", path, err)
 		}
 		*result = append(*result, value)

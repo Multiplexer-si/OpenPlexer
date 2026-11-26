@@ -47,6 +47,7 @@ func (a agentInput) session(member string) (agentInput, error) {
 func (s *Store) roomRoutes(mux *http.ServeMux) {
 	mux.HandleFunc("POST /api/v1/rooms/{room}/events", s.roomEndpoint(maxRoomBody, s.postEvent))
 	mux.HandleFunc("GET /api/v1/rooms/{room}/events", s.roomEndpoint(0, replay))
+	mux.HandleFunc("GET /api/v1/rooms/{room}/stream", s.streamRoom)
 	mux.HandleFunc("POST /api/v1/rooms/{room}/stream", s.streamRoom)
 	mux.HandleFunc("POST /api/v1/rooms/{room}/claims", s.claimEndpoint(createClaim))
 	mux.HandleFunc("POST /api/v1/rooms/{room}/claims/{claim}/renew", s.claimEndpoint(renewClaim))
@@ -145,21 +146,29 @@ func (st *state) appendEvent(roomID, member string, agent agentInput, kind strin
 }
 
 func replay(st *state, req request) (any, error) {
-	query, err := url.ParseQuery(req.URL.RawQuery)
+	after, err := replayCursor(req.URL.RawQuery)
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid query string", errInvalid)
+		return nil, err
+	}
+	return roomPage(st.Rooms[req.roomID()], after)
+}
+
+func replayCursor(rawQuery string) (uint64, error) {
+	query, err := url.ParseQuery(rawQuery)
+	if err != nil {
+		return 0, fmt.Errorf("%w: invalid query string", errInvalid)
 	}
 	after := uint64(0)
 	if values, present := query["last_seq"]; present {
 		if len(values) != 1 {
-			return nil, fmt.Errorf("%w: last_seq must be supplied once", errInvalid)
+			return 0, fmt.Errorf("%w: last_seq must be supplied once", errInvalid)
 		}
 		after, err = strconv.ParseUint(values[0], 10, 53)
 		if err != nil {
-			return nil, fmt.Errorf("%w: last_seq must be a nonnegative safe integer", errInvalid)
+			return 0, fmt.Errorf("%w: last_seq must be a nonnegative safe integer", errInvalid)
 		}
 	}
-	return roomPage(st.Rooms[req.roomID()], after)
+	return after, nil
 }
 
 func roomPage(events []eventRecord, after uint64) ([]room.Message, error) {
