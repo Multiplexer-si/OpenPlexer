@@ -96,13 +96,14 @@ Store a protected copy of `wrap-key-v1` separately from your audit exports. Wrap
 
 Use `mem-lee` as the first lead in this example. The command saves its token in the private file you name. Retry with that same file if the init request is interrupted.
 
-The `add-member` commands use `noclobber` so a retry cannot overwrite an existing token file.
+The setup block stops at the first error. The `add-member` commands use `noclobber` so a retry cannot overwrite an existing token file.
 
 ```sh
-openplexer-hub init --hub "$hub" --token-file "$credentials/bootstrap.token" \
-  --id mem-lee --lead-token-file "$credentials/lee.token"
-
 (
+  set -e
+  openplexer-hub init --hub "$hub" --token-file "$credentials/bootstrap.token" \
+    --id mem-lee --lead-token-file "$credentials/lee.token"
+
   set -o noclobber
   openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
     --id mem-sam --role lead > "$credentials/sam.token"
@@ -110,10 +111,12 @@ openplexer-hub init --hub "$hub" --token-file "$credentials/bootstrap.token" \
     --id mem-claude > "$credentials/claude.token"
   openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
     --id mem-codex > "$credentials/codex.token"
+  openplexer-hub add-project --hub "$hub" --token-file "$credentials/lee.token" \
+    --id prj-demo --repo demo
 )
-openplexer-hub add-project --hub "$hub" --token-file "$credentials/lee.token" \
-  --id prj-demo --repo demo
 ```
+
+If a token file exists but is empty, the member may have been created. Check with a lead. If the member exists, have the lead remove it first. The Worker protects the last lead from removal. Delete the empty file and retry that `add-member` command.
 
 Give the second lead their token through a private channel. Keep the two lead credentials separately so either person can administer the team. Use the second lead's token to check their access before removing the bootstrap secret.
 
