@@ -104,6 +104,15 @@ class Reader {
     return "";
   };
 
+  timestamp: Read<string> = (path, value) => {
+    if (isText(value) && value.length === 24) {
+      const date = new Date(value);
+      if (Number.isFinite(date.valueOf()) && date.toISOString() === value) return value;
+    }
+    this.fail(path, "must be a UTC timestamp with milliseconds");
+    return "";
+  };
+
   nonBlank: Read<string> = (path, value) => {
     if (isText(value) && value.trim() !== "") return value;
     this.fail(path, "must be a string with a character that is not white space");
@@ -199,7 +208,10 @@ function eventFields(r: Reader): Record<EventType, Field[]> {
       r.field(obj, path, "request_id", r.text, false);
     }), false]],
     human: [["text", r.text], ["mentions", r.list, false]],
-    "policy.denied": [["action", r.text], ["path", r.text], ["rule", r.text], ["detected", r.text, false]],
+    "policy.denied": [
+      ["action", r.text], ["path", r.text], ["rule", r.text], ["detected", r.text, false],
+      ["decided_at", r.timestamp, false],
+    ],
     "policy.override": [
       ["lead", r.text], ["agent", r.text], ["areas", r.list], ["actions", r.list], ["scope", r.text], ["reason", r.text],
     ],
@@ -245,6 +257,15 @@ export function parseEventPost(input: Uint8Array) {
     const body = r.body(obj, type);
     return { type: type ?? "status", agent, body };
   });
+}
+
+export function denialDecidedAt(post: ReturnType<typeof parseEventPost>, receivedAt: number): string | undefined {
+  const decidedAt = post.body.decided_at;
+  if (post.type !== "policy.denied" || typeof decidedAt !== "string") return undefined;
+  if (Date.parse(decidedAt) - receivedAt > 30_000) {
+    throw new SyntaxError("body.decided_at must be no more than 30 seconds after at");
+  }
+  return decidedAt;
 }
 
 export function parseClaimPost(input: Uint8Array) {
