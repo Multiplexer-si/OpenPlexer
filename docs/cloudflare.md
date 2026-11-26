@@ -72,11 +72,11 @@ Run these commands once for a new Worker. They generate the secrets into private
 
 ```sh
 umask 077
-credentials=$(mktemp -d "$HOME/openplexer-cloudflare.XXXXXX")
-openssl rand -hex 32 > "$credentials/bootstrap.token"
-openssl rand -hex 32 > "$credentials/wrap-key-v1"
-npx wrangler secret put BOOTSTRAP_TOKEN < "$credentials/bootstrap.token"
-npx wrangler secret put WRAP_KEY_V1 < "$credentials/wrap-key-v1"
+credentials=$(mktemp -d "$HOME/openplexer-cloudflare.XXXXXX") &&
+openssl rand -hex 32 > "$credentials/bootstrap.token" &&
+openssl rand -hex 32 > "$credentials/wrap-key-v1" &&
+npx wrangler secret put BOOTSTRAP_TOKEN < "$credentials/bootstrap.token" &&
+npx wrangler secret put WRAP_KEY_V1 < "$credentials/wrap-key-v1" &&
 npm run deploy
 ```
 
@@ -94,24 +94,31 @@ Store a protected copy of `wrap-key-v1` separately from your audit exports. Wrap
 
 ## 4. Create the lead accounts and project
 
-Use `mem-lee` as the first lead in this example. The command saves its token in the private file you name. Retry with that same file if the init request is interrupted.
-
-The setup block stops at the first error. The `add-member` commands use `noclobber` so a retry cannot overwrite an existing token file.
+Use `mem-lee` as the first lead. Save its token in a fresh private directory.
 
 ```sh
+lead_tokens=$(umask 077 && mktemp -d "$credentials/lead.XXXXXX") &&
+lead_token="$lead_tokens/lee.token" &&
+openplexer-hub init --hub "$hub" --token-file "$credentials/bootstrap.token" \
+  --id mem-lee --lead-token-file "$lead_token"
+```
+
+If the init request is interrupted, rerun just the `openplexer-hub init` command. Keep the same `lead_token` path.
+
+The setup block stops at the first error. It writes the new member tokens in a fresh private directory.
+
+```sh
+member_tokens=$(umask 077 && mktemp -d "$credentials/members.XXXXXX") &&
 (
   set -e
-  openplexer-hub init --hub "$hub" --token-file "$credentials/bootstrap.token" \
-    --id mem-lee --lead-token-file "$credentials/lee.token"
-
-  set -o noclobber
-  openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
-    --id mem-sam --role lead > "$credentials/sam.token"
-  openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
-    --id mem-claude > "$credentials/claude.token"
-  openplexer-hub add-member --hub "$hub" --token-file "$credentials/lee.token" \
-    --id mem-codex > "$credentials/codex.token"
-  openplexer-hub add-project --hub "$hub" --token-file "$credentials/lee.token" \
+  umask 077
+  openplexer-hub add-member --hub "$hub" --token-file "$lead_token" \
+    --id mem-sam --role lead > "$member_tokens/sam.token"
+  openplexer-hub add-member --hub "$hub" --token-file "$lead_token" \
+    --id mem-claude > "$member_tokens/claude.token"
+  openplexer-hub add-member --hub "$hub" --token-file "$lead_token" \
+    --id mem-codex > "$member_tokens/codex.token"
+  openplexer-hub add-project --hub "$hub" --token-file "$lead_token" \
     --id prj-demo --repo demo
 )
 ```
@@ -121,7 +128,7 @@ If a token file exists but is empty, the member may have been created. Check wit
 Give the second lead their token through a private channel. Keep the two lead credentials separately so either person can administer the team. Use the second lead's token to check their access before removing the bootstrap secret.
 
 ```sh
-openplexer-hub export --hub "$hub" --token-file "$credentials/sam.token" \
+openplexer-hub export --hub "$hub" --token-file "$member_tokens/sam.token" \
   --out "$credentials/second-lead-check"
 npx wrangler secret delete BOOTSTRAP_TOKEN
 rm "$credentials/bootstrap.token"
@@ -138,7 +145,7 @@ cat > "$credentials/policy.json" <<'JSON'
  "roles": {"dev": {"read": [], "write": ["app"], "exec": []}},
  "members": {"mem-claude": "dev", "mem-codex": "dev"}}
 JSON
-openplexer-hub publish-policy --hub "$hub" --token-file "$credentials/lee.token" \
+openplexer-hub publish-policy --hub "$hub" --token-file "$lead_token" \
   --project prj-demo --file "$credentials/policy.json"
 curl -fsS "$hub/.well-known/jwks.json" -o "$credentials/keys.json"
 ```
@@ -211,7 +218,7 @@ Run this in the operator shell. Use a new output directory for each export.
 
 ```sh
 audit=$(mktemp -d "$credentials/audit.XXXXXX")
-openplexer-hub export --hub "$hub" --token-file "$credentials/lee.token" --out "$audit"
+openplexer-hub export --hub "$hub" --token-file "$lead_token" --out "$audit"
 openplexer-verify --export "$audit/export.json" --jwks "$audit/jwks.json" \
   --checkpoint "$audit/checkpoint.jws"
 jq -e 'any(.entries[]; .action == "event.policy-denied" and .actor_member_id == "mem-codex")' "$audit/export.json"
@@ -226,8 +233,8 @@ Export and verify daily and before upgrades or key changes. Keep each export, it
 Set a time when developers and audit reviewers can receive new pins. Stage both signing keys in the operator shell and fetch the updated key sets.
 
 ```sh
-policy_kid=$(openplexer-hub stage-key --hub "$hub" --token-file "$credentials/lee.token" --purpose policy)
-audit_kid=$(openplexer-hub stage-key --hub "$hub" --token-file "$credentials/lee.token" --purpose audit)
+policy_kid=$(openplexer-hub stage-key --hub "$hub" --token-file "$lead_token" --purpose policy)
+audit_kid=$(openplexer-hub stage-key --hub "$hub" --token-file "$lead_token" --purpose audit)
 curl -fsS "$hub/.well-known/jwks.json" -o "$credentials/keys-next.json"
 curl -fsS "$hub/.well-known/audit-jwks.json" -o "$credentials/audit-keys-next.json"
 ```
@@ -241,12 +248,12 @@ openplexer configure --keys "$OPENPLEXER_HOME/keys-next.json"
 After developers and reviewers have the new pins, activate the keys and publish a higher version for every project. For the example project, run:
 
 ```sh
-openplexer-hub activate-key --hub "$hub" --token-file "$credentials/lee.token" \
+openplexer-hub activate-key --hub "$hub" --token-file "$lead_token" \
   --purpose policy --kid "$policy_kid"
-openplexer-hub activate-key --hub "$hub" --token-file "$credentials/lee.token" \
+openplexer-hub activate-key --hub "$hub" --token-file "$lead_token" \
   --purpose audit --kid "$audit_kid"
 jq '.version += 1' "$credentials/policy.json" > "$credentials/policy-next.json"
-openplexer-hub publish-policy --hub "$hub" --token-file "$credentials/lee.token" \
+openplexer-hub publish-policy --hub "$hub" --token-file "$lead_token" \
   --project prj-demo --file "$credentials/policy-next.json"
 mv "$credentials/policy-next.json" "$credentials/policy.json"
 ```
@@ -258,9 +265,9 @@ Developers can run `openplexer policy sync` and `openplexer policy status` to ch
 Remove the member's token at the hub. Remove their grants from the policy and publish a higher version. For example, revoke the Codex member this way.
 
 ```sh
-openplexer-hub remove-member --hub "$hub" --token-file "$credentials/lee.token" --id mem-codex
+openplexer-hub remove-member --hub "$hub" --token-file "$lead_token" --id mem-codex
 jq 'del(.members["mem-codex"]) | .version += 1' "$credentials/policy.json" > "$credentials/policy-next.json"
-openplexer-hub publish-policy --hub "$hub" --token-file "$credentials/lee.token" \
+openplexer-hub publish-policy --hub "$hub" --token-file "$lead_token" \
   --project prj-demo --file "$credentials/policy-next.json"
 mv "$credentials/policy-next.json" "$credentials/policy.json"
 ```
@@ -294,7 +301,7 @@ To run the API and edge checks instead of initializing the team by hand, stop af
 
 On a team you already initialized, pass its lead token file and omit `--bootstrap-token-file`. Run with the same Wrangler configuration and account you deployed. The script creates test members and projects and redeploys the Worker. Its disconnect check uses Wrangler tail. It reports one result per check and exits nonzero if a check fails. Omit `--budget` to skip both stream budget checks.
 
-To run both agents by hand after the script initializes the team, use `remote-lead.token` in place of `lee.token` and start with the `noclobber` block in step 4. After the second lead test, remove the bootstrap secret as shown there.
+To run both agents by hand after the script initializes the team, set `lead_token="$credentials/remote-lead.token"`. Start with the second command block in step 4. After the second lead test, remove the bootstrap secret as shown in step 4.
 
 ## Delete a test deployment
 

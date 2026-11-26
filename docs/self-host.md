@@ -28,7 +28,7 @@ To use a source checkout, start with [Build from source](#build-from-source).
 
 ## Initialize the data directory and publish a policy
 
-Start with a new data directory. `init` creates `state.json` and generates the signing key.
+Start with a new data directory. `init` creates `state.json` and generates the signing key. The setup saves member tokens in a fresh private directory.
 
 ```sh
 data_dir="$hub_root/data"
@@ -37,12 +37,12 @@ repo=api
 
 mkdir -m 700 "$data_dir" &&
 "$hub" init -data-dir "$data_dir" &&
+tokens=$(umask 077 && mktemp -d "$hub_root/tokens.XXXXXX") &&
 (
   umask 077 &&
-  set -C &&
-  "$hub" add-member -data-dir "$data_dir" -id mem-lee -role lead > "$hub_root/mem-lee.token" &&
-  "$hub" add-member -data-dir "$data_dir" -id mem-ana > "$hub_root/mem-ana.token" &&
-  "$hub" add-member -data-dir "$data_dir" -id mem-sam > "$hub_root/mem-sam.token"
+  "$hub" add-member -data-dir "$data_dir" -id mem-lee -role lead > "$tokens/mem-lee.token" &&
+  "$hub" add-member -data-dir "$data_dir" -id mem-ana > "$tokens/mem-ana.token" &&
+  "$hub" add-member -data-dir "$data_dir" -id mem-sam > "$tokens/mem-sam.token"
 ) &&
 "$hub" add-project -data-dir "$data_dir" -id "$project" -repo "$repo" &&
 jq --arg project "$project" --arg repo "$repo" \
@@ -71,7 +71,7 @@ curl --noproxy 127.0.0.1 --fail --silent --show-error --max-time 2 \
 	--retry 5 --retry-connrefused --retry-delay 1 \
 	"$hub_url/.well-known/jwks.json" -o "$hub_root/keys.json"
 for member in mem-lee mem-ana mem-sam; do
-	printf 'Authorization: Bearer %s\n' "$(cat "$hub_root/$member.token")" |
+	printf 'Authorization: Bearer %s\n' "$(cat "$tokens/$member.token")" |
 		curl --noproxy 127.0.0.1 --fail --silent --show-error --max-time 2 --header @- \
 			"$hub_url/api/v1/projects/$project/policy.bundle" -o "$hub_root/$member.bundle.json"
 	OPENPLEXER_HOME="$hub_root/check-$member" openplexer \
@@ -174,9 +174,12 @@ On the hub host, export the team's audit log so a reviewer can verify it offline
 
 Stop the hub and pause admin commands before taking a backup. On Linux, use `sudo systemctl stop openplexer-hub`. On macOS, use `sudo launchctl bootout system /Library/LaunchDaemons/com.openplexer.hub.plist`.
 
+Save each archive in a fresh private directory.
+
 ```sh
-backup="$hub_root/openplexer-$(date +%Y%m%d-%H%M%S).tar"
-(umask 077 && set -C && sudo tar -C /var/lib -cf - openplexer > "$backup")
+backup_dir=$(umask 077 && mktemp -d "$hub_root/backup.XXXXXX") &&
+backup="$backup_dir/openplexer-$(date +%Y%m%d-%H%M%S).tar" &&
+(umask 077 && sudo tar -C /var/lib -cf - openplexer > "$backup")
 ```
 
 Store the archive securely off the hub host. It contains the signing private key, token hashes, the current signed policies, Room history, and active claims. To restore on the same host, stop the service, move the existing data directory aside, and extract with `sudo tar -C /var/lib -xpf "$backup"`. Check that `/var/lib/openplexer` is private and owned by the service account before restarting. Restoring an older backup also rolls back policy versions, membership, and Room sequence numbers.
