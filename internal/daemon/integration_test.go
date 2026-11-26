@@ -141,9 +141,9 @@ func TestAuditRoomBoundary(t *testing.T) {
 	}
 }
 
-func startTestHub(t *testing.T) (*pipeHub, *hub.Store, hubClient, hubClient) {
+func startTestHub(t *testing.T, dir string) (*pipeHub, *hub.Store, hubClient, hubClient) {
 	t.Helper()
-	store := hub.Open(t.TempDir())
+	store := hub.Open(dir)
 	if err := store.Init(); err != nil {
 		t.Fatal(err)
 	}
@@ -254,7 +254,7 @@ func receiveSeq(t *testing.T, ctx context.Context, events <-chan room.Event, wan
 }
 
 func TestHubAgentPolicyAndRoomReconnect(t *testing.T) {
-	wire, store, lead, member := startTestHub(t)
+	wire, store, lead, member := startTestHub(t, t.TempDir())
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	home := t.TempDir()
@@ -372,7 +372,7 @@ func TestHubAgentPolicyAndRoomReconnect(t *testing.T) {
 }
 
 func TestRoomResumeReplacesSubscription(t *testing.T) {
-	_, _, _, member := startTestHub(t)
+	_, _, _, member := startTestHub(t, t.TempDir())
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	postTestStatus(t, ctx, member, "one")
@@ -432,6 +432,79 @@ func TestHubRoomCursorIsOnDisk(t *testing.T) {
 	}
 }
 
+func TestRoomReportsUnreadableHubEventOnEveryRetry(t *testing.T) {
+	dir := t.TempDir()
+	_, _, _, member := startTestHub(t, dir)
+	home := t.TempDir()
+	configure(t, home, Settings{
+		HubURL: member.origin, ProjectID: member.project, MemberID: member.member, Token: member.token,
+		KeySet: newSigner(t).keySet(t),
+	})
+
+	// Keep the first page readable. The corrupt event is on the next page
+	// during replay and on the first page after reconnecting.
+	const pageSize = 100
+	for range pageSize {
+		postTestStatus(t, t.Context(), member, "")
+	}
+	statePath := filepath.Join(dir, "state.json")
+	var state map[string]json.RawMessage
+	decode(t, readFile(t, statePath), &state)
+	var rooms map[string][]json.RawMessage
+	decode(t, state["rooms"], &rooms)
+	rooms[member.project] = append(rooms[member.project], json.RawMessage(`{"event":{}}`))
+	var err error
+	state["rooms"], err = json.Marshal(rooms)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := json.Marshal(state)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(statePath, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	var lastSeq int64
+	var reports []error
+	var lastReport time.Time
+	err = Run(ctx, home, time.Now, func(event room.Event) error {
+		if event.Seq() != lastSeq+1 {
+			return fmt.Errorf("delivered sequence %d after %d", event.Seq(), lastSeq)
+		}
+		lastSeq = event.Seq()
+		return nil
+	}, func(err error) {
+		if !strings.HasPrefix(err.Error(), "Room stream:") {
+			return
+		}
+		now := time.Now()
+		if !lastReport.IsZero() && now.Sub(lastReport) < time.Second {
+			t.Errorf("retried after %v, want at least one second", now.Sub(lastReport))
+		}
+		lastReport = now
+		reports = append(reports, err)
+		if len(reports) == 3 {
+			cancel()
+		}
+	})
+	if err != nil || lastSeq != pageSize {
+		t.Fatalf("Run = %v, delivered through sequence %d, want %d", err, lastSeq, pageSize)
+	}
+	if len(reports) != 3 || !errors.Is(reports[0], io.ErrUnexpectedEOF) ||
+		!errors.Is(reports[1], hubStatus(http.StatusInternalServerError)) || !errors.Is(reports[2], hubStatus(http.StatusInternalServerError)) {
+		t.Fatalf("Room reports = %v, want an aborted stream followed by two HTTP 500s", reports)
+	}
+	var saved roomCursor
+	decode(t, readFile(t, filepath.Join(home, roomCursorFile)), &saved)
+	if saved.LastSeq != pageSize {
+		t.Fatalf("saved cursor = %d, want %d", saved.LastSeq, pageSize)
+	}
+}
+
 func TestRoomReconnectsFromSavedCursor(t *testing.T) {
 	const project = "prj-shop"
 	token := strings.Repeat("A", 43)
@@ -459,8 +532,8 @@ func TestRoomReconnectsFromSavedCursor(t *testing.T) {
 		frames string
 		end    error
 	}{
-		{41, "", io.EOF},
-		{41, event(42) + "\n" + status(43, "{}") + duplicateField, io.EOF},
+		{41, "", io.EOF}, // The deadline arrived before the first frame.
+		{41, event(42) + "\n" + status(43, "{}") + duplicateField, io.EOF}, // The final page used the call budget.
 		{43, event(42) + event(43) + event(44), os.ErrDeadlineExceeded},
 		{44, fmt.Sprintf(`{"v":1,"type":"error","sender":{"id":"hub","kind":"server"},"room":%q,"payload":%s}`+"\n",
 			project, behind.Bytes()) + status(45, `{"summary":"after behind on old response"}`), io.EOF},

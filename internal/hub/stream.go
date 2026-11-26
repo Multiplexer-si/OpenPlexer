@@ -72,18 +72,24 @@ func (s *Store) streamRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	encoder := json.NewEncoder(w)
+	started := false
 	send := func(message *room.Message) error {
-		if err := controller.SetWriteDeadline(time.Now().Add(5 * time.Second)); err != nil {
-			return err
-		}
-		if message == nil {
-			if _, err := w.Write([]byte("\n")); err != nil {
-				return err
+		err := controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
+		if err == nil {
+			if message == nil {
+				_, err = w.Write([]byte("\n"))
+			} else {
+				err = encoder.Encode(message)
 			}
-		} else if err := encoder.Encode(message); err != nil {
-			return err
 		}
-		return controller.Flush()
+		if err == nil {
+			err = controller.Flush()
+		}
+		if err != nil && download {
+			panic(http.ErrAbortHandler)
+		}
+		started = true
+		return err
 	}
 	ctx, cancel := context.WithCancel(r.Context())
 	defer cancel()
@@ -126,10 +132,14 @@ func (s *Store) streamRoom(w http.ResponseWriter, r *http.Request) {
 			cursor, _ = message.Seq()
 		case readNow:
 			if err := read(cursor, &page); err != nil {
-				if errors.Is(err, errUnauthorized) {
+				if download && !started {
+					respond(w, nil, err)
+				} else if errors.Is(err, errUnauthorized) {
 					message := room.ErrorMessage(room.Sender{ID: "hub", Kind: room.Server}, roomID,
 						s.now().UTC().Format(timestampFmt), room.Error{Code: "unauthorized", Message: "invalid bearer token"})
 					_ = send(&message)
+				} else if download {
+					panic(http.ErrAbortHandler)
 				}
 				return
 			}

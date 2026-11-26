@@ -102,7 +102,7 @@ type roundTripFunc func(*http.Request) (*http.Response, error)
 func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
 
 func TestRoomPostSurvivesDisconnectAndLostAcknowledgement(t *testing.T) {
-	wire, store, _, member := startTestHub(t)
+	wire, store, _, member := startTestHub(t, t.TempDir())
 	ctx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 	defer cancel()
 	home := t.TempDir()
