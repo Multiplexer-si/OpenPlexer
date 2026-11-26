@@ -7,7 +7,9 @@ The Worker serves team setup, member and project administration, signed policies
 
 On authenticated routes, the Worker rejects bearer tokens containing a comma with 401 before reading the body. On capped routes, the Go hub applies the body cap before rejecting a single 43-byte comma bearer. The public JWKS routes check no bearer.
 
-Use the Room events endpoint to post and replay events, and the claim endpoints to create, renew, and release leases. To follow a Room, open `GET /api/v1/rooms/{room}/stream?last_seq=0` with a member bearer. The stream sends v1 NDJSON envelopes after the cursor and blank lines while caught up. It checks membership on every page read. It sends `unauthorized` and closes if the member is revoked. The response ends after up to five minutes or 400 Durable Object calls. Open a new GET from the last saved sequence. The Worker returns 405 for POST to the stream route. [Hub HTTP API](../../docs/hub.md#http-api)
+Use the Room events endpoint to post and replay events, and the claim endpoints to create, renew, and release leases. To follow a Room, open `GET /api/v1/rooms/{room}/stream?last_seq=0` with a member bearer. The stream sends v1 NDJSON envelopes after the cursor and blank lines while caught up. It checks membership on every page read. It sends `unauthorized` and closes if the member is revoked.
+
+The five-minute deadline starts when the Worker receives the request and applies to every page read. The Worker discards results that arrive at or after the deadline. If the deadline expires before the first frame, the Worker returns an empty NDJSON response with HTTP 200. The Worker makes at most 400 Durable Object calls per stream, including the first authenticated read. After the stream ends, open a new GET from the last saved sequence. The Worker returns 405 for POST to the stream route. [Hub HTTP API](../../docs/hub.md#http-api)
 
 ## Run locally
 

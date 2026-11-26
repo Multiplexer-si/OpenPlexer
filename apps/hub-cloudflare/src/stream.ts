@@ -12,7 +12,7 @@ const utf8 = new TextEncoder();
 
 export function roomStream(
   signal: AbortSignal, room: string, initial: Page, read: (after: number) => Promise<RoomPage>,
-  limits: typeof streamLimits, started: number,
+  limits: typeof streamLimits, remainingMs: () => number,
 ): ReadableStream<Uint8Array> {
   let cursor = initial.cursor;
   let page: Page["frames"] | undefined = initial.frames;
@@ -40,6 +40,11 @@ export function roomStream(
     close();
   }
 
+  function isFinished() {
+    if (remainingMs() <= 0) finish();
+    return stopped;
+  }
+
   return new ReadableStream({
     start(controller) {
       close = () => controller.close();
@@ -48,7 +53,7 @@ export function roomStream(
         return;
       }
       signal.addEventListener("abort", finish, { once: true });
-      budgetTimer = setTimeout(finish, Math.max(0, limits.durationMs - (Date.now() - started)));
+      budgetTimer = setTimeout(finish, remainingMs());
       writeTimer = setTimeout(finish, limits.writeMs);
     },
     async pull(controller) {
@@ -60,12 +65,12 @@ export function roomStream(
         });
         wakePoll = undefined;
       }
-      if (stopped) return;
+      if (isFinished()) return;
       try {
         if (!page) {
           calls++;
           const next = await read(cursor);
-          if (stopped) return;
+          if (isFinished()) return;
           if (!next.ok) {
             if (next.status === 401) {
               controller.enqueue(utf8.encode(JSON.stringify({

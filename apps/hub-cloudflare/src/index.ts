@@ -22,7 +22,7 @@ export interface Env {
 type RoutingEnv = Pick<Env, "HUB_HOSTNAME" | "TEAM_ID" | "DEV_MODE"> & {
   TEAM_HUB: {
     idFromName(name: string): DurableObjectId;
-    get(id: DurableObjectId): Pick<DurableObjectStub<TeamHub>, "fetch" | "readRoomPage">;
+    get(id: DurableObjectId): Pick<TeamHub, "fetch" | "readRoomPage">;
   };
 };
 
@@ -30,7 +30,10 @@ const jsonHeaders = { "Cache-Control": "no-store" };
 
 export default { fetch: (request: Request, env: RoutingEnv) => fetchHub(request, env) } satisfies ExportedHandler<Env>;
 
-export async function fetchHub(request: Request, env: RoutingEnv, limits = streamLimits): Promise<Response> {
+export async function fetchHub(
+  request: Request, env: RoutingEnv, limits = streamLimits, now = Date.now,
+): Promise<Response> {
+  const deadline = now() + limits.durationMs;
   const { hostname } = new URL(request.url);
   const local = env.DEV_MODE === "1" && (hostname === "localhost" || hostname === "127.0.0.1");
   if (hostname !== env.HUB_HOSTNAME.toLowerCase() && !local) {
@@ -50,18 +53,34 @@ export async function fetchHub(request: Request, env: RoutingEnv, limits = strea
 
   try {
     allow(request.method, ["GET", "HEAD"]);
-    const started = Date.now();
     const hash = bearer(request);
     const read = (after: RoomRead["after"]) => stub.readRoomPage({ hash, room, after });
-    const initial = await read(request.url);
+    const remainingMs = () => deadline - now();
+    const initial = await readFirstPage(() => read(request.url), remainingMs);
+    if (initial === undefined) return new Response(null, { headers: streamHeaders });
     if (!initial.ok) {
       throw initial.status === 401 ? unauthorized() : new HubError(initial.status, initial.message);
     }
-    const body = request.method === "HEAD" ? null : roomStream(request.signal, room, initial, read, limits, started);
+    const body = request.method === "HEAD" ? null : roomStream(request.signal, room, initial, read, limits, remainingMs);
     return new Response(body, { headers: streamHeaders });
   } catch (error) {
     const failure = error instanceof HubError ? error : new HubError(500, "hub state unavailable");
     return headResponse(request, failure.response());
+  }
+}
+
+async function readFirstPage(read: () => Promise<RoomPage>, remainingMs: () => number): Promise<RoomPage | undefined> {
+  const remaining = remainingMs();
+  if (remaining <= 0) return;
+  const timeout = Promise.withResolvers<undefined>();
+  const timer = setTimeout(() => timeout.resolve(undefined), remaining);
+  try {
+    const page = await Promise.race([read(), timeout.promise]);
+    if (remainingMs() > 0) return page;
+  } catch (error) {
+    if (remainingMs() > 0) throw error;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

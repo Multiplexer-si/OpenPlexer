@@ -9,6 +9,7 @@ import { tokenHash } from "../src/http";
 import { fetchHub } from "../src/index";
 import { newToken } from "../src/state";
 import { streamLimits } from "../src/stream";
+import type { RoomRead } from "../src/stream";
 
 beforeEach(reset);
 
@@ -136,17 +137,34 @@ test("routes Room methods before auth and returns implicit HEAD for replay", asy
 
 async function openStream(member: string, options: {
   query?: string; signal?: AbortSignal; limits?: Partial<typeof streamLimits>;
+  now?: () => number; delayPage?: (after: RoomRead["after"]) => Promise<void>;
 } = {}) {
   const stream = new Request(request(room + "/stream" + (options.query ?? ""), "GET", member), { signal: options.signal });
-  const response = await fetchHub(stream, env, { ...streamLimits, pollMs: 1, ...options.limits });
+  const response = await fetchHub(stream, {
+    ...env,
+    TEAM_HUB: {
+      idFromName: (name) => env.TEAM_HUB.idFromName(name),
+      get(id) {
+        const hub = env.TEAM_HUB.get(id);
+        return {
+          fetch: (req) => hub.fetch(req),
+          async readRoomPage(read) {
+            const page = await hub.readRoomPage(read);
+            await options.delayPage?.(read.after);
+            return page;
+          },
+        };
+      },
+    },
+  }, { ...streamLimits, pollMs: 1, ...options.limits }, options.now);
   expect(response.status).toBe(200);
   expect(response.headers.get("Content-Type")).toBe("application/x-ndjson");
   expect(response.headers.get("Cache-Control")).toBe("no-store");
-  if (!response.body) throw new Error("Expected a Room response body");
-  const reader = response.body.getReader();
+  const reader = response.body?.getReader();
   return {
-    cancel: () => reader.cancel(),
+    cancel: () => reader?.cancel(),
     async next() {
+      if (!reader) return;
       const { done, value } = await reader.read();
       return done ? undefined : new TextDecoder().decode(value);
     },
@@ -252,6 +270,76 @@ test("closes at the duration budget while caught up", async () => {
     expect(await live.next()).toBeUndefined();
   } finally {
     await live.cancel();
+  }
+});
+
+test("drops the first page if its read finishes after the request deadline", async () => {
+  const { member } = await setup();
+  await postStatus(member);
+  let now = 0;
+  const live = await openStream(member, {
+    limits: { calls: 1 },
+    now: () => now,
+    async delayPage() { now += 300_500; },
+  });
+  try {
+    expect(await live.next()).toBeUndefined();
+  } finally {
+    await live.cancel();
+  }
+});
+
+test.each([
+  { elapsed: 300_500, sendsPage: false },
+  { elapsed: 299_999, sendsPage: true },
+])("handles a later page that finishes $elapsed ms into the request", async ({ elapsed, sendsPage }) => {
+  const { member } = await setup();
+  const first = await postStatus(member);
+  let now = 0;
+  const live = await openStream(member, {
+    limits: { calls: 2 },
+    now: () => now,
+    async delayPage(after) {
+      if (after === 1) now += elapsed;
+    },
+  });
+  try {
+    expect(await live.next()).toBe(first);
+    const second = await postStatus(member);
+    const third = await postStatus(member);
+    if (sendsPage) {
+      expect(await live.next()).toBe(second);
+      expect(await live.next()).toBe(third);
+    }
+    expect(await live.next()).toBeUndefined();
+  } finally {
+    await live.cancel();
+  }
+});
+
+test("returns an empty stream while the first page read is still pending", async () => {
+  const { member } = await setup();
+  await postStatus(member);
+  const hold = Promise.withResolvers<void>();
+  let released = false;
+  const fallback = setTimeout(hold.resolve, 1_500);
+  try {
+    const live = await openStream(member, {
+      limits: { durationMs: 500, calls: 1 },
+      async delayPage() {
+        await hold.promise;
+        released = true;
+      },
+    });
+    try {
+      expect(released).toBe(false);
+      expect(await live.next()).toBeUndefined();
+    } finally {
+      await live.cancel();
+    }
+  } finally {
+    clearTimeout(fallback);
+    hold.resolve();
   }
 });
 

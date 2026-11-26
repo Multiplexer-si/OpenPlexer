@@ -11,7 +11,7 @@ test("counts the initial read toward the 400-call budget and closes after the la
   const stream = roomStream(signal, "demo", page(0), async (cursor) => {
     cursors.push(cursor);
     return page(cursor);
-  }, streamLimits, Date.now());
+  }, streamLimits, () => streamLimits.durationMs);
   const lines = (await new Response(stream).text()).trimEnd().split("\n");
   expect(cursors).toEqual(Array.from({ length: 400 }, (_, i) => i));
   expect(lines).toEqual(cursors.map((cursor) => JSON.stringify({ seq: cursor + 1 })));
@@ -24,7 +24,7 @@ test("emits a heartbeat and stops waiting when the request signal aborts", async
   const stream = roomStream(request.signal, "demo", page, async () => {
     reads++;
     return page;
-  }, { ...streamLimits, pollMs: 60_000 }, Date.now());
+  }, { ...streamLimits, pollMs: 60_000 }, () => streamLimits.durationMs);
   const reader = stream.getReader();
   try {
     expect((await reader.read()).value).toEqual(new Uint8Array([10]));
