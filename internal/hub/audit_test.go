@@ -10,8 +10,10 @@ import (
 	"os"
 	"slices"
 	"testing"
+	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/audit"
+	"github.com/multiplexer-si/openplexer/internal/room"
 )
 
 func TestAuditAppendCommitsWithItsAction(t *testing.T) {
@@ -65,13 +67,35 @@ func TestAuditAppendCommitsWithItsAction(t *testing.T) {
 	if entry.Target != "event:"+event.ID() || entry.Result != "denied" ||
 		entry.ActorMemberID == nil || *entry.ActorMemberID != "member" ||
 		entry.AgentMemberID == nil || *entry.AgentMemberID != "member" ||
-		entry.AgentSessionID == nil || *entry.AgentSessionID != "member/session" {
+		entry.AgentSessionID == nil || *entry.AgentSessionID != "member/session" || len(entry.Meta) != 3 {
 		t.Errorf("denial record = %+v", entry)
 	}
 	for _, secret := range []string{token, hex.EncodeToString(hash[:]), base64.RawURLEncoding.EncodeToString(hash[:]), string(encode(t, hash))} {
 		if bytes.Contains(after.Export, []byte(secret)) {
 			t.Fatal("audit export contains authentication material")
 		}
+	}
+}
+
+func TestRoomDenialRejectsInvalidDecisionTime(t *testing.T) {
+	s, token := roomStore(t, "project", "member")
+	s.now = func() time.Time { return time.Date(2026, 1, 15, 12, 0, 0, 999999, time.UTC) }
+	h := s.Handler()
+	path := eventsURL("project")
+	post := func(decidedAt string) []byte {
+		return fmt.Appendf(nil, `{"type":"policy.denied","agent":{"id":"session","vendor":"codex"},"body":{"action":"write","path":"src/main.go","rule":"locked","decided_at":%q},"at":"spoofed"}`, decidedAt)
+	}
+	before := snapshot(t, s)
+	for _, invalid := range []string{"yesterday", "2026-01-15T12:00:30.001Z"} {
+		wantStatus(t, call(h, http.MethodPost, path, token, post(invalid), "denial"), http.StatusBadRequest)
+	}
+	if after := snapshot(t, s); !bytes.Equal(before.Export, after.Export) {
+		t.Fatal("invalid decision time changed the audit log")
+	}
+	const atLimit = "2026-01-15T12:00:30.000Z"
+	event := eventResponse(t, call(h, http.MethodPost, path, token, post(atLimit), "denial"))
+	if event.Seq() != 1 || event.At() != "2026-01-15T12:00:00.000Z" || event.Body().(*room.PolicyDenied).DecidedAt != atLimit {
+		t.Fatalf("unexpected event %s at %s with body %+v", event.ID(), event.At(), event.Body())
 	}
 }
 

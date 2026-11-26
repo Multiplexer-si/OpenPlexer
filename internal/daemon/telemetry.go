@@ -126,6 +126,9 @@ func copyPostFields(post room.EventPost, fields postFields, body map[string]any)
 			path = "[omitted]"
 		}
 		body["action"], body["path"], body["rule"] = action, path, "denied by policy"
+		if decidedAt, present := src["decided_at"]; present {
+			body["decided_at"] = decidedAt
+		}
 	}
 	return nil
 }

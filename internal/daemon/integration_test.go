@@ -419,23 +419,17 @@ func TestQueuedDenialKeepsDecisionTime(t *testing.T) {
 	default:
 		t.Fatal("daemon did not deliver the queued denial")
 	}
-	data, err := json.Marshal(event)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var wire struct {
-		Body struct {
-			DecidedAt string `json:"decided_at"`
-		}
-	}
-	decode(t, data, &wire)
-	want := decision.Format(audit.CreatedAtLayout)
-	if wire.Body.DecidedAt != want || event.At() <= want {
-		t.Fatalf("Room decision time = %q, received at = %q, want decision time %q", wire.Body.DecidedAt, event.At(), want)
+	want := decision.Format(room.TimestampLayout)
+	denial, ok := event.Body().(*room.PolicyDenied)
+	if !ok || denial.DecidedAt != want || event.At() <= want {
+		t.Fatalf("Room denial body = %+v, received at = %q, want decision time %q", event.Body(), event.At(), want)
 	}
 	snapshot, err := store.ExportAudit()
 	if err != nil {
 		t.Fatal(err)
+	}
+	if verified := audit.VerifyExport(snapshot.Export, snapshot.JWKS, snapshot.Checkpoint); !verified.OK {
+		t.Fatal(verified.Diagnostic())
 	}
 	var exported struct{ Entries []audit.Record }
 	decode(t, snapshot.Export, &exported)

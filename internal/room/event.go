@@ -3,7 +3,22 @@ package room
 import (
 	"encoding/json"
 	"strconv"
+	"time"
 )
+
+// TimestampLayout is the UTC millisecond format the hub writes in at.
+const TimestampLayout = "2006-01-02T15:04:05.000Z"
+
+func (r *reader) timestamp(path string, value any) string {
+	text, ok := value.(string)
+	if ok && len(text) == len(TimestampLayout) {
+		if at, err := time.Parse(TimestampLayout, text); err == nil && at.Format(TimestampLayout) == text {
+			return text
+		}
+	}
+	r.fail(path, "must be a UTC timestamp with milliseconds")
+	return ""
+}
 
 // Agent names who posted an event. Parent is "" unless the event is from a
 // sub-agent.

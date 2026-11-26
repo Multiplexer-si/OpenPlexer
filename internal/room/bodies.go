@@ -113,7 +113,7 @@ type Human struct {
 
 type PolicyDenied struct {
 	Thread
-	Action, Path, Rule, Detected string
+	Action, Path, Rule, Detected, DecidedAt string
 }
 
 type PolicyOverride struct {
@@ -197,6 +197,7 @@ func (b *PolicyDenied) read(r *reader, path string, o object) {
 	b.Path, _ = field(r, path, o, "path", required, r.text)
 	b.Rule, _ = field(r, path, o, "rule", required, r.text)
 	b.Detected, _ = field(r, path, o, "detected", optional, r.text)
+	b.DecidedAt, _ = field(r, path, o, "decided_at", optional, r.timestamp)
 }
 
 func (b *PolicyOverride) read(r *reader, path string, o object) {

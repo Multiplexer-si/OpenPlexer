@@ -16,7 +16,7 @@ import (
 const (
 	maxRoomBody  = 64 << 10
 	replayPage   = 100
-	timestampFmt = "2006-01-02T15:04:05.000Z"
+	timestampFmt = room.TimestampLayout
 	humanVendor  = "human"
 )
 
@@ -106,16 +106,24 @@ func (s *Store) postEvent(st *state, req request) (any, error) {
 	}
 	delete(post.Body, "flagged")
 	now := s.now()
+	decidedAt, err := post.DenialDecidedAt(now)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %w", errInvalid, err)
+	}
 	event, err := st.appendEvent(req.roomID(), req.member, agent, post.Type, post.Body, now, key)
 	if err != nil {
 		return nil, fmt.Errorf("%w: event: %w", errInvalid, err)
 	}
 	if event.Type() == "policy.denied" {
 		// Link to the event without copying arbitrary Room text into the audit log.
+		meta := map[string]any{"room_id": event.Mission(), "seq": event.Seq(), "event_id": event.ID()}
+		if decidedAt != "" {
+			meta["decided_at"] = decidedAt
+		}
 		if err := st.appendAudit(audit.Record{
 			ActorMemberID: &req.member, AgentSessionID: &agent.ID,
 			Action: "event.policy-denied", Target: "event:" + event.ID(),
-			Meta: map[string]any{"room_id": event.Mission(), "seq": event.Seq(), "event_id": event.ID()},
+			Meta: meta,
 		}, now); err != nil {
 			return nil, err
 		}
