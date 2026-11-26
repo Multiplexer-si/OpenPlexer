@@ -21,6 +21,8 @@ Revoking a member deletes only the roster row. Historical IDs stay valid. Keep R
 
 Each audited write uses `transactionSync` (F3). In one callback, check authorization and state, apply the change, seal the record against `audit_tip`, insert it at `audit_seq + 1`, and advance both tip fields. This covers `member.added` (including the first lead), `member.removed`, `project.added`, `policy.updated`, `event.policy-denied`, and the key changes in section 4. For a denial, the change includes the Room event and sequence. Its audit metadata is only `room_id`, `seq`, and `event_id`. Remote admin records name the authenticated lead. Bootstrap has a null actor. An identical current policy or repeated denial post writes no second record.
 
+The Worker also seals `claim.created`, `claim.renewed`, `claim.released`, and `claim.expired` in the same transaction as the lease change. Each record targets `claim:<id>` and names the Room and holder's agent session. Creation, release, and expiry link to the corresponding Room event by ID and sequence. Renewal records the new expiry. An automatic expiry has a null actor.
+
 The named object is the one writer. Its synchronous callback runs without another request interleaving, and a failed callback rolls back both the action and the record (F2 through F4). It is the same read, seal, and commit boundary as the Go hub's file lock and atomic rename. Handlers can interleave across `await` (F4). Prepare signatures outside the transaction, then recheck the lead, project, roster, policy version, and signing key before committing. If the key changed, prepare a new signature. Use synchronous SHA-256 for the audit seal (F10). Send success after the durable commit (F4).
 
 One object per Room would spread load, but a Room denial and the team audit tip would then have separate writers. A single JSON snapshot would also preserve atomicity, but would rewrite history on every append. #82 defines the team routing, schema, and migrations. #84 through #86 own these writes. #81 races submissions and checks that sequence numbers and audit links form one chain each.
@@ -37,7 +39,7 @@ Full-duplex POST keeps the current Go transport, but concurrent upload and downl
 
 ## 3. Admin without a data folder
 
-Use the existing `lead` role for remote administration. `openplexer-hub init`, `add-member`, `remove-member`, `add-project`, `publish-policy`, and `export-audit` accept `--hub <origin>`. Read credentials from a private file or stdin. Require HTTPS off loopback and refuse redirects, as the daemon does. Keep the Go hub's existing local commands and `serve -data-dir`.
+Use the existing `lead` role for remote administration. `openplexer-hub init`, `add-member`, `remove-member`, `add-project`, `publish-policy`, `export`, `stage-key`, and `activate-key` accept `--hub <origin>`. Read credentials from a private file or stdin. Require HTTPS off loopback and refuse redirects, as the daemon does. Keep the Go hub's existing local commands and `serve -data-dir`.
 
 For `init`, the operator sets a random bootstrap bearer in a Worker secret (F8). The admin CLI generates the first lead's base64url token from 32 random bytes, saves it in an owner-only file, and submits the lead ID and the hex SHA-256 of the token. Initialization creates the team, keys, and first lead together. With the bootstrap secret still set, a retry reads the same private token file. If the stored lead matches, it succeeds without writing anything. Other initialization requests for that team conflict. Remove the bootstrap secret after testing the lead token.
 
@@ -84,6 +86,8 @@ Keep the Go paths, methods, results, and validation. Reuse the existing v1 schem
 JSON successes are 200. New admin operations with no result return `{}`. New admin JSON bodies have a 64 KiB limit. Match the Go error envelope `{"error":"..."}`, `Cache-Control: no-store`, and `WWW-Authenticate: Bearer` on 401. Preserve 400 for body reads that fail, 401 for invalid or revoked credentials, 403 for a role refusal, 404 for an unknown project or Room, 413 for an oversized body, and 500 for unavailable hub state. As in Go, check bearer syntax before reading a capped body and check roster membership after the read. Match implicit HEAD on the existing GET routes and 405 with `Allow` for wrong methods. In an existing Room, a claim request sweeps expired leases before the requested action. Commit the sweep even if that action fails validation or cannot find its lease. Retain Go's claim release order by claim ID and renewal behavior. [Go hub API](hub.md#http-api) and [Room rules](../spec/room/README.md#claims-and-expiry).
 
 The Worker sends the JSON error envelope and `Cache-Control: no-store` on 405 so all its HTTP errors use the same format. The Go router keeps its existing plain-text 405.
+
+Send one `Idempotency-Key` header per Room post. Workerd exposes repeated headers as one combined value, which the Worker uses as the key. Go uses the first value.
 
 ## 6. Limits and cost
 

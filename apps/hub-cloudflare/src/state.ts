@@ -43,12 +43,14 @@ export function authenticate(sql: TransactionSQL, hash: ArrayBuffer, leadOnly = 
 }
 
 export function appendAudit(sql: TransactionSQL, action: Pick<UnsealedRecord, "action" | "target" | "actor_member_id">
-    & Partial<Pick<UnsealedRecord, "meta" | "agent_session_id" | "reason" | "flagged">>): void {
+    & Partial<Pick<UnsealedRecord, "meta" | "agent_session_id" | "reason" | "flagged">>,
+  createdAt?: string,
+): void {
   const current = activeTeam(sql);
   const seq = current.audit_seq + 1;
   const record = seal({
     agent_session_id: null, reason: null, flagged: false, meta: null, ...action,
-    id: String(seq), workspace_id: current.workspace_id, created_at: new Date().toISOString(),
+    id: String(seq), workspace_id: current.workspace_id, created_at: createdAt ?? new Date().toISOString(),
   }, current.audit_tip);
   sql.exec(`INSERT INTO audit_records
     (seq, workspace_id, actor_member_id, agent_session_id, reason, action, target, meta_json, flagged, created_at, prev_hash, hash)

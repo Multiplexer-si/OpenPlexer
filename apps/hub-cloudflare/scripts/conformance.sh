@@ -69,7 +69,7 @@ cat > "$state/policy.json" <<'JSON'
 JSON
 admin publish-policy --project conformance --file "$state/policy.json"
 
-sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export)$/^(escaped-paths|policy-jwks|audit-jwks|audit-export|project|policy-bundle|publish-policy|policy|audit|separate-key-pairs|read-projects-and-seeded-policy|missing-project-and-bundle|publish-and-version-floor|body-limit|canonical-limit)$'
+sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|room-events|claims|concurrency)$'
 go test -count=1 -v ./test/hubconformance -run "$sections" -args \
   -hub-url "$origin" -wrangler-dev -lead-token-file "$state/lead.token" -member-token-file "$state/member.token" \
   -revoked-token-file "$state/revoked.token"
@@ -88,6 +88,10 @@ const result = JSON.parse(fs.readFileSync(dir + "/verified.json", "utf8"));
 if (result.ok !== true || result.completeness !== "through_checkpoint" ||
     result.entries !== audit.entries.length || result.checkpoint_entries !== result.entries) {
   throw new Error("Expected the checkpoint to authenticate the full export");
+}
+const actions = new Set(audit.entries.map((entry) => entry.action));
+for (const action of ["event.policy-denied", "claim.created", "claim.renewed", "claim.released", "claim.expired"]) {
+  if (!actions.has(action)) throw new Error("Missing audit action " + action);
 }
 audit.entries[0].target += "-tampered";
 fs.writeFileSync(dir + "/tampered.json", JSON.stringify(audit));

@@ -36,6 +36,7 @@ go test -count=1 ./test/hubconformance -args \
 If the fixture uses other project IDs, pass `-project` and `-second-project` after `-args`.
 
 When testing against `wrangler dev`, pass `-hub-url` and `-wrangler-dev` after `-args`. The suite rejects `-wrangler-dev` without `-hub-url` before it starts a hub.
+The race checks the audit chain and its earlier checkpoint on both the Go hub and Wrangler. The Worker's `scripts/conformance.sh` then runs `openplexer-verify` on an export that includes Room denials and claim records.
 
 ## Checks by target
 

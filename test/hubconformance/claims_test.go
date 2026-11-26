@@ -176,7 +176,7 @@ func (f *fixture) claims(t *testing.T) {
 				if err != nil {
 					t.Fatal("could not submit the one-second claim")
 				}
-				if f.target != builtInGo && res.status == http.StatusBadRequest {
+				if f.target == externalHub && res.status == http.StatusBadRequest {
 					res.expect(t, post, path, http.StatusBadRequest)
 					t.Skip("external hub rejected the one-second claim TTL needed for a bounded expiry check")
 				}
