@@ -1,6 +1,8 @@
 package hubconformance
 
 import (
+	"bytes"
+	"mime"
 	"net/http"
 	"slices"
 	"strings"
@@ -92,6 +94,12 @@ func (f *fixture) auth(t *testing.T) {
 						res, err := f.send(t.Context(), r.method, r.path, "", rejectedBody, "", fields...)
 						if err != nil {
 							t.Fatal(f.redact(err.Error()))
+						}
+						if f.cloudflareEdge && len(fields) > 1 && res.status == http.StatusBadRequest {
+							media, _, _ := mime.ParseMediaType(res.header.Get("Content-Type"))
+							if media == "text/html" && bytes.Contains(res.body, []byte("<center>cloudflare</center>")) {
+								continue
+							}
 						}
 						res.expect(t, r.method, r.path, http.StatusUnauthorized)
 					}

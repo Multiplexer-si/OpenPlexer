@@ -30,6 +30,7 @@ import (
 var (
 	hubURL           = flag.String("hub-url", "", "origin of a seeded hub (default: start a Go hub)")
 	wranglerDev      = flag.Bool("wrangler-dev", false, "use small bodies for early bearer rejections against Wrangler dev (requires -hub-url)")
+	cloudflareEdge   = flag.Bool("cloudflare-edge", false, "allow Cloudflare edge to reject duplicate Authorization fields (requires -hub-url)")
 	leadTokenFile    = flag.String("lead-token-file", "", "file containing the lead token")
 	memberTokenFile  = flag.String("member-token-file", "", "file containing the member token")
 	revokedTokenFile = flag.String("revoked-token-file", "", "optional file containing a previously revoked token")
@@ -60,11 +61,16 @@ type fixture struct {
 	origin, lead, member, revoked, unknown string
 	missing                                string
 	target                                 hubTarget
+	cloudflareEdge                         bool
 	client                                 *http.Client
 }
 
-func targetFromFlags(origin string, wrangler bool) (hubTarget, error) {
+func targetFromFlags(origin string, wrangler, edge bool) (hubTarget, error) {
 	switch {
+	case wrangler && edge:
+		return 0, errors.New("-wrangler-dev and -cloudflare-edge are mutually exclusive")
+	case edge && origin == "":
+		return 0, errors.New("-cloudflare-edge requires -hub-url")
 	case wrangler && origin == "":
 		return 0, errors.New("-wrangler-dev requires -hub-url")
 	case origin == "":
@@ -78,18 +84,23 @@ func targetFromFlags(origin string, wrangler bool) (hubTarget, error) {
 
 func TestValidateTarget(t *testing.T) {
 	for _, tc := range []struct {
-		name, origin string
-		wrangler     bool
-		wantError    bool
+		name, origin   string
+		wrangler, edge bool
+		want           hubTarget
+		wantError      bool
 	}{
-		{name: "built-in-go"},
-		{name: "external", origin: "https://hub.example.test"},
-		{name: "wrangler-with-origin", origin: "https://hub.example.test", wrangler: true},
+		{name: "built-in-go", want: builtInGo},
+		{name: "external", origin: "https://hub.example.test", want: externalHub},
+		{name: "wrangler-with-origin", origin: "https://hub.example.test", wrangler: true, want: localWrangler},
 		{name: "wrangler-without-origin", wrangler: true, wantError: true},
+		{name: "edge-with-origin", origin: "https://hub.example.test", edge: true, want: externalHub},
+		{name: "edge-without-origin", edge: true, wantError: true},
+		{name: "edge-and-wrangler", origin: "https://hub.example.test", wrangler: true, edge: true, wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := targetFromFlags(tc.origin, tc.wrangler); (err != nil) != tc.wantError {
-				t.Fatalf("targetFromFlags returned %v, want error: %t", err, tc.wantError)
+			target, err := targetFromFlags(tc.origin, tc.wrangler, tc.edge)
+			if (err != nil) != tc.wantError || !tc.wantError && target != tc.want {
+				t.Fatalf("targetFromFlags returned %v, %v, want target %v and error: %t", target, err, tc.want, tc.wantError)
 			}
 		})
 	}
@@ -97,7 +108,7 @@ func TestValidateTarget(t *testing.T) {
 
 func setup(t *testing.T) *fixture {
 	t.Helper()
-	target, err := targetFromFlags(*hubURL, *wranglerDev)
+	target, err := targetFromFlags(*hubURL, *wranglerDev, *cloudflareEdge)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +117,7 @@ func setup(t *testing.T) *fixture {
 		t.Fatal("-project and -second-project must be distinct hub IDs")
 	}
 	f := &fixture{
-		target: target, missing: "missing-" + rand.Text(),
+		target: target, cloudflareEdge: *cloudflareEdge, missing: "missing-" + rand.Text(),
 		client: &http.Client{
 			Timeout:       10 * time.Second,
 			CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },

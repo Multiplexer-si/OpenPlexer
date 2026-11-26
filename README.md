@@ -34,7 +34,7 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 | See what stays local, what the hub receives, and what each part guarantees | [Architecture and privacy](docs/architecture-and-privacy.md) |
 | Decide whether to trust the hooks on your machine | [Trust model](docs/trust-model.md) |
 | Load a signed policy on your machine and check an action against it | [Local policy gate](docs/local-policy.md) |
-| Run a hub for your team | [Self-host the OpenPlexer hub](docs/self-host.md) |
+| Choose a hub for your team | [Compare the Go and Cloudflare hubs](docs/hub.md#choose-a-hub) · [Self-host the Go hub](docs/self-host.md) · [Deploy to Cloudflare](docs/cloudflare.md) |
 | See the design for running a team hub on Cloudflare | [Cloudflare hub design](docs/cloudflare-hub-design.md) |
 | Connect Claude Code to the gate, remove it, or see what its hook cannot see | [Claude Code hooks](docs/hooks-claude-code.md) |
 | Connect Codex to the gate, remove it, or see what its hook cannot see | [Codex hooks](docs/hooks-codex.md) |

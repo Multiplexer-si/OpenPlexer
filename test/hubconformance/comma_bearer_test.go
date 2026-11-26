@@ -13,12 +13,14 @@ func TestCommaBearerBodyOrder(t *testing.T) {
 	const replay = "OPENPLEXER_TEST_COMMA_BEARER_REPLAY"
 	external := []string{"-hub-url=https://hub.example.test"}
 	wrangler := []string{"-hub-url=https://hub.example.test", "-wrangler-dev"}
+	edge := []string{"-hub-url=https://hub.example.test", "-cloudflare-edge"}
 	for _, tc := range []struct {
-		name       string
-		flags      []string
-		status     int
-		omitHeader string
-		failure    string
+		name          string
+		flags         []string
+		status        int
+		omitHeader    string
+		failure       string
+		duplicateBody string
 	}{
 		{name: "go-401", status: 401, failure: "status 401, want 413"},
 		{name: "go-413", status: 413},
@@ -29,10 +31,16 @@ func TestCommaBearerBodyOrder(t *testing.T) {
 		{name: "external-500", flags: external, status: 500, failure: "status 500, want 401 or 413"},
 		{name: "external-401-no-challenge", flags: external, status: 401, omitHeader: "WWW-Authenticate", failure: "missing WWW-Authenticate: Bearer"},
 		{name: "external-413-no-cache-control", flags: external, status: 413, omitHeader: "Cache-Control", failure: "missing Cache-Control: no-store"},
+		{name: "edge-duplicate-400", flags: edge, status: 401, duplicateBody: "<center>cloudflare</center>"},
+		{name: "edge-duplicate-generic-400", flags: edge, status: 401, duplicateBody: "<h1>Bad Request</h1>", failure: "status 400, want 401"},
+		{name: "edge-single-comma-400", flags: edge, status: 400, failure: "status 400, want 401 or 413"},
+		{name: "go-duplicate-400", status: 413, duplicateBody: "<center>cloudflare</center>", failure: "status 400, want 401"},
+		{name: "wrangler-duplicate-400", flags: wrangler, status: 401, duplicateBody: "<center>cloudflare</center>", failure: "status 400, want 401"},
+		{name: "external-duplicate-400", flags: external, status: 401, duplicateBody: "<center>cloudflare</center>", failure: "status 400, want 401"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if os.Getenv(replay) == "1" {
-				replayCommaBearer(t, tc.status, tc.omitHeader)
+				replayCommaBearer(t, tc.status, tc.omitHeader, tc.duplicateBody)
 				return
 			}
 			// A rejected response fails the conformance test, so observe it in a subprocess.
@@ -51,21 +59,28 @@ func TestCommaBearerBodyOrder(t *testing.T) {
 	}
 }
 
-func replayCommaBearer(t *testing.T, replayStatus int, omitHeader string) {
+func replayCommaBearer(t *testing.T, replayStatus int, omitHeader, duplicateBody string) {
 	t.Helper()
 	const commaBearer = "Bearer aaaaaaaaaaaaaaaaaaaaa,aaaaaaaaaaaaaaaaaaaaa"
 	wantSizes := []int64{policyLimit + 1, 2}
 	if *wranglerDev {
 		wantSizes = wantSizes[1:]
 	}
-	target, err := targetFromFlags(*hubURL, *wranglerDev)
+	target, err := targetFromFlags(*hubURL, *wranglerDev, *cloudflareEdge)
 	if err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{target: target, origin: "https://hub.example.test", unknown: strings.Repeat("b", 43)}
+	f := &fixture{target: target, cloudflareEdge: *cloudflareEdge, origin: "https://hub.example.test", unknown: strings.Repeat("b", 43)}
 	commaRequests := 0
 	f.client = &http.Client{Transport: commaBearerTransport(func(req *http.Request) (*http.Response, error) {
 		defer req.Body.Close()
+		if duplicateBody != "" && len(req.Header.Values("Authorization")) > 1 {
+			return &http.Response{
+				StatusCode: http.StatusBadRequest,
+				Header:     http.Header{"Content-Type": {"text/html; charset=UTF-8"}},
+				Body:       io.NopCloser(strings.NewReader(duplicateBody)),
+			}, nil
+		}
 		status := http.StatusUnauthorized
 		switch req.Header.Get("Authorization") {
 		case commaBearer:

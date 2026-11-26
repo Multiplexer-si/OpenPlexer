@@ -200,6 +200,16 @@ rm -rf ~/openplexer-test ~/.local/bin/openplexer ~/.local/bin/openplexer-hub ~/.
 
 The hook lived only in `~/openplexer-test/demo`, so nothing else needs to be removed.
 
+## Try the same walkthrough on Cloudflare
+
+Use the source binaries and a disposable Worker for steps 1 to 3. Initialize the team over HTTPS and publish the same `prj-demo` policy with separate member IDs for Claude Code and Codex. Follow steps 1 to 5 of the [Cloudflare guide](cloudflare.md).
+
+For step 4, use the HTTPS origin, your member token, and the operator's trusted key set. Use a separate `OPENPLEXER_HOME` per member. [Connect each developer and their agent](cloudflare.md#6-connect-each-developer-and-their-agent)
+
+Use the same policy checks, Claude Code prompts, and Room post from steps 4 to 6. Skip the hook install in step 5 if you already installed it through the Cloudflare guide. In every terminal, use the home for the member running that command. Use the Codex hook and trust steps from the Cloudflare guide to test the second agent.
+
+For step 7, export over HTTPS with a lead token. Then use the same verifier and edit a copy of the export to see the A3 tamper check. Stop both daemons and delete the disposable Worker when you finish. [Export and verify the audit log](cloudflare.md#7-export-and-verify-the-audit-log) · [Delete a test deployment](cloudflare.md#delete-a-test-deployment)
+
 ## Next steps
 
 - Run a hub for a team: [Self-host the OpenPlexer hub](self-host.md).

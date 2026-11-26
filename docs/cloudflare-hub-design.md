@@ -53,7 +53,7 @@ Deployment-only admin commands would require Cloudflare credentials for routine 
 
 At initialization, generate distinct P-256 key pairs for policy and checkpoints. Store public JWKs and wrap each private PKCS#8 key with AES-256-GCM and a fresh nonce before writing it to SQLite. Bind the ciphertext to the team, purpose, and `kid` as authenticated data. The wrapping key lives in a separate versioned Worker secret, apart from the bootstrap secret (F8). Use Worker Web Crypto for randomness, wrapping, and ECDSA with SHA-256 (F9). Use the [canonical JSON](../spec/canonical-json/README.md) bytes and the existing [policy](../spec/policy/README.md#the-signed-bundle) and [checkpoint](../spec/audit/README.md#checkpoint-format-and-key) JWS formats, including raw 64-byte `r || s` and the Go `kid` derivation. Checkpoint IDs have the `audit-` prefix.
 
-A lead stages one new key per purpose and then activates it. Staging adds the public JWK immediately and records `key.staged`. Distribute the updated policy JWKS through the trusted channel and apply it with `openplexer configure --keys` before activation. Give audit reviewers the new audit JWKS the same way. Activation switches the signing pointer, clears the retired key's wrapped private material from active storage, and records `key.activated`. Keep every public JWK in its purpose's JWKS, including retired keys. Policy activation signs future versions. Publish a higher version to move a project's stored bundle to the new key. Checkpoint activation applies to the next export. To rotate the wrapping key, load the new secret alongside the old one, rewrap and verify the active and staged rows, then remove the old binding (F8). For a signing key compromise, replace affected pins out of band and preserve earlier trusted checkpoints for comparison.
+A lead stages one new key per purpose and then activates it. Staging adds the public JWK immediately and records `key.staged`. Distribute the updated policy JWKS through the trusted channel and apply it with `openplexer configure --keys` before activation. Give audit reviewers the new audit JWKS the same way. Activation switches the signing pointer, clears the retired key's wrapped private material from active storage, and records `key.activated`. Keep every public JWK in its purpose's JWKS, including retired keys. Policy activation signs future versions. Publish a higher version to move a project's stored bundle to the new key. Checkpoint activation applies to the next export. To rotate the wrapping key, load the new secret alongside the old one, rewrap and verify the active and staged rows, then remove the old binding (F8). Wrapping-key rotation is planned and still unimplemented. For a signing key compromise, replace affected pins out of band and preserve earlier trusted checkpoints for comparison.
 
 A reader of SQLite sees roster hashes, policies, Room text, claims, and the audit history. Random bearer tokens resist guessing from hashes. The reader needs the wrapping secret to recover the private keys. A reader of Worker secrets has that wrapping key but needs the ciphertext to sign. The bootstrap secret can initialize its configured team only while it is uninitialized. An attacker with storage and the wrapping secret can forge signatures for the corresponding trusted keys. Access to the running hub can expose both. An earlier checkpoint kept off the hub still anchors the prefix it covered.
 
@@ -96,8 +96,8 @@ Keep the hub's current limits and put a budget on each stream. This keeps memory
 | Limit | Planning assumption and fit |
 |---|---|
 | Worker request body | Budget against 100 MB on the smallest applicable Cloudflare account plan (F11). Enforce the hub's 1 MiB policy and 64 KiB Room and admin caps while reading. |
-| CPU and memory | Budget for 30 seconds of CPU per Worker request and Durable Object invocation, and 128 MB per Worker isolate (F12, F13, and F16). In a short read transaction, capture the audit count, tip, and checkpoint key. Sign that snapshot and stream immutable pages from the object through that count in descending order. Keep public replay at 100 events and bound internal chunks by bytes. #85 checks the maximum practical full export. |
-| Calls and stream duration | Allow at most 400 Durable Object calls per stream request, including the first authenticated read. This is within the 10,000 subrequests of Workers Paid (F14). Start a five-minute deadline at request arrival. Use it for every page read and discard results that arrive at or after it. Close when the deadline expires or the final allowed page drains. Probe actual flush, disconnect, and timeout behavior in #88. |
+| CPU and memory | On Workers Paid, budget for 30 seconds of CPU per Worker request and Durable Object invocation, and 128 MB per Worker isolate (F12, F13, and F16). The small Workers Free trial is recorded in F27. In a short read transaction, capture the audit count, tip, and checkpoint key. Sign that snapshot and stream immutable pages from the object through that count in descending order. Keep public replay at 100 events and bound internal chunks by bytes. #85 checks the maximum practical full export. |
+| Calls and stream duration | Allow at most 400 Durable Object calls per stream request, including the first authenticated read. This fits the internal subrequest limits of Workers Free and Workers Paid (F14). Start a five-minute deadline at request arrival. Use it for every page read and discard results that arrive at or after it. Close when the deadline expires or the final allowed page drains (F15). |
 | SQLite | Budget against a 10 GB database cap and an 8 MB row or value cap (F17). Bind payloads as values. A maximal policy fits because the row stores only one copy of the payload. Watch total size and alert before capacity is exhausted. Keep history in Phase 5. |
 
 The Durable Object streams the finite audit export in one call. It releases the snapshot transaction before signing and reads up to 128 immutable rows per page as the client drains 64 KiB chunks. This avoids one object call per page and preserves the Go hub's full export for logs that span more than 400 pages.
@@ -125,7 +125,7 @@ Hard-coding a calendar or recovery service would require the hub to choose each 
 
 ## Platform facts
 
-The coordinator checked these against Cloudflare's documentation on 2026-11-20. "Open" means the documentation does not settle it, and the named issue must prove it by a test before it relies on it.
+The coordinator checked these against Cloudflare's documentation on 2026-11-20. The table records later test results with the date and environment. "Open" marks behavior that still needs a test on the deployed Worker.
 
 | Fact | Status | Source |
 |---|---|---|
@@ -133,8 +133,8 @@ The coordinator checked these against Cloudflare's documentation on 2026-11-20. 
 | F2. `idFromName` with a stable name always reaches the same single object. | Confirmed. | [Namespace API](https://developers.cloudflare.com/durable-objects/api/namespace/) |
 | F3. SQLite objects expose `sql.exec` and `transactionSync`, which rolls back if the callback throws. | Confirmed. The callback must be synchronous. | [SQLite storage API](https://developers.cloudflare.com/durable-objects/api/sqlite-storage-api/) |
 | F4. Synchronous code does not interleave, awaits on other I/O can, and output gates hold replies until writes are flushed. | Confirmed. | [Rules of Durable Objects](https://developers.cloudflare.com/durable-objects/best-practices/rules-of-durable-objects/) |
-| F5. A Worker can stream a response incrementally with waits between writes, and see a client disconnect. | Cloudflare documents `request.signal` from compatibility date 2026-11-17 or with `enable_request_signal`. The Node test in `test/stream.unit.test.ts` observed a heartbeat followed by clean closure when a test signal aborted. Worker and edge disconnect behavior were not observed in #87's sandbox. | [Streams](https://developers.cloudflare.com/workers/runtime-apis/streams/), [Request](https://developers.cloudflare.com/workers/runtime-apis/request/) |
-| F6. A request body can still be read while the response is sent. | Open. The documentation does not say. Section 2 does not depend on it. | [Request](https://developers.cloudflare.com/workers/runtime-apis/request/) |
+| F5. A Worker can flush a stream incrementally through the edge. | Confirmed on 2026-11-26 (Workers Free, workers.dev). The manual stream probe received the first heartbeat at 0.17 s, then one every 1.0 s. The edge accepted the `&probe=disconnect` query parameter with HTTP 200. | [Streams](https://developers.cloudflare.com/workers/runtime-apis/streams/) |
+| F6. A request body can still be read while the response is sent. | Not needed. Section 2 uses a download-only GET stream with no request body. | [Request](https://developers.cloudflare.com/workers/runtime-apis/request/) |
 | F7. Durable Objects accept WebSockets that hibernate without billing duration. | Confirmed. Not used by this design. | [WebSockets](https://developers.cloudflare.com/durable-objects/best-practices/websockets/) |
 | F8. Secrets are encrypted bindings that `wrangler secret put` replaces and `wrangler secret delete` removes. | Confirmed. | [Secrets](https://developers.cloudflare.com/workers/configuration/secrets/) |
 | F9. Web Crypto supports random bytes, P-256 signing, and AES-GCM wrapping. | The Workers runtime runs `test/crypto.unit.test.ts`. The test “round trips generated P-256 keys through PKCS#8 and JWK” checks key generation, import, export, and raw 64-byte ES256 signatures. The test “wraps PKCS#8 with fresh nonces and authenticates the key identity and ciphertext” checks AES-GCM key generation, raw key export and import, and wrapping and unwrapping with random nonces. | [Web Crypto](https://developers.cloudflare.com/workers/runtime-apis/web-crypto/) |
@@ -142,8 +142,8 @@ The coordinator checked these against Cloudflare's documentation on 2026-11-20. 
 | F11. The request body limit is 100 MB on the Free and Pro plans. | Confirmed. It depends on the domain's plan, not the Workers plan. | [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) |
 | F12. Workers Paid allows 30 seconds of CPU per request by default. | Confirmed. It can be raised to 5 minutes with `limits.cpu_ms`. | [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) |
 | F13. Worker memory is 128 MB per isolate. | Confirmed. | [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) |
-| F14. One request can make 400 calls to a Durable Object. | Open. Workers Paid allows 10,000 subrequests per request. The Node test in `test/stream.unit.test.ts` observed a clean end after 400 simulated reads, including the first read. It did not exercise the platform quota. | [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) |
-| F15. An HTTP response has no wall-time limit while the client stays connected. | Confirmed. A runtime update can still end it after a grace period, so the daemon must reconnect. | [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) |
+| F14. One request can make 400 calls to a Durable Object. | Confirmed on 2026-11-26 (Workers Free, workers.dev). The remote check counted 400 reads and clean EOF at 201,121 ms. | [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) |
+| F15. The platform allows an HTTP stream to stay open through the hub's five-minute budget. | On 2026-11-26 (Workers Free, workers.dev), the first idle stream reached EOF at 300,155 ms after 299 heartbeats. Wrangler tail received the first daemon stream's completion report 300,189 ms after the daemon started. The daemon resumed, delivered the next event, and saved its cursor. The second run reached EOF at 300,170 ms. | [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) |
 | F16. A Durable Object gets 30 seconds of CPU per request by default. | Confirmed. Each request resets it, and it can be raised to 5 minutes. | [Durable Object limits](https://developers.cloudflare.com/durable-objects/platform/limits/) |
 | F17. SQLite storage limits. | Confirmed: 10 GB per object on Workers Paid (1 GB on Free), 8 MB per row, string, or BLOB, 100 KB per SQL statement, and 100 bound parameters per query. | [Durable Object limits](https://developers.cloudflare.com/durable-objects/platform/limits/) |
 | F18. Workers Paid costs 5 USD a month with 10 million requests and 30 million CPU ms included. | Confirmed. | [Workers pricing](https://developers.cloudflare.com/workers/platform/pricing/) |
@@ -151,3 +151,39 @@ The coordinator checked these against Cloudflare's documentation on 2026-11-20. 
 | F20. Duration is billed on active wall time at 128 MB, with 400,000 GB-s a month included. | Confirmed, and 12.50 USD per million GB-s after. A request every second keeps the object active all month, as section 6 assumes. | [Durable Object pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/) |
 | F21. SQLite storage includes 5 GB-month, 25 billion rows read, and 50 million rows written a month. | Confirmed: then 0.20 USD per GB-month, 0.001 USD per million rows read, and 1.00 USD per million rows written. Deletes count as writes. | [Durable Object pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/) |
 | F22. Wrangler local mode runs SQLite Durable Objects, bindings, and `.dev.vars` secrets without an account. | Confirmed on 2026-11-25. CI runs `wrangler dev --local` and checks for HTTP 200 with the SQLite schema version at `/healthz`. It requires HTTP 404 for another `Host` and checks that both secret bindings appear in the log. The conformance script uses a temporary environment file so it can run alongside a developer's `.dev.vars` file. | [Local development](https://developers.cloudflare.com/workers/development-testing/) |
+| F23. The Workers runtime reported a canceled stream invocation after a client disconnect. | On 2026-11-26 (Workers Free, workers.dev), a stream client disconnected after 4 s. The runtime reported `canceled` with a wall time of 3,878 ms. The run did not show whether the Worker's JavaScript abort handler ran. | [Request](https://developers.cloudflare.com/workers/runtime-apis/request/) |
+| F24. Redeploy preserves state and secret bindings. | Confirmed on 2026-11-26 (Workers Free, workers.dev). The remote check verified all 50 audit records, Room history, and the secret bindings after redeploy. It signed and synced a new policy under the original key pin. Redeploy and verification took 17.4 s. | [Remote check](cloudflare.md#check-a-disposable-deployment) |
+| F25. The edge rejects duplicate `Authorization` fields. | Confirmed on 2026-11-26 (Workers Free, workers.dev). The edge returned its HTML HTTP 400 before the Worker ran. A single Basic or comma bearer field reached the Worker and returned its JSON HTTP 401, even with a 1.1 MB body. | [Conformance flags](../test/hubconformance/README.md#run-against-a-seeded-hub) |
+| F26. The edge can reject a foreign `Host`. | Confirmed on 2026-11-26 (Workers Free, workers.dev). The edge returned HTTP 403 for an unrouted `Host`. Local tests cover the Worker's HTTP 404 (F22). | [Remote check](cloudflare.md#check-a-disposable-deployment) |
+| F27. The Workers Free CPU limit supports signing and exporting a small team's audit log. | Confirmed on 2026-11-26 (Workers Free, workers.dev). Policy signing, a 52-record export, and checkpoint signing all succeeded with the 10 ms per-request Worker CPU limit. | [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) |
+
+### Check Wrangler output redaction offline
+
+From `apps/hub-cloudflare` with dependencies installed, run this check. The staging config triggers a Wrangler route warning. The missing credential file stops the script before any network calls.
+
+```sh
+(
+  set -eu
+  probe=$(mktemp -d "$PWD/.redaction-check.XXXXXX")
+  trap 'rm -rf "$probe"' EXIT
+  mkdir "$probe/scripts"
+  cp scripts/remote-check.sh "$probe/scripts/"
+  ln -s "$PWD/node_modules" "$probe/node_modules"
+  cat > "$probe/wrangler.toml" <<'TOML'
+name = "redaction-check"
+routes = [{ pattern = "redaction.example.test", custom_domain = true }]
+
+[env.staging.vars]
+HUB_HOSTNAME = "redaction.example.test"
+DEV_MODE = ""
+TOML
+  status=0
+  CLOUDFLARE_ENV=staging XDG_CONFIG_HOME="$probe" \
+    bash "$probe/scripts/remote-check.sh" --hub-url https://redaction.example.test \
+    --lead-token-file "$probe/redaction.example.test" > "$probe/output" 2>&1 || status=$?
+  test "$status" -eq 1
+  grep -qF 'FAIL deployment configuration and credentials (Error: ENOENT' "$probe/output"
+  grep -qF '[redacted]' "$probe/output"
+  ! grep -qF 'redaction.example.test' "$probe/output"
+)
+```
