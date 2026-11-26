@@ -56,11 +56,11 @@ An event with any other `type` is invalid, whatever its body.
 
 ### Denial time
 
-A hook puts the time of its decision in `body.decided_at` when it queues a `policy.denied` event. Older hooks can omit it. The field uses the same UTC format with milliseconds as the hub writes in `at`, for example `2026-01-15T11:00:00.000Z`.
+A hook puts the member's claimed decision time in `body.decided_at` when it queues a `policy.denied` event. Older hooks can omit it. The field uses the same UTC format with milliseconds as the hub writes in `at`, for example `2026-01-15T11:00:00.000Z`. The date must exist in the Gregorian calendar. Seconds range from `00` to `59`, so leap seconds are invalid. The JSON Schema pattern checks the spelling. Hubs also check the calendar values.
 
-The hub rejects an invalid calendar timestamp or a decision time more than 30 seconds after its receipt time, measured to the millisecond. This allows a small lead on the hook clock and limits how far ahead a client can date a denial. The hub accepts older decisions of any age so an outbox can drain after a long outage. It stores and sends the timestamp exactly as posted.
+For a new event, the hub rejects a decision time more than 30 seconds after its receipt time, measured to the millisecond. This allows a small lead on the hook clock and limits how far ahead a client can date a denial. The hub accepts older decisions of any age so an outbox can drain after a long outage. It stores and sends the timestamp exactly as posted.
 
-The hub sets `at` at receipt. Claim expiry still uses `at` under rule E2, and the envelope uses it for `ts`. Room order follows `seq`. Readers use `decided_at` as the denial time and fall back to `at` when it is absent. The audit record keeps both times when the hook supplies them. [Audit contract](../audit/README.md#room-denials).
+The hub sets `at` at receipt. Claim expiry still uses `at` under rule E2, and the envelope uses it for `ts`. Room order follows `seq`. Readers preserve a stored `decided_at` that fails the new format as a legacy extension. They use `at` when `decided_at` is absent or invalid. The audit record keeps both times when the member supplies a decision time. [Audit contract](../audit/README.md#room-denials).
 
 The reference at `7d80045a` has no decision time for Room denials. Its Room schema keeps unknown body fields, so it accepts `decided_at` as an extension. Its separate check verdict also uses the name `decided_at`.
 

@@ -400,7 +400,7 @@ function roomSchemas(reference: Reference): Document[] {
     format: "date-time",
     minLength: 24,
     maxLength: 24,
-    description: "The UTC time when the hook denied the action, with milliseconds. The hub stores it as sent.",
+    description: "The member's claimed decision time in UTC with milliseconds. The date must exist in the Gregorian calendar. Seconds range from 00 to 59. Leap seconds are invalid. The hub stores the value as sent.",
   };
   describe(bodies["policy.denied"]!, {
     action: "The action that the gate denied.",

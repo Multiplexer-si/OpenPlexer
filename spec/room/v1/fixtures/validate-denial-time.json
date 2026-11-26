@@ -112,7 +112,30 @@
         }
       },
       "name": "an impossible calendar date is invalid",
-      "why": "The field must name a real instant."
+      "why": "February 29 must fall in a leap year."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": "2016-12-31T23:59:60.000Z",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "a leap second is invalid",
+      "why": "Seconds must be between 00 and 59."
     },
     {
       "expected": {
