@@ -52,15 +52,27 @@ const second = "conformance-other-" + runID;
 const edgeRoom = "edge-" + runID;
 const member = "member-" + runID;
 const children = new Set();
+const redactions = new Set([
+  process.env.CLOUDFLARE_API_TOKEN, process.env.CLOUDFLARE_API_KEY, process.env.CLOUDFLARE_ACCOUNT_ID,
+]);
 let origin;
 let scratch;
 let memberToken;
 let cliEnv;
 let failed = false;
 
-class CheckFailure extends Error {}
+class CheckFailure extends Error {
+  name = "CheckFailure";
+}
 function requireCheck(condition, message) {
   if (!condition) throw new CheckFailure(message);
+}
+
+function redact(message) {
+  for (const value of redactions) {
+    if (value) message = message.replaceAll(value, "[redacted]");
+  }
+  return message;
 }
 
 async function check(name, action) {
@@ -70,8 +82,7 @@ async function check(name, action) {
     console.log(`PASS ${name}${detail ? " " + detail : ""}`);
     return true;
   } catch (error) {
-    const message = error instanceof CheckFailure ? error.message
-      : error?.name === "TimeoutError" ? "timed out" : "unexpected error";
+    const message = redact(`${error?.name ?? "Error"}: ${error?.message ?? error}`);
     console.log(`FAIL ${name} (${message}, ${elapsed(start)} ms)`);
     failed = true;
     return false;
@@ -87,6 +98,7 @@ function run(tool, argv, { cwd = root, env = process.env, status = 0, label = "c
     cwd, env, stdio: ["ignore", "pipe", "pipe"], encoding: "utf8",
     maxBuffer: 16 << 20, timeout: 300_000,
   });
+  if (result.error) throw result.error;
   if (status === 0 && label === "go test" && result.status === 1) {
     const tests = result.stdout.split("\n").map((line) => {
       try { return JSON.parse(line); } catch { return {}; }
@@ -94,7 +106,7 @@ function run(tool, argv, { cwd = root, env = process.env, status = 0, label = "c
     const names = tests.slice(0, 3).map(({ Test }) => Test).join(", ");
     throw new CheckFailure(names || "go test exited 1");
   }
-  requireCheck(!result.error && result.status === status, `${label} exited ${result.status ?? "without a status"}`);
+  requireCheck(result.status === status, `${label} exited ${result.status ?? "without a status"}`);
   return result.stdout;
 }
 
@@ -110,9 +122,12 @@ function startChild(tool, argv, { cwd = root, env = process.env, stdio } = {}) {
   return state;
 }
 
-function privateFile(path) {
+function readTokenFile(path) {
   const info = statSync(path);
   requireCheck(info.isFile() && (info.mode & 0o077) === 0, "credential files must be owner-only regular files");
+  const token = readFileSync(path, "utf8").trim();
+  redactions.add(token);
+  return token;
 }
 
 function bin(name) { return join(scratch, "bin", "openplexer" + name); }
@@ -212,12 +227,12 @@ function endSeen(tail, path, timeout) {
 
 async function flush(tail) {
   let event, path, disconnectAt;
-  const ready = await check("edge frame and heartbeat flush", async () => {
+  await check("edge frame and heartbeat flush", async () => {
     event = await post(edgeRoom, "flush");
     path = streamPath(edgeRoom, event.seq - 1) + "&probe=disconnect";
-    const abort = new AbortController();
     const start = performance.now();
-    const lines = stream(path, AbortSignal.any([abort.signal, AbortSignal.timeout(10_000)]));
+    const lines = stream(path, AbortSignal.timeout(10_000));
+    let receivedHeartbeats = false;
     try {
       const first = await lines.next();
       const firstMs = elapsed(start);
@@ -231,17 +246,18 @@ async function flush(tail) {
         gaps.push(elapsed(previous));
         previous = performance.now();
       }
+      receivedHeartbeats = true;
       requireCheck(gaps[0] <= 3_000 && gaps[1] >= 300 && gaps[1] <= 3_000,
         `heartbeat gaps were ${gaps.join("/")} ms`);
       return `first=${firstMs} ms heartbeat gaps=${gaps.join("/")} ms`;
     } finally {
-      disconnectAt = performance.now();
-      abort.abort();
+      const closingAt = performance.now();
       await lines.return();
+      if (receivedHeartbeats) disconnectAt = closingAt;
     }
   });
   await check("edge disconnect", async () => {
-    requireCheck(ready, "flush probe did not reach the disconnect step");
+    requireCheck(disconnectAt !== undefined, "flush probe did not reach the disconnect step");
     requireCheck(tail?.ready, "Wrangler tail unavailable");
     const finished = await endSeen(tail, path, 10_000);
     requireCheck(finished.at >= disconnectAt && ["Canceled", "Ok"].includes(finished.outcome),
@@ -362,12 +378,14 @@ async function main() {
       "provide an HTTPS origin without a port or path and a lead token file");
     const url = new URL(address);
     origin = url.origin;
+    redactions.add(url.hostname);
+    redactions.add(address.slice("https://".length).replace(/\/$/, ""));
     const { unstable_readConfig } = createRequire(join(worker, "package.json"))("wrangler");
     const config = unstable_readConfig({ config: configPath });
     requireCheck(config.name && config.vars.HUB_HOSTNAME === url.hostname && config.vars.DEV_MODE === "",
       "wrangler.toml must name the deployed Worker and match HUB_HOSTNAME with DEV_MODE empty");
-    if (bootstrapFile) privateFile(bootstrapFile);
-    if (!bootstrapFile || exists(leadFile)) privateFile(leadFile);
+    if (bootstrapFile) readTokenFile(bootstrapFile);
+    if (!bootstrapFile || exists(leadFile)) readTokenFile(leadFile);
   })) return;
 
   if (!await check("build OpenPlexer binaries", () => {
@@ -384,14 +402,18 @@ async function main() {
   })) return;
 
   if (!await check("seed disposable team", () => {
-    if (bootstrapFile) init();
+    if (bootstrapFile) {
+      init();
+      readTokenFile(leadFile);
+    }
     writeFileSync(file("member.token"), admin("add-member", "--id", member));
+    memberToken = readTokenFile(file("member.token"));
     writeFileSync(file("revoked.token"), admin("add-member", "--id", "revoked-" + runID));
+    readTokenFile(file("revoked.token"));
     admin("remove-member", "--id", "revoked-" + runID);
     for (const id of [project, second, edgeRoom]) admin("add-project", "--id", id, "--repo", "R&D");
     publish(project, 1);
     publish(edgeRoom, 1);
-    memberToken = readFileSync(file("member.token"), "utf8").trim();
   })) return;
 
   await check("external hub conformance", () => {
