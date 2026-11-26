@@ -491,9 +491,9 @@ function auditSchemas(reference: Reference): Document[] {
     action: "What happened, as a stable token such as `override.granted`. Hashed.",
     target: "What the action was applied to. Hashed.",
     reason: "The reason that the actor gave, or null. Hashed.",
-    meta: "More data about the action. Hashed. A Room denial can include decided_at, the time the hook denied the action.",
+    meta: "More data about the action. Hashed. A Room denial can include decided_at, the member's claimed decision time.",
     flagged: "True if `reason` or `meta` quote text that moderation flagged. Hashed.",
-    created_at: "The time of the record, in UTC with milliseconds, such as `2026-01-15T12:00:00.000Z`. Hashed as this exact string.",
+    created_at: "The time the hub records the action, in UTC with milliseconds, such as `2026-01-15T12:00:00.000Z`. Hashed as this exact string.",
     prev_hash: "The `hash` of the record before this one. The first record has 64 zeros.",
     hash: "The SHA-256 of `prev_hash` followed by the canonical JSON of the hashed fields, in lowercase hexadecimal.",
   };

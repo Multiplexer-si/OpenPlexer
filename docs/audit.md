@@ -14,7 +14,7 @@ The command writes `export.json`, `checkpoint.jws`, and `jwks.json` from one sna
 
 A lead can also call `GET /api/v1/audit/export` with a bearer token. Save the JSON body as `export.json`. Save the `OpenPlexer-Audit-Checkpoint` response header value as `checkpoint.jws`, with no trailing newline. The export holds the full chain, newest first, with `next_cursor` set to null. The public checkpoint keys are at `GET /.well-known/audit-jwks.json`. [Hub HTTP API](hub.md#http-api).
 
-For an `event.policy-denied` record, read `meta.decided_at` for the time the hook denied the action. Read `created_at` for the time the hub received it. An older hook leaves only the receipt time. The new metadata uses the existing v1 record format, and older versions of `openplexer-verify` include it in the hash. [Audit contract](../spec/audit/README.md#room-denials).
+For an `event.policy-denied` record, `meta.decided_at` is the authenticated member's claim about when the hook denied the action. The hub writes its own receipt time in `created_at`. An older hook can omit the decision time. Both fields are hashed in the v1 record format, including by older versions of `openplexer-verify`. [Audit contract](../spec/audit/README.md#room-denials).
 
 ## Verify offline
 
@@ -41,6 +41,7 @@ The verifier exits with `0` for a valid export, `1` for a failed verification, a
 
 - Without a trusted checkpoint, the verifier can check that the chain agrees from genesis. A valid prefix and a full rewrite with recomputed hashes both pass that check.
 - A trusted checkpoint covers records through its count. Records after the highest supplied count are unanchored. The verifier cannot tell whether the hub wrote more records, skipped an event, or signed a checkpoint you never received.
+- A trusted checkpoint proves that the recorded decision and receipt times match the hub's signed history through its count. Establishing when the denial happened or whether either clock was accurate requires independent evidence.
 - The hash leaves out `id`, `result`, `agent_member_id`, and unknown fields. Their original values cannot be verified. The display result can be derived from the hashed `action`.
 - A checkpoint carries the hub's claim about its issue time. A hub with the signing key can sign a rewritten log. A previously kept checkpoint can expose a rewrite that changes its signed tip.
 
