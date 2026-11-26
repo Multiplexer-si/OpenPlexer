@@ -4,6 +4,15 @@
 For a walkthrough from a clean machine to a three-person hub, see [Self-host the OpenPlexer hub](self-host.md).
 For the Phase 5 design, see [Cloudflare hub design](cloudflare-hub-design.md).
 
+## Choose a hub
+
+| Hub | What you operate |
+|---|---|
+| Go hub | Run a binary and own its data directory, backups, and HTTPS reverse proxy. Use local commands on the hub host for team administration. [Self-host the Go hub](self-host.md) |
+| Cloudflare hub | Deploy a Worker and one SQLite Durable Object on Workers Paid. Cloudflare runs the service and supplies HTTPS. Leads administer the team over HTTPS. [Deploy to Cloudflare](cloudflare.md) |
+
+Both hubs use the same developer CLI, agent hooks, signed policy format, Room protocol, and audit verifier.
+
 ## Start the server
 
 Build the binaries with `make build`. On a Unix host, choose a private data directory on a local filesystem that supports file locks and atomic renames. Run the server and admin commands as the account that owns the directory.
@@ -40,7 +49,7 @@ The hub validates the [policy bundle](../spec/policy/README.md), checks member I
 Use `--hub <origin>` for remote commands.
 Use HTTPS off loopback. The commands refuse redirects.
 Pass a private regular file with `--token-file` or send the credential on stdin.
-[Deploy the Worker and set its secrets](../apps/hub-cloudflare/README.md#deploy).
+[Deploy the Worker and set its secrets](cloudflare.md).
 
 ```sh
 hub=https://hub.example.com

@@ -2,6 +2,10 @@
 
 Set up one project for three people, verify its first signed policy, and keep the hub running for your team. Any hosted free-tier limits apply to the hosted service. Apache-2.0 places no team-size restriction on self-hosting. [License](../LICENSE)
 
+## Choose a hub
+
+Use the Go hub below if you want to run the server and keep its data and backups on infrastructure you manage. Use the Cloudflare hub if you want Cloudflare to run the HTTPS service and store team data in a SQLite Durable Object on Workers Paid. Developer setup is the same on both. [Compare the hubs](hub.md#choose-a-hub) · [Deploy to Cloudflare](cloudflare.md)
+
 ## Get the binaries and service files
 
 Use a Linux or macOS host with a local filesystem that supports file locks and atomic renames. Install jq and curl 7.55.0 or later. The service installation steps require `sudo`. For remote access, you also need a DNS name and an HTTPS reverse proxy on the hub host.
