@@ -44,10 +44,10 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ## 2. Create a hub, a member, and a policy (window B)
 
-Create the hub's data, one member with the lead role, and one project. The member's bearer token goes in `you.token`. Treat it as a password. `umask 077` gives only you read and write access to the new token file.
+Create the hub's data, one member with the lead role, and one project. The member's bearer token goes in `you.token`. Treat it as a password. The command creates `you.token` with mode `0600` and stops if the file already exists.
 
 ```bash
-cd ~/openplexer-test && openplexer-hub init -data-dir hub && (umask 077 && openplexer-hub add-member -data-dir hub -id mem-you -role lead > you.token) && openplexer-hub add-project -data-dir hub -id prj-demo -repo demo
+cd ~/openplexer-test && (umask 077 && set -C && (openplexer-hub init -data-dir hub >&2 && openplexer-hub add-member -data-dir hub -id mem-you -role lead) > you.token) && openplexer-hub add-project -data-dir hub -id prj-demo -repo demo
 ```
 
 Write a policy. It gives the role `dev` write access to `src/` in the `demo` repository, and nothing else.
