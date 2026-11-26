@@ -4,7 +4,9 @@ Deploy one Worker for your team. Connect Claude Code and Codex as separate membe
 
 ## 1. Get an account and build the binaries
 
-Use a Cloudflare account with Workers Paid and permission to deploy Workers and create Durable Objects. The hub uses one SQLite Durable Object for the team. The live Room polls that object about once a second per connected daemon, so plan for the Paid request allowance and its 10 GB per-object storage limit. [Limits and cost estimate](cloudflare-hub-design.md#6-limits-and-cost)
+Use a Cloudflare account with permission to deploy Workers and create Durable Objects. The hub uses one SQLite Durable Object for the team. Workers Free supports SQLite Durable Objects and is enough to try the hub. A disposable deployment passed the policy, audit, and stream budget checks on Workers Free. [Platform facts](cloudflare-hub-design.md#platform-facts)
+
+Workers Free allows 100,000 Worker requests per day and 10 ms of CPU per Worker request. It also allows 100,000 Durable Object requests per day. Requests over the free limits fail without overage charges. Use Workers Paid for a team that keeps daemons connected all day. Each connected daemon causes about one Durable Object poll per second, or about 86,400 requests per day. [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) [Durable Object pricing](https://developers.cloudflare.com/durable-objects/platform/pricing/)
 
 On macOS or Linux, install Git, Go 1.27 or later, make, Node 24, npm 11, curl, OpenSSL, and jq. Use the same checkout for the Worker and the three OpenPlexer binaries.
 
@@ -29,7 +31,7 @@ export CLOUDFLARE_ACCOUNT_ID='<your-account-id>'
 
 Choose a new Worker name for each team. Edit `wrangler.toml` in the current directory. Keep the bindings and migrations from the checkout. Keep `DEV_MODE` empty.
 
-For `workers.dev`, use the account's existing subdomain or register one in the Workers section of the Cloudflare dashboard. Use the Worker name and the account subdomain in `HUB_HOSTNAME`. Replace each angle-bracket placeholder in this example.
+For `workers.dev`, open **Workers & Pages** in the Cloudflare dashboard for your account. Find the account's label under **Your subdomain**, or register a subdomain there. Use the Worker name and the account subdomain in `HUB_HOSTNAME`. Replace each angle-bracket placeholder in this example. If you need to look up the subdomain after deploying, leave the example hostname for now. The first `npm run deploy` in step 3 prints `https://<name>.<subdomain>.workers.dev`. [Cloudflare workers.dev setup](https://developers.cloudflare.com/workers/configuration/routing/workers-dev/)
 
 ```toml
 name = "<your-worker-name>"
@@ -58,7 +60,7 @@ DEV_MODE = ""
 
 Use the exact hostname on the route as `HUB_HOSTNAME`, without `https://` or a path. Choose a stable `TEAM_ID`, such as a team slug. The Worker uses it to find the team's SQLite object and to unwrap its keys. Keep it the same on every deploy. Keep the account ID and your local deployment edits out of commits.
 
-Set `hub` to the HTTPS origin for the hostname you chose.
+If you know the hostname, set `hub` to its HTTPS origin.
 
 ```sh
 hub='https://<your-hub-hostname>'
@@ -76,6 +78,13 @@ openssl rand -hex 32 > "$credentials/wrap-key-v1"
 npx wrangler secret put BOOTSTRAP_TOKEN < "$credentials/bootstrap.token"
 npx wrangler secret put WRAP_KEY_V1 < "$credentials/wrap-key-v1"
 npm run deploy
+```
+
+If you left `HUB_HOSTNAME` at the example value, copy the hostname from the URL printed by `npm run deploy` into `HUB_HOSTNAME`. Run `npm run deploy` again. Set `hub` to the full HTTPS URL.
+
+Check the deployment.
+
+```sh
 curl -fsS "$hub/healthz"
 ```
 
@@ -170,7 +179,7 @@ export OPENPLEXER_HOME="$HOME/openplexer-cloudflare-mem-claude"
 openplexer daemon
 ```
 
-Leave the daemon running to refresh policy and send and receive Room events. In the project terminal, run the commands for your agent.
+Leave the daemon running to refresh policy and send and receive Room events. In the project terminal, run `openplexer install` with `claude-code` or `codex`.
 
 ```sh
 openplexer install claude-code --project .
@@ -264,7 +273,7 @@ Check that `WRAP_KEY_V1` is listed. Repeat the export and verification in step 7
 
 ## Cost and alerts
 
-The design estimates about $5.40 to $6 per month for 5 to 10 developers under its stated usage assumptions. Watch Worker and Durable Object requests, CPU, and SQLite storage in the Cloudflare dashboard. Alert at 70% of the per-object storage cap and on sustained increases in errors, CPU limit failures, or reconnects. To inspect an invocation, run `npx wrangler tail` from the Worker directory. [Limits and cost estimate](cloudflare-hub-design.md#6-limits-and-cost)
+The design estimates about $5.40 to $6 per month on Workers Paid for 5 to 10 developers under its stated usage assumptions. On Workers Free, watch the daily Durable Object request quota while trying the hub. On either plan, watch Worker and Durable Object requests, CPU, and SQLite storage in the Cloudflare dashboard. Alert at 70% of the per-object storage cap and on sustained increases in errors, CPU limit failures, or reconnects. To inspect an invocation, run `npx wrangler tail` from the Worker directory. [Limits and cost estimate](cloudflare-hub-design.md#6-limits-and-cost)
 
 ## Check a disposable deployment
 
