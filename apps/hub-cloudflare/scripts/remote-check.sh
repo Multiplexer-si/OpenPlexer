@@ -3,14 +3,13 @@ set -euo pipefail
 set +x
 
 worker_dir=$(cd "$(dirname "$0")/.." && pwd -P)
-export WRANGLER_SEND_METRICS=false
+export WRANGLER_SEND_METRICS=false WRANGLER_WRITE_LOGS=false
 
 exec node --input-type=module - "$worker_dir" "$@" <<'JS'
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { request as httpsRequest } from "node:https";
-import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { createInterface } from "node:readline";
@@ -79,7 +78,7 @@ async function check(name, action) {
   const start = performance.now();
   try {
     const detail = await action();
-    console.log(`PASS ${name}${detail ? " " + detail : ""}`);
+    console.log(redact(`PASS ${name}${detail ? " " + detail : ""}`));
     return true;
   } catch (error) {
     const message = redact(`${error?.name ?? "Error"}: ${error?.message ?? error}`);
@@ -154,6 +153,20 @@ function ctl(...argv) {
   return run(wrangler, [...argv, "--config", configPath], { cwd: worker, label: "wrangler " + argv[0] });
 }
 
+function validateWranglerConfig(hostname) {
+  // The configuration reader can write diagnostics directly to stdout and stderr.
+  run(process.execPath, ["--input-type=commonjs", "-e", `
+    const { unstable_readConfig } = require("wrangler");
+    const [configPath, hostname] = process.argv.slice(1);
+    const config = unstable_readConfig({ config: configPath });
+    if (!(config.name && config.vars?.HUB_HOSTNAME === hostname && config.vars.DEV_MODE === "")) {
+      process.exitCode = 1;
+    }
+  `, configPath, hostname], {
+    cwd: worker, label: "Wrangler configuration check (Worker name, matching HUB_HOSTNAME and empty DEV_MODE)",
+  });
+}
+
 async function http(path, { token, body, signal = AbortSignal.timeout(10_000) } = {}) {
   const headers = { "Accept-Encoding": "identity" };
   if (token) headers.Authorization = "Bearer " + token;
@@ -203,8 +216,9 @@ async function until(condition, ms, message) {
 
 function startTail() {
   const tail = startChild(wrangler, ["tail", "--method", "GET", "--format", "json", "--config", configPath], {
-    cwd: worker, env: { ...process.env, WRANGLER_LOG: "debug", WRANGLER_WRITE_LOGS: "false" },
+    cwd: worker, env: { ...process.env, WRANGLER_LOG: "debug" }, stdio: ["ignore", "pipe", "pipe"],
   });
+  tail.child.stderr.resume();
   tail.events = new Map();
   let json = "";
   createInterface({ input: tail.child.stdout }).on("line", (line) => {
@@ -392,10 +406,7 @@ async function main() {
     origin = url.origin;
     redactions.add(url.hostname);
     redactions.add(address.slice("https://".length).replace(/\/$/, ""));
-    const { unstable_readConfig } = createRequire(join(worker, "package.json"))("wrangler");
-    const config = unstable_readConfig({ config: configPath });
-    requireCheck(config.name && config.vars.HUB_HOSTNAME === url.hostname && config.vars.DEV_MODE === "",
-      "wrangler.toml must name the deployed Worker and match HUB_HOSTNAME with DEV_MODE empty");
+    validateWranglerConfig(url.hostname);
     if (bootstrapFile) readTokenFile(bootstrapFile);
     if (!bootstrapFile || exists(leadFile)) readTokenFile(leadFile);
   })) return;

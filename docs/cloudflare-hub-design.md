@@ -156,3 +156,34 @@ The coordinator checked these against Cloudflare's documentation on 2026-11-20. 
 | F25. The edge rejects duplicate `Authorization` fields. | Confirmed on 2026-11-26 (Workers Free, workers.dev). The edge returned its HTML HTTP 400 before the Worker ran. A single Basic or comma bearer field reached the Worker and returned its JSON HTTP 401, even with a 1.1 MB body. | [Conformance flags](../test/hubconformance/README.md#run-against-a-seeded-hub) |
 | F26. The edge can reject a foreign `Host`. | Confirmed on 2026-11-26 (Workers Free, workers.dev). The edge returned HTTP 403 for an unrouted `Host`. Local tests cover the Worker's HTTP 404 (F22). | [Remote check](cloudflare.md#check-a-disposable-deployment) |
 | F27. The Workers Free CPU limit supports signing and exporting a small team's audit log. | Confirmed on 2026-11-26 (Workers Free, workers.dev). Policy signing, a 52-record export, and checkpoint signing all succeeded with the 10 ms per-request Worker CPU limit. | [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) |
+
+### Check Wrangler output redaction offline
+
+From `apps/hub-cloudflare` with dependencies installed, run this check. The staging config triggers a Wrangler route warning. The missing credential file stops the script before any network calls.
+
+```sh
+(
+  set -eu
+  probe=$(mktemp -d "$PWD/.redaction-check.XXXXXX")
+  trap 'rm -rf "$probe"' EXIT
+  mkdir "$probe/scripts"
+  cp scripts/remote-check.sh "$probe/scripts/"
+  ln -s "$PWD/node_modules" "$probe/node_modules"
+  cat > "$probe/wrangler.toml" <<'TOML'
+name = "redaction-check"
+routes = [{ pattern = "redaction.example.test", custom_domain = true }]
+
+[env.staging.vars]
+HUB_HOSTNAME = "redaction.example.test"
+DEV_MODE = ""
+TOML
+  status=0
+  CLOUDFLARE_ENV=staging XDG_CONFIG_HOME="$probe" \
+    bash "$probe/scripts/remote-check.sh" --hub-url https://redaction.example.test \
+    --lead-token-file "$probe/redaction.example.test" > "$probe/output" 2>&1 || status=$?
+  test "$status" -eq 1
+  grep -qF 'FAIL deployment configuration and credentials (Error: ENOENT' "$probe/output"
+  grep -qF '[redacted]' "$probe/output"
+  ! grep -qF 'redaction.example.test' "$probe/output"
+)
+```
