@@ -28,7 +28,7 @@ const (
 	// Verified means that the stored token verifies and is not stale.
 	Verified
 	// Stale means that the stored token verifies, and that the source has
-	// not confirmed it for the configured time. The gate still enforces it.
+	// not confirmed it for the configured time.
 	Stale
 	// Rejected means that a policy is stored and cannot be used.
 	Rejected
@@ -42,12 +42,14 @@ func (s State) String() string {
 // ProjectID, Version, ConfirmedAt, StaleAt, and Role are set only when the
 // state is Verified or Stale.
 type Status struct {
-	State       State
-	Detail      string
-	ProjectID   string
-	Version     int64
-	ConfirmedAt time.Time
-	StaleAt     time.Time
+	State          State
+	Detail         string
+	ProjectID      string
+	Version        int64
+	ConfirmedAt    time.Time
+	StaleAt        time.Time
+	HubConfirmedAt time.Time
+	MaxPolicyAge   time.Duration
 	// Member is the configured member id of the developer, or "".
 	Member string
 	// Role is the role that the bundle gives to Member, or "".
@@ -60,11 +62,13 @@ func (s Status) Enforced() bool {
 }
 
 type storedPolicy struct {
-	Token       string    `json:"token"`
-	ConfirmedAt time.Time `json:"confirmed_at"`
+	Token          string    `json:"token"`
+	ConfirmedAt    time.Time `json:"confirmed_at"`
+	HubConfirmedAt time.Time `json:"hub_confirmed_at,omitzero"`
+	HubBinding     string    `json:"hub_binding,omitempty"`
 }
 
-func classify(home string, staleAfter time.Duration, now time.Time, verifier policy.BundleVerifier) (Status, *policy.Verified) {
+func classify(home string, cfg config, now time.Time, verifier policy.BundleVerifier) (Status, *policy.Verified) {
 	rejected := func(format string, args ...any) (Status, *policy.Verified) {
 		return Status{State: Rejected, Detail: fmt.Sprintf(format, args...)}, nil
 	}
@@ -79,7 +83,7 @@ func classify(home string, staleAfter time.Duration, now time.Time, verifier pol
 	if err != nil {
 		return rejected("the stored policy does not verify against the key set: %v", err)
 	}
-	keys, err := readKeys(home)
+	keys, pin, err := readPinnedKeys(home)
 	switch {
 	case err != nil:
 		return rejected("the key set cannot be read: %v", err)
@@ -95,10 +99,20 @@ func classify(home string, staleAfter time.Duration, now time.Time, verifier pol
 		ProjectID:   verified.Bundle.ProjectID,
 		Version:     verified.Bundle.Version,
 		ConfirmedAt: stored.ConfirmedAt,
-		StaleAt:     stored.ConfirmedAt.Add(staleAfter),
+		StaleAt:     stored.ConfirmedAt.Add(cfg.staleAfter()),
 	}
 	status.Detail = fmt.Sprintf("version %d of project %s, confirmed %s", status.Version, status.ProjectID, stored.ConfirmedAt.UTC().Format(time.RFC3339))
-	if !now.Before(status.StaleAt) {
+	if cfg.hasHubSettings() {
+		if client, err := cfg.client(); err == nil && stored.HubBinding == client.binding(pin, cfg.HubTrustRevision) {
+			status.HubConfirmedAt = stored.HubConfirmedAt
+		}
+		status.ConfirmedAt = status.HubConfirmedAt
+		status.StaleAt = time.Time{}
+		status.Detail = fmt.Sprintf("version %d of project %s", status.Version, status.ProjectID)
+		if !status.HubConfirmedAt.IsZero() {
+			status.StaleAt = status.HubConfirmedAt.Add(cfg.maxPolicyAge())
+		}
+	} else if !now.Before(status.StaleAt) {
 		status.State = Stale
 		status.Detail += fmt.Sprintf(", stale since %s", status.StaleAt.UTC().Format(time.RFC3339))
 	}

@@ -150,7 +150,7 @@ func TestAuditCredentialSurfaces(t *testing.T) {
 			check("fetch error", err)
 			status, err := g.Sync(context.Background())
 			check("sync error", err)
-			if status.State != Verified || status.Version != 1 {
+			if status.State != Stale || status.Version != 1 {
 				t.Error("failed sync changed the policy in force")
 			}
 

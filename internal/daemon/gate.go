@@ -13,7 +13,7 @@ import (
 
 // Gate decides the actions of a coding agent under the policy that is
 // stored in one home directory. It is the view of one short process: Open
-// reads the home once, and only Load changes what the gate holds.
+// reads the home once. Loads and automatic refreshes reopen it.
 type Gate struct {
 	home     string
 	now      func() time.Time
@@ -43,7 +43,7 @@ func openGate(home string, now func() time.Time, verifier policy.BundleVerifier)
 }
 
 func (g *Gate) read() *policy.Verified {
-	status, verified := classify(g.home, g.config.staleAfter(), g.now(), g.verifier)
+	status, verified := classify(g.home, g.config, g.now(), g.verifier)
 	status.Member = g.config.MemberID
 	g.bundle = nil
 	if verified != nil {
@@ -56,13 +56,23 @@ func (g *Gate) read() *policy.Verified {
 		g.bundle = verified.Bundle
 		status.Role = verified.Bundle.Members[status.Member]
 	}
+	status.MaxPolicyAge = g.config.maxPolicyAge()
 	g.status = status
 	return verified
 }
 
-// Status returns the state of the stored policy as this gate read it.
+// Status reports the state of the policy this gate read at the current hub age.
 func (g *Gate) Status() Status {
-	return g.status
+	return g.statusAt(g.now())
+}
+
+func (g *Gate) statusAt(now time.Time) Status {
+	status := g.status
+	if status.hubStaleAt(now) {
+		status.State = Stale
+		status.Detail += ", " + StalePolicyReason
+	}
+	return status
 }
 
 // ExecGated reports whether the policy in force gives the role of the
@@ -84,7 +94,7 @@ func bundleSizeError(err error) bool {
 // force. The bundle must verify against the configured key set and meet its
 // project's version floor. While a policy is in force, the bundle must also
 // be for the same project, and it must be a newer version or the same bundle
-// again. The same bundle again confirms the policy, which makes it fresh.
+// again. A file load confirms the local advisory and clears hub freshness.
 //
 // Load returns the status after the load. With an error, the policy in
 // force stays as it was: a source that is not available and a bundle that
@@ -92,17 +102,21 @@ func bundleSizeError(err error) bool {
 // ErrRejected. An error that wraps only ErrNotRecorded means that the
 // bundle is in force.
 func (g *Gate) Load(ctx context.Context, source Source) (Status, error) {
+	return g.load(ctx, source, storedPolicy{})
+}
+
+func (g *Gate) load(ctx context.Context, source Source, stored storedPolicy) (Status, error) {
 	token, err := source.Fetch(ctx)
 	if err != nil && !bundleSizeError(err) {
-		return g.status, fmt.Errorf("the policy source is not available, and the policy in force stays: %w", err)
+		return g.Status(), fmt.Errorf("the policy source is not available, and the policy in force stays: %w", err)
 	}
 	var signed *policy.SignedBundle
 	if err == nil {
 		signed, err = policy.ReadSignedBundle(token)
 	}
-	unlock, lockErr := lockHome(g.home)
+	unlock, lockErr := lockHomeFile(ctx, g.home, lockFile)
 	if lockErr != nil {
-		return g.status, lockErr
+		return g.Status(), lockErr
 	}
 	defer unlock()
 
@@ -115,6 +129,15 @@ func (g *Gate) Load(ctx context.Context, source Source) (Status, error) {
 	}
 	g.config = current
 	inForce := g.read()
+	if stored.HubBinding != "" {
+		_, binding, err := current.hubSnapshot(g.home)
+		if err != nil || binding != stored.HubBinding {
+			return g.reject(errors.New("the hub configuration changed during policy sync"))
+		}
+	}
+	if err := ctx.Err(); err != nil {
+		return g.Status(), err
+	}
 	if err != nil {
 		return g.reject(err)
 	}
@@ -122,11 +145,15 @@ func (g *Gate) Load(ctx context.Context, source Source) (Status, error) {
 	if err != nil {
 		return g.reject(err)
 	}
-	if err := writeJSON(g.home, policyFile, storedPolicy{Token: token, ConfirmedAt: g.now().UTC()}); err != nil {
-		return g.status, err
+	if err := ctx.Err(); err != nil {
+		return g.Status(), err
+	}
+	stored.Token, stored.ConfirmedAt = token, g.now().UTC()
+	if err := writeJSON(g.home, policyFile, stored); err != nil {
+		return g.Status(), err
 	}
 	g.read()
-	return g.status, g.record(audit.Record{
+	return g.Status(), g.record(audit.Record{
 		Action: action,
 		Target: candidate.Bundle.ProjectID,
 		Meta:   map[string]any{"version": candidate.Bundle.Version},
@@ -138,7 +165,7 @@ func (g *Gate) reject(err error) (Status, error) {
 	// A failed record does not join the rejection, because a caller takes
 	// an error that wraps ErrNotRecorded to mean that the bundle is in force.
 	_ = g.record(audit.Record{Action: "policy.rejected", Target: g.status.ProjectID, Reason: &reason})
-	return g.status, fmt.Errorf("%w, and the policy in force stays: %w", ErrRejected, err)
+	return g.Status(), fmt.Errorf("%w, and the policy in force stays: %w", ErrRejected, err)
 }
 
 // ErrNotRecorded is the error of a Load or a Decide that did its work and
@@ -257,14 +284,28 @@ func (v Verdict) Result() (policy.Result, bool) {
 // The verdict is valid even when the error is not nil. The error wraps
 // ErrNotRecorded.
 func (g *Gate) Decide(agent string, first policy.Query, rest ...policy.Query) (Verdict, error) {
+	return g.DecideContext(context.Background(), agent, first, rest...)
+}
+
+// DecideContext bounds the wait to append a decision record.
+func (g *Gate) DecideContext(ctx context.Context, agent string, first policy.Query, rest ...policy.Query) (Verdict, error) {
 	queries := append([]policy.Query{first}, rest...)
-	verdict := Verdict{Policy: g.status, Query: first}
-	if g.status.Enforced() {
+	now := g.now()
+	verdict := Verdict{Policy: g.statusAt(now), Query: first}
+	if verdict.Policy.MaxPolicyAge != 0 && verdict.Policy.State == Stale {
+		verdict.Query.Member, verdict.Query.Now, verdict.Query.Overrides = g.config.MemberID, policy.TimestampOf(now), nil
+		if first.Action == policy.Read || first.Action == policy.Write {
+			verdict.Query.Repo = g.bundle.Repos[0]
+		}
+		verdict.decided = true
+		verdict.decidedAt = now
+		verdict.result = policy.Result{Decision: policy.Deny, Rule: StalePolicyReason}
+	} else if verdict.Policy.Enforced() {
 		verdict.decided = true
 		verdict.Query, verdict.result = g.evaluate(queries)
 		verdict.decidedAt = g.now()
 	}
-	unlock, err := lockHome(g.home)
+	unlock, err := lockHomeFile(ctx, g.home, lockFile)
 	if err != nil {
 		return verdict, fmt.Errorf("%w: %w", ErrNotRecorded, err)
 	}

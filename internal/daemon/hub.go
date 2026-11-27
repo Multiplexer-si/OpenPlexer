@@ -2,7 +2,9 @@ package daemon
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -173,11 +175,46 @@ func (h hubSource) Fetch(ctx context.Context) (string, error) {
 	return token, nil
 }
 
+func (h hubClient) binding(pin [sha256.Size]byte, revision string) string {
+	fields, _ := json.Marshal([]string{h.origin, h.project, h.member, h.token, revision})
+	sum := sha256.Sum256(append(fields, pin[:]...))
+	return base64.RawURLEncoding.EncodeToString(sum[:])
+}
+
+func (c config) hubSnapshot(home string) (hubClient, string, error) {
+	client, err := c.client()
+	if err != nil {
+		return hubClient{}, "", err
+	}
+	keys, pin, err := readPinnedKeys(home)
+	if err != nil {
+		return hubClient{}, "", err
+	}
+	if keys == nil {
+		return hubClient{}, "", errors.New("no key set is configured")
+	}
+	return client, client.binding(pin, c.HubTrustRevision), nil
+}
+
 // Sync fetches and admits the latest policy from the configured hub.
 func (g *Gate) Sync(ctx context.Context) (Status, error) {
-	client, err := g.config.client()
+	unlock, err := lockHomeFile(ctx, g.home, lockFile)
 	if err != nil {
-		return g.status, err
+		return g.Status(), err
 	}
-	return g.Load(ctx, hubSource{hubClient: client, verifier: g.verifier})
+	cfg, err := readConfig(g.home)
+	var client hubClient
+	var binding string
+	if err == nil {
+		client, binding, err = cfg.hubSnapshot(g.home)
+	}
+	unlock()
+	if err != nil {
+		return g.Status(), err
+	}
+	if err := ctx.Err(); err != nil {
+		return g.Status(), err
+	}
+	confirmation := storedPolicy{HubConfirmedAt: g.now().UTC(), HubBinding: binding}
+	return g.load(ctx, hubSource{hubClient: client, verifier: g.verifier}, confirmation)
 }
