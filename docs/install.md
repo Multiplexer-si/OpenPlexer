@@ -88,3 +88,22 @@ gh attestation verify "$archive" --repo Multiplexer-si/OpenPlexer --signer-workf
 
 - Run a hub for your team. [Self-host the OpenPlexer hub](self-host.md)
 - Connect a coding agent. [Claude Code hooks](hooks-claude-code.md) or [Codex hooks](hooks-codex.md)
+
+## Run the daemon as a login service
+
+The `service` command needs a build newer than `v0.1.0-rc.1`.
+Run `make build` from a source commit that includes `openplexer service`.
+Install the resulting `bin/openplexer` in the location where you plan to keep it.
+
+From your macOS or Linux login session, run these commands in the checkout that uses the configured home. Add `--home <dir>` after the subcommand to choose a specific home. Stop any foreground daemon for that home before you install the service.
+
+```sh
+openplexer service install
+openplexer service status
+```
+
+Status shows the service state, local policy state, and log location. For a running daemon, status also shows its last heartbeat if available. The service logs operational errors. To remove the service, run `openplexer service uninstall` for the same home.
+
+On macOS, the logs are `logs/daemon.stdout.log` and `logs/daemon.stderr.log` under the OpenPlexer home. To rotate them, uninstall the service, rename the files, and install the service again.
+
+On Linux, run the `journalctl --user -u` command printed by status. The journal handles rotation.

@@ -1,0 +1,75 @@
+package daemon
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"syscall"
+	"time"
+)
+
+const (
+	daemonPIDFile     = "daemon.pid"
+	heartbeatInterval = 5 * time.Second
+)
+
+// DaemonActivity records when the daemon acquired the Room lock and last checked in.
+type DaemonActivity struct {
+	PID         int       `json:"pid"`
+	StartedAt   time.Time `json:"started_at"`
+	HeartbeatAt time.Time `json:"heartbeat_at"`
+}
+
+// ReadDaemonActivity reads local daemon activity without taking a lock.
+// A missing or invalid record returns zero activity.
+func ReadDaemonActivity(home string) (DaemonActivity, error) {
+	data, err := os.ReadFile(filepath.Join(home, daemonPIDFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return DaemonActivity{}, nil
+	}
+	if err != nil {
+		return DaemonActivity{}, err
+	}
+	var activity DaemonActivity
+	if json.Unmarshal(data, &activity) != nil || activity.PID <= 0 ||
+		activity.StartedAt.IsZero() || activity.HeartbeatAt.IsZero() {
+		return DaemonActivity{}, nil
+	}
+	return activity, nil
+}
+
+func (a DaemonActivity) heartbeatFresh() bool {
+	age := time.Since(a.HeartbeatAt)
+	return age >= 0 && age <= 3*heartbeatInterval
+}
+
+func (a DaemonActivity) running() bool {
+	if a.PID == 0 || !a.heartbeatFresh() {
+		return false
+	}
+	process, err := os.FindProcess(a.PID)
+	if err != nil {
+		return false
+	}
+	defer process.Release()
+	return process.Signal(syscall.Signal(0)) == nil
+}
+
+func (a DaemonActivity) heartbeat(ctx context.Context, home string, report func(error)) {
+	tick := time.NewTicker(heartbeatInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-tick.C:
+			a.HeartbeatAt = time.Now().UTC()
+			if err := writeJSON(home, daemonPIDFile, a); err != nil {
+				report(fmt.Errorf("update daemon heartbeat: %w", err))
+			}
+		}
+	}
+}

@@ -24,7 +24,8 @@ const usage = `usage:
   openplexer configure [--keys <jwks.json>] [--member <member-id>] [--stale-after-days <days>]
   openplexer configure --project-root <dir> [--home <dir>]
   openplexer configure --hub <url> --project <id> --member <id> --keys <jwks.json> --token-file <file>
-  openplexer daemon
+  openplexer daemon [--quiet]
+  openplexer service install|uninstall|status [--home <dir>]
   openplexer room post < event.json
   openplexer policy sync
   openplexer policy load <signed-bundle.json>
@@ -94,6 +95,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() ti
 			return c.install(args[1:])
 		case "uninstall":
 			return c.uninstall(args[1:])
+		case "service":
+			return c.service(args[1:])
 		case "hook":
 			return c.runHook(args[1:])
 		}
@@ -105,8 +108,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() ti
 	switch {
 	case len(args) == 2 && args[0] == "room" && args[1] == "post":
 		return c.post()
-	case len(args) == 1 && args[0] == "daemon":
-		return c.daemon()
+	case len(args) >= 1 && args[0] == "daemon":
+		return c.daemon(args[1:])
 	case len(args) == 3 && args[0] == "policy" && args[1] == "load":
 		return c.load(args[2])
 	case len(args) == 2 && args[0] == "policy" && args[1] == "sync":
@@ -220,6 +223,8 @@ func (c command) status() int {
 	}
 	status := gate.Status()
 	c.report(status)
+	activity, _ := daemon.ReadDaemonActivity(c.home)
+	c.reportDaemonHeartbeat(activity)
 	switch status.State {
 	case daemon.Verified:
 		return exitOK
