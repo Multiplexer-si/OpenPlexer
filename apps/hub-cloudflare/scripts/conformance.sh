@@ -46,7 +46,7 @@ health_status=$(curl -fsS -o "$state/health.json" -w '%{http_code}' --max-time 2
 kill -0 "$wrangler_pid"
 test "$health_status" = 200
 health_body=$(cat "$state/health.json")
-test "$health_body" = '{"ok":true,"schema":1}'
+test "$health_body" = '{"ok":true,"schema":2}'
 foreign_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 -H 'Host: foreign.example' "$origin/healthz")
 test "$foreign_status" = 404
 grep -Fq 'env.BOOTSTRAP_TOKEN' "$state/wrangler.log"
@@ -69,7 +69,41 @@ cat > "$state/policy.json" <<'JSON'
 JSON
 admin publish-policy --project conformance --file "$state/policy.json"
 
-sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|queued-denial|room-events|claims|concurrency|live-stream)$'
+invite_admin() {
+  local subcommand=$1
+  shift
+  "$hub" invite "$subcommand" --hub "$origin" --token-file "$state/lead.token" "$@"
+}
+invite_admin create --project conformance --member cli-invite --require-approval > "$state/invite.link"
+node --input-type=module - "$origin" "$state/invite.link" > "$state/invite.id" <<'JS'
+import { createHash, randomBytes } from "node:crypto";
+import { readFileSync } from "node:fs";
+const [origin, file] = process.argv.slice(2);
+let link;
+try {
+  link = new URL(readFileSync(file, "utf8").trim());
+} catch {
+  throw new Error("Invalid CLI invite link");
+}
+if (link.origin !== origin || !/^#fp=[a-f0-9]{64}$/.test(link.hash)) throw new Error("Invalid CLI invite link");
+const code = link.pathname.slice("/join/".length);
+const token_hash = createHash("sha256").update(randomBytes(32).toString("base64url")).digest("hex");
+const response = await fetch(origin + "/api/v1/invites/redeem", {
+  method: "POST", redirect: "error", headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ code, token_hash }),
+});
+if (response.status !== 202) throw new Error("CLI invite did not require approval");
+const { invite_id: id } = await response.json().catch(() => { throw new Error("Invalid approval reply"); });
+if (!/^[a-f0-9]{32}$/.test(id)) throw new Error("Missing public CLI invite ID");
+process.stdout.write(id);
+JS
+invite_id=$(cat "$state/invite.id")
+invite_admin list --limit 100 > "$state/invites.json"
+grep -Fq "$invite_id" "$state/invites.json"
+invite_admin approve --id "$invite_id" > /dev/null
+invite_admin revoke --id "$invite_id" > /dev/null
+
+sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|queued-denial|room-events|claims|concurrency|live-stream|invites)$'
 go test -count=1 -v ./test/hubconformance -run "$sections" -args \
   -hub-url "$origin" -wrangler-dev -lead-token-file "$state/lead.token" -member-token-file "$state/member.token" \
   -revoked-token-file "$state/revoked.token"
@@ -90,7 +124,8 @@ if (result.ok !== true || result.completeness !== "through_checkpoint" ||
   throw new Error("Expected the checkpoint to authenticate the full export");
 }
 const actions = new Set(audit.entries.map((entry) => entry.action));
-for (const action of ["event.policy-denied", "claim.created", "claim.renewed", "claim.released", "claim.expired"]) {
+for (const action of ["event.policy-denied", "claim.created", "claim.renewed", "claim.released", "claim.expired",
+  "invite.created", "invite.requested", "invite.approved", "invite.redeemed", "invite.revoked"]) {
   if (!actions.has(action)) throw new Error("Missing audit action " + action);
 }
 audit.entries[0].target += "-tampered";

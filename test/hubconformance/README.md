@@ -2,7 +2,7 @@
 
 The suite exercises the shared hub API over HTTP. The Cloudflare hub design defines the contract. [HTTP contract](../../docs/cloudflare-hub-design.md#5-http-contract)
 
-The tests cover bearer authentication and revocation, lead permissions, public signing keys, and signed policy reads and writes. They check policy version conflicts, retry signatures, and exact body and canonical bundle limits. Room tests cover event validation, replay, pagination, idempotency, claim ownership, conflicts across projects, and expiry. The suite races Room posts and policy publication, then checks for gaps in the Room and audit histories. Audit exports and their signed checkpoints pass through the same verifier as `openplexer-verify`.
+The tests cover bearer authentication and revocation, lead permissions, public signing keys, and signed policy reads and writes. They check policy version conflicts, retry signatures, and exact body and canonical bundle limits. Room tests cover event validation, replay, pagination, idempotency, claim ownership, conflicts across projects, and expiry. The suite races Room posts and policy publication, then checks for gaps in the Room and audit histories. Invites cover approval, competing claims, receipt retries, revocation, and authorization. Audit exports and their signed checkpoints pass through the same verifier as `openplexer-verify`.
 
 ## Run against the Go hub
 
@@ -76,6 +76,7 @@ The Wrangler run uses requests without upload bodies and checks the same GET fra
 
 ## Coverage limits
 
-- Admin routes, key rotation, and storage fault injection are outside the shared suite.
+- Invite administration and the roster changes used to test enrollment are in the shared suite. The suite omits other admin routes, key rotation, and storage fault injection.
+- The HTTP invite expiry case waits up to one minute for the hub deadline. Each hub checks the exact boundary with a controlled clock in its own tests.
 - Expiry uses a one-second lease. The expiry cases skip if an external hub rejects that TTL.
 - Every wrong-method check requires 405 and the expected `Allow` methods. The response must have a JSON error envelope and `Cache-Control: no-store`, or exactly the Go router's `Method Not Allowed\n` body with `Content-Type: text/plain; charset=utf-8` and no `Cache-Control` header.

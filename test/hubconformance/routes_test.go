@@ -253,4 +253,5 @@ func TestHub(t *testing.T) {
 	t.Run("queued-denial", f.queuedDenial)
 	t.Run("concurrency", f.concurrentWrites)
 	t.Run("live-stream", f.liveStream)
+	t.Run("invites", f.invites)
 }
