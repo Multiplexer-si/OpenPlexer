@@ -75,9 +75,13 @@ The operator can export team records on the hub host. A lead can also send a lea
 
 OpenPlexer has no separate telemetry or analytics service. The daemon sends no presence reports, read receipts, injection counters, write ledger, file hashes, raw tool input or output, patches, diffs, or file contents. Room prose is user or agent supplied. It can still contain source or secrets that the filter misses. Keep sensitive material out of Room posts. [Outbound data](trust-model.md#what-openplexer-sends) and [content filters](trust-model.md#free-text-filtering-is-a-heuristic).
 
+### Member sync state
+
+> The hub keeps the time and version of the last policy it served and the time of the last live Room connection it accepted for each member and project. Team leads and operators with access to the hub's data can see these values. They show hub activity and cannot confirm that a laptop applied policy or is still online. OpenPlexer stores no laptop identifiers, IP addresses, or per-request history in member sync state. Each value expires after 30 days. Removing a member clears that member's sync state.
+
 ## What the hub stores and for how long
 
-The team hub keeps its data in the owner-only `state.json`. The snapshot includes the team ID, member IDs and roles, SHA-256 hashes of bearer tokens, project and repository IDs, the latest signed bundle per project, and the policy and checkpoint signing keys. Removing a member deletes that member's token hash from the active roster. It leaves earlier Room and audit records in place. A new policy replaces the prior bundle for its project.
+The Go hub keeps its main snapshot in the owner-only `state.json`. The snapshot includes the team ID, member IDs and roles, SHA-256 hashes of bearer tokens, project and repository IDs, the latest signed bundle per project, and the policy and checkpoint signing keys. Removing a member deletes that member's token hash from the active roster. It leaves earlier Room and audit records in place. A new policy replaces the prior bundle for its project.
 
 Room history includes accepted event bodies, session and member IDs, event metadata, and any posted idempotency keys. The hub keeps Room history and the team audit chain indefinitely. It has no automatic pruning, redaction, or deletion schedule. Released claims leave active storage. Expired claims are removed on the next authenticated claim operation in an existing Room. Their events remain in Room history. Backups may keep copies of any of this state. [Hub storage](trust-model.md#decisions-settled-by-the-single-team-hub) and [backup procedure](self-host.md#back-up-and-upgrade).
 

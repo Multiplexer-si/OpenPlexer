@@ -59,7 +59,7 @@ const (
 
 type fixture struct {
 	origin, lead, member, revoked, unknown string
-	missing                                string
+	missing, dataDir                       string
 	target                                 hubTarget
 	cloudflareEdge                         bool
 	client                                 *http.Client
@@ -204,6 +204,7 @@ func (f *fixture) startGoHub(t *testing.T) {
 		}
 	}
 	data := filepath.Join(dir, "hub-data")
+	f.dataDir = data
 	admin := func(name string, args ...string) []byte {
 		t.Helper()
 		ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)

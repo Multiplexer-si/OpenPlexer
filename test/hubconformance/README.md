@@ -74,6 +74,10 @@ Every target must reject invalid credentials and cursors before starting the GET
 
 The Wrangler run uses requests without upload bodies and checks the same GET frames as the Go run. The suite checks the frames that arrive over local HTTP. Flush latency, disconnect propagation, and write timeouts over the Cloudflare edge are tracked in [issue #88](https://github.com/Multiplexer-si/OpenPlexer/issues/88).
 
+## Member sync state
+
+Select the section with `go test -count=1 ./test/hubconformance -run '^TestHub$/^member-sync$'`. The suite checks lead access, project filtering, cursor paging, and both observations over HTTP. It publishes a policy for the second project. It checks that a member still shows the older version until the next fetch. On the built-in Go hub and the Worker, it also removes and re-adds a temporary member to check that observations are cleared.
+
 ## Coverage limits
 
 - Invite administration and the roster changes used to test enrollment are in the shared suite. The suite omits other admin routes, key rotation, and storage fault injection.

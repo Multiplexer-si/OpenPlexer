@@ -101,6 +101,16 @@ For remote creation, replace `--data-dir` and `--origin` with `--hub` and a lead
 
 With `--require-approval`, confirm the public invite ID with the recipient before running `invite approve --id <id>`. Run `invite revoke --id <id>` to cancel an outstanding invite. Use `invite list --after <id> --limit <n>` to page. Publish the member's policy grants after redemption. [Invite and approval rules](onboarding-design.md#1-invite-contract-92)
 
+## Check member sync state
+
+Run `bin/openplexer-hub members --data-dir ./hub-data` on the Go hub host. You can read the directory with the server stopped. To read from either running hub, use a lead token.
+
+```sh
+bin/openplexer-hub members --hub "$hub" --token-file "$tokens/lee.token" --project prj-shop
+```
+
+Use `--project` to see every member for one project. The command shows the last policy version served and its age. It shows the current version when it differs, as in `mem-ana  role member  policy v1 (current v2)  last check-in 3 days ago`. It also shows the age of the last live Room connection when available. Rows without either value show `no recent observation`. Multiple laptops on one credential share these values. [Member sync state privacy](architecture-and-privacy.md#member-sync-state)
+
 ## HTTP API
 
 Use `Authorization: Bearer <token>` on every request except the two public key endpoints and invite redemption. Successful requests return `200` unless the route specifies another status. Use JSON for request and response bodies on routes outside the Room streams.
@@ -109,9 +119,10 @@ Use `Authorization: Bearer <token>` on every request except the two public key e
 |---|---|
 | `GET /.well-known/jwks.json` | The public policy signing keys in the [v1 JWKS format](../spec/policy/v1/jwks.schema.json). |
 | `GET /.well-known/audit-jwks.json` | The public audit checkpoint signing keys. |
+| `GET /api/v1/admin/members` | A page of member sync observations. Requires a lead token. |
 | `GET /api/v1/audit/export` | The full audit export, newest first, with a signed tip in the `OpenPlexer-Audit-Checkpoint` response header. Requires a lead token. |
 | `GET /api/v1/projects/{project}` | The project's `id` and `repo`. |
-| `GET /api/v1/projects/{project}/policy.bundle` | The latest [signed policy bundle](../spec/policy/v1/signed-bundle.schema.json). |
+| `GET /api/v1/projects/{project}/policy.bundle` | The latest [signed policy bundle](../spec/policy/v1/signed-bundle.schema.json). GET and HEAD also return `OpenPlexer-Policy-Version`. |
 | `PUT /api/v1/projects/{project}/policy` | Publish a JSON bundle and return the signed bundle. Requires a lead token. |
 | `POST /api/v1/rooms/{room}/events` | Append an event and return its v1 envelope. |
 | `GET /api/v1/rooms/{room}/stream?last_seq=0` | Stream replay and live v1 Room envelopes as NDJSON. The cursor defaults to zero. |
@@ -137,6 +148,10 @@ Each team can receive 20 redeem failures in a 60-second window that starts with 
 Roster requests have a 64 KiB body limit. Roster addition rejects duplicate and unknown JSON fields with `400`. Deletion returns `400` for a nonempty body within the limit and `413` for a larger body.
 
 Give members a trusted copy of the policy JWKS through an authenticated channel. See the [agent setup](local-policy.md#connect-to-a-team-hub). The agent verifies the JWS against the configured pin and the hub's advertised JWKS. The unsigned display fields are for presentation. The docs on [policy verification](../spec/policy/README.md#the-signed-bundle) give the verification steps.
+
+`GET /api/v1/admin/members` returns `{members, next_cursor}` with `Cache-Control: no-store`. HEAD follows GET and omits the body. Rows contain `member_id`, `hub_role`, `project_id`, `last_policy_fetch_at`, `policy_version`, and `last_room_connected_at`. The observation fields can be null. Times use UTC RFC 3339. Without a filter the list gives one row per member and project with retained observations. A member with no observations has one row with a null project ID. With `project_id`, the list gives one row per member for the selected project. An unknown project returns `404`.
+
+The list sorts by member ID and then project ID. The default page size is 100 and `limit` accepts 1 through 100. Send `next_cursor` as `after` when it is non-null. A cursor is the unpadded base64url encoding of canonical JSON `[member_id, project_id]`. A null project sorts first. Each page reads current state, so a cursor can outlive its row. Invalid, repeated, or unknown query parameters return `400`.
 
 For an event post, send `type`, `body`, and `agent` with `id`, `vendor`, and optional `parent`. Omit `agent` for a `human` event. The hub prefixes session and parent IDs with the authenticated member ID and a slash. The hub sets `on_behalf_of`, the event ID, the Room, the timestamp, and the next sequence number. The client can send `Idempotency-Key` with up to 128 bytes. A repeated key for the same member and Room returns the original envelope. The claim endpoints write `claim` and `release` events. The event endpoint reserves `decision.confirm` and the two override event types for future hub services.
 
@@ -181,6 +196,8 @@ bin/openplexer-hub export --hub "$hub" --token-file "$tokens/lee.token" --out ./
 
 ## Data directory and operational limits
 
-Use one server on one host per data directory. The hub uses a file lock to coordinate the server and CLI, and atomically replaces `state.json` on writes. Each operation reads the snapshot into memory. Room history and audit records accumulate, so disk use, memory use, and write time grow.
+Use one server on one host per data directory. The hub uses a file lock to coordinate the server and CLI, and atomically replaces `state.json` when it changes. Hub requests and admin commands read the snapshot into memory. Room history and audit records accumulate, so disk use, memory use, and write time grow.
 
 Protect `state.json` and its backups. It contains the separate ES256 policy and checkpoint private keys, member token hashes, policies, Room history, claims, and the audit chain. Back it up to preserve the keys, the stable team ID, Room sequence numbers, and audit history. The hub initializes audit state in older data directories on the first audited action, export, or checkpoint key request. The audit chain starts with the first audited action. The hub keeps the public checkpoint key history. The local daemon filters posts before sending them. The hub validates event schemas. Server-side content filtering remains open for direct API callers. Keep sensitive material out of Room bodies. The [trust model](trust-model.md#decisions-settled-by-the-single-team-hub) records these choices.
+
+With 50 members, five projects, and 5,000 Room events, the Go disk benchmark wrote 682 bytes per update for a member file, 34,552 for a team file, and 1,671,300 for the main snapshot. The Go hub keeps one private file per member in `member-sync/` and scans those small files at startup and daily, while reads hide values at 30 days.
