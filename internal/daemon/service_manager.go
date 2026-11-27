@@ -26,6 +26,15 @@ func (execServiceRunner) run(name string, args ...string) ([]byte, error) {
 
 func (s *Service) definition(binary string) ([]byte, error) {
 	if s.platform == "linux" {
+		// ExecStart checks the executable after unquoting and specifier expansion.
+		if !systemdTextValid(binary) || strings.ContainsAny(binary, "'\"\\") ||
+			strings.ContainsFunc(binary, func(r rune) bool { return r < ' ' || r == 0x7f }) {
+			return nil, errors.New("systemd cannot use this executable path in ExecStart. Install the binary in a path without quotes, backslashes, or control characters, using valid UTF-8")
+		}
+		// Environment values allow quotes, backslashes, and controls other than NUL.
+		if !systemdTextValid(s.Home) {
+			return nil, errors.New("systemd cannot set OPENPLEXER_HOME from this path. Use a home path with valid UTF-8, no NUL, and no Unicode noncharacters")
+		}
 		return fmt.Appendf(nil, `[Unit]
 Description=OpenPlexer daemon
 
@@ -90,6 +99,12 @@ WantedBy=default.target
 
 func systemdQuote(word string) string {
 	return strconv.Quote(strings.ReplaceAll(word, "%", "%%"))
+}
+
+func systemdTextValid(value string) bool {
+	return utf8.ValidString(value) && !strings.ContainsFunc(value, func(r rune) bool {
+		return r == 0 || r >= 0xfdd0 && r <= 0xfdef || r&0xffff >= 0xfffe
+	})
 }
 
 func (s *Service) prepareLogs() error {
