@@ -132,6 +132,30 @@ export const schemaMigrations: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 2,
+    sql: `
+      ALTER TABLE members ADD COLUMN enrollment_id TEXT NOT NULL DEFAULT '';
+      UPDATE members SET enrollment_id = lower(hex(randomblob(16)));
+      CREATE TABLE invites (
+        id TEXT PRIMARY KEY,
+        project_id TEXT NOT NULL,
+        member_id TEXT NOT NULL,
+        hub_role TEXT NOT NULL CHECK (hub_role IN ('member', 'lead')),
+        require_approval INTEGER NOT NULL CHECK (require_approval IN (0, 1)),
+        state TEXT NOT NULL CHECK (state IN ('issued', 'pending_approval', 'approved', 'redeemed', 'revoked')),
+        created_at_ms INTEGER NOT NULL,
+        expires_at_ms INTEGER NOT NULL,
+        code_hash BLOB NOT NULL UNIQUE CHECK (length(code_hash) = 32),
+        claim_hash BLOB CHECK (length(claim_hash) = 32),
+        ended_at_ms INTEGER,
+        enrollment_id TEXT,
+        repo TEXT
+      ) STRICT;
+      CREATE INDEX invites_live_member ON invites (member_id, expires_at_ms) WHERE ended_at_ms IS NULL;
+      CREATE INDEX invites_retention ON invites (COALESCE(ended_at_ms, expires_at_ms));
+    `,
+  },
 ];
 
 export function migrate(storage: HubStorage, migrations = schemaMigrations): number {

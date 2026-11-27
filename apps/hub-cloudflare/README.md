@@ -2,7 +2,7 @@
 
 This Worker routes requests for one team to one SQLite-backed Durable Object.
 On startup, the object applies any pending schema migrations.
-`GET /healthz` returns `{"ok":true,"schema":1}` on a fresh object.
+`GET /healthz` returns `{"ok":true,"schema":2}` on a fresh object.
 The Worker serves team setup, member and project administration, signed policies, Room events, claims, and signed audit exports.
 
 On authenticated routes, the Worker rejects bearer tokens containing a comma with 401 before reading the body. On capped routes, the Go hub applies the body cap before rejecting a single 43-byte comma bearer. The public JWKS routes check no bearer.

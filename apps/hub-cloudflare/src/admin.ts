@@ -4,7 +4,7 @@ import type { JsonObject } from "./canonical";
 import type { Env } from "./index";
 import { bearer, cappedBody, conflict, invalid, notFound, tokenHash, unauthorized } from "./http";
 import type { SigningPurpose } from "./jws";
-import { activeSigningKey, activeTeam, appendAudit, authenticate, insertSigningKey, newSigningKey, newToken, team, wrappingKey } from "./state";
+import { activeSigningKey, activeTeam, appendAudit, authenticate, insertMember, insertSigningKey, memberReserved, newSigningKey, newToken, team, wrappingKey } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
 
 const adminLimit = 64 << 10;
@@ -21,7 +21,7 @@ function validRepo(repo: unknown): repo is string {
     && !/[\p{White_Space}\p{Cc}]/u.test(repo);
 }
 
-function adminJSON(body: Uint8Array, duplicates?: WeakSet<JsonObject>) {
+export function adminJSON(body: Uint8Array, duplicates?: WeakSet<JsonObject>) {
   try {
     const value = parseJSON(body, { loneSurrogates: "reject", duplicates });
     if (isJsonObject(value) && (!duplicates || !hasDuplicateMembers(value, duplicates))) return value;
@@ -67,7 +67,7 @@ export async function initialize(request: Request, storage: HubStorage, env: Pic
     insertSigningKey(sql, audit, "active");
     sql.exec("INSERT INTO team (singleton, workspace_id, policy_kid, audit_kid) VALUES (1, ?, ?, ?)",
       crypto.randomUUID(), policy.kid, audit.kid);
-    sql.exec("INSERT INTO members (member_id, role, token_hash) VALUES (?, 'lead', ?)", id, hash);
+    insertMember(sql, id, "lead", hash);
     appendAudit(sql, { action: "member.added", target: "member:" + id, actor_member_id: null, meta: { role: "lead" } });
     return {};
   });
@@ -80,11 +80,11 @@ export async function addMember(request: Request, storage: HubStorage) {
     const actor = authenticate(sql, hash, true);
     const { id, role } = adminJSON(body);
     if (!validID(id) || (role !== "lead" && role !== "member")) throw invalid(memberInput);
-    if (sql.exec("SELECT 1 FROM members WHERE member_id = ?", id).length) {
+    if (sql.exec("SELECT 1 FROM members WHERE member_id = ?", id).length || memberReserved(sql, id, Date.now())) {
       throw conflict("member " + JSON.stringify(id));
     }
     const token = newToken();
-    sql.exec("INSERT INTO members (member_id, role, token_hash) VALUES (?, ?, ?)", id, role, tokenHash(token));
+    insertMember(sql, id, role, tokenHash(token));
     appendAudit(sql, { action: "member.added", target: "member:" + id, actor_member_id: actor, meta: { role } });
     return { token };
   });
