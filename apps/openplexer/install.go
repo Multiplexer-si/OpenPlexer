@@ -97,23 +97,20 @@ func (c command) install(args []string) int {
 	}
 	agent, path, root := file.agent, file.path, file.root
 	executable := "openplexer"
-	if file.portable {
-		if err := c.registerProject(root, nil); err != nil {
-			return c.fail(err)
-		}
-	} else {
+	if !file.portable {
 		executable, err = executablePath()
 	}
 	if err != nil {
 		return c.fail(fmt.Errorf("the path of this binary is not known, so the hook cannot name it: %w", err))
 	}
 	handler := agent.Handler(executable)
-	recordedRoot := root
+	var change hook.Change
 	if file.portable {
 		handler.Command += " --project-home"
-		recordedRoot = ""
+		change, err = c.installPortable(root, path, handler)
+	} else {
+		change, err = c.journal().Install(path, handler, root)
 	}
-	change, err := c.journal().Install(path, handler, recordedRoot)
 	if err != nil {
 		return c.fail(err)
 	}
@@ -135,6 +132,26 @@ func (c command) install(args []string) int {
 		fmt.Fprintln(c.stderr, "openplexer: no verified policy is in force, so the hook blocks every shell command and every write in a project. Load one with `openplexer policy load <file>`.")
 	}
 	return exitOK
+}
+
+func (c command) installPortable(root, path string, handler hook.Handler) (hook.Change, error) {
+	user, err := os.UserHomeDir()
+	if err != nil {
+		return hook.Unchanged, err
+	}
+	journal := c.journal()
+	var change hook.Change
+	err = projects.RegisterAfter(user, root, c.home, func(publish func() error) error {
+		if registryDir, err := os.Stat(filepath.Join(user, ".openplexer")); err == nil {
+			if journalDir, err := os.Stat(journal.Dir); err == nil && os.SameFile(registryDir, journalDir) {
+				return errors.New("the hook install journal and project registry use the same directory")
+			}
+		}
+		var err error
+		change, err = journal.InstallAndRegister(path, handler, publish)
+		return err
+	})
+	return change, err
 }
 
 func (c command) uninstall(args []string) int {

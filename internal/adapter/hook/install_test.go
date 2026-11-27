@@ -492,6 +492,59 @@ func TestJournalInstall(t *testing.T) {
 	})
 }
 
+func TestJournalRestoresHookAndRecordOnPublishError(t *testing.T) {
+	publishErr := errors.New("could not publish the claim")
+	for _, existing := range []bool{false, true} {
+		name := "new hook file"
+		if existing {
+			name = "legacy hook file"
+		}
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			root := filepath.Join(dir, "checkout")
+			path := filepath.Join(root, ".claude", "settings.json")
+			journal := Journal{Dir: filepath.Join(dir, "installs")}
+			handler := handlerFor("claude-code")
+			var before []byte
+			if existing {
+				if _, err := journal.Install(path, handler, root); err != nil {
+					t.Fatal(err)
+				}
+				var err error
+				before, err = os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+			}
+			handler.Command = "openplexer hook claude-code pre-tool --project-home"
+			change, err := journal.InstallAndRegister(path, handler, func() error {
+				if got, err := os.ReadFile(path); err != nil || !bytes.Contains(got, []byte(handler.Command)) {
+					t.Errorf("the portable hook was not in place at publication: %v", err)
+				}
+				return publishErr
+			})
+			if change != Unchanged || !errors.Is(err, publishErr) {
+				t.Fatalf("InstallAndRegister = %v, %v", change, err)
+			}
+			got, err := os.ReadFile(path)
+			roots, rootsErr := journal.Roots()
+			if rootsErr != nil {
+				t.Fatal(rootsErr)
+			}
+			if existing {
+				if err != nil || !bytes.Equal(got, before) || !slices.Equal(roots, []string{root}) {
+					t.Error("the legacy hook file or its install record changed")
+				}
+			} else {
+				records, readErr := os.ReadDir(journal.Dir)
+				if !errors.Is(err, fs.ErrNotExist) || readErr != nil || len(records) != 0 {
+					t.Error("the portable hook file or its install record was left behind")
+				}
+			}
+		})
+	}
+}
+
 func TestALaterRunRemovesTheTemporaryFileOfAKilledRun(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.json")
@@ -534,7 +587,7 @@ func TestFileChangedWhileEditing(t *testing.T) {
 				out, change, _, err := Install(text, exists, handlerFor("claude-code"))
 				steal()
 				return out, false, change, err
-			})
+			}, nil)
 			return err
 		}},
 		{"uninstall", `{"a":1,"hooks":{"PreToolUse":[{"hooks":[{"command":"/b/openplexer hook claude-code pre-tool"}]}]}}`, func(path string, steal func()) error {
@@ -542,7 +595,7 @@ func TestFileChangedWhileEditing(t *testing.T) {
 				out, remove, change, err := Uninstall(text, "claude-code", AddedFile)
 				steal()
 				return out, remove, change, err
-			})
+			}, nil)
 			return err
 		}},
 	} {

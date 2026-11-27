@@ -351,7 +351,7 @@ func (l *layout) removal(o ours, added Level) (edit jsonedit.Edit, wholeDocument
 
 type transform func(text []byte, exists bool) (out []byte, remove bool, change Change, err error)
 
-func editFile(path string, edit transform) (Change, error) {
+func editFile(path string, edit transform, publish func() error) (Change, error) {
 	target, err := resolveLink(path, 0)
 	if err != nil {
 		return Unchanged, err
@@ -377,11 +377,24 @@ func editFile(path string, edit transform) (Change, error) {
 	if info, err := os.Lstat(path); remove && err == nil && info.Mode()&fs.ModeSymlink != 0 {
 		out, remove = []byte("{}\n"), false
 	}
-	if change == Unchanged || (exists && !remove && bytes.Equal(out, text)) {
-		return Unchanged, nil
+	if exists && !remove && bytes.Equal(out, text) {
+		change = Unchanged
 	}
-	if err := replace(target, text, exists, out, remove, mode); err != nil {
-		return Unchanged, fmt.Errorf("%s: %w", path, err)
+	if change != Unchanged {
+		if err := replace(target, text, exists, out, remove, mode); err != nil {
+			return Unchanged, fmt.Errorf("%s: %w", path, err)
+		}
+	}
+	if publish == nil {
+		return change, nil
+	}
+	if err := publish(); err != nil {
+		if change != Unchanged {
+			if rollbackErr := replace(target, out, !remove, text, !exists, mode); rollbackErr != nil {
+				return change, errors.Join(err, fmt.Errorf("cannot restore %s: %w", path, rollbackErr))
+			}
+		}
+		return Unchanged, err
 	}
 	return change, nil
 }

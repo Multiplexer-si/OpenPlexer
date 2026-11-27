@@ -30,6 +30,7 @@ type claim struct {
 type Registry struct {
 	Path   string
 	claims []claim
+	info   fs.FileInfo
 }
 
 // Directory resolves a directory and verifies that the original spelling and
@@ -102,6 +103,7 @@ func read(dir string) (Registry, error) {
 	if !info.Mode().IsRegular() || !ownedWithMode(info, 0o077) {
 		return r, errors.New("the project registry must be a private regular file")
 	}
+	r.info = info
 	data, err := io.ReadAll(file)
 	if err != nil {
 		return r, err
@@ -177,6 +179,16 @@ func (p Project) CheckHome() error {
 // Register atomically adds a claim, or keeps the same existing claim. The
 // caller can validate the contents of the canonical home before publication.
 func Register(userHome, root, home string, validate func(string) error) error {
+	return register(userHome, root, home, validate, nil)
+}
+
+// RegisterAfter prepares a claim under the registry lock. Install calls publish
+// after writing the hook file and restores the hook if publication fails.
+func RegisterAfter(userHome, root, home string, install func(publish func() error) error) error {
+	return register(userHome, root, home, nil, install)
+}
+
+func register(userHome, root, home string, validate func(string) error, install func(publish func() error) error) error {
 	canonicalRoot, rootInfo, err := Directory(root)
 	if err != nil {
 		return fmt.Errorf("cannot register the checkout: %w", err)
@@ -244,33 +256,58 @@ func Register(userHome, root, home string, validate func(string) error) error {
 			return err
 		}
 	}
-	if claimed {
-		return nil
+	var temp string
+	if !claimed {
+		homes[canonicalRoot] = canonicalHome
+		temp, err = prepareRegistry(dir, homes)
+		if err != nil {
+			return err
+		}
+		defer os.Remove(temp)
 	}
-	homes[canonicalRoot] = canonicalHome
+	publish := func() error {
+		if install != nil {
+			current, err := os.Lstat(r.Path)
+			if r.info == nil && !errors.Is(err, fs.ErrNotExist) ||
+				r.info != nil && (err != nil || !os.SameFile(r.info, current)) {
+				return errors.New("the project registry changed while installing the hook")
+			}
+		}
+		if claimed {
+			return nil
+		}
+		if !sameDirectory(root, rootInfo) || !sameDirectory(canonicalRoot, rootInfo) ||
+			!sameDirectory(home, homeInfo) || !sameDirectory(canonicalHome, homeInfo) ||
+			!sameDirectory(dir, info) {
+			return errors.New("a directory changed while registering the checkout")
+		}
+		return os.Rename(temp, r.Path)
+	}
+	if install != nil {
+		return install(publish)
+	}
+	return publish()
+}
+
+func prepareRegistry(dir string, homes map[string]string) (string, error) {
 	data, err := json.MarshalIndent(homes, "", "  ")
 	if err != nil {
-		return err
+		return "", err
 	}
 	temp, err := os.CreateTemp(dir, ".projects-*.tmp")
 	if err != nil {
-		return err
+		return "", err
 	}
-	defer os.Remove(temp.Name())
 	_, writeErr := temp.Write(append(data, '\n'))
 	if writeErr == nil {
 		writeErr = temp.Sync()
 	}
 	closeErr := temp.Close()
 	if err := errors.Join(writeErr, closeErr); err != nil {
-		return err
+		os.Remove(temp.Name())
+		return "", err
 	}
-	if !sameDirectory(root, rootInfo) || !sameDirectory(canonicalRoot, rootInfo) ||
-		!sameDirectory(home, homeInfo) || !sameDirectory(canonicalHome, homeInfo) ||
-		!sameDirectory(dir, info) {
-		return errors.New("a directory changed while registering the checkout")
-	}
-	return os.Rename(temp.Name(), r.Path)
+	return temp.Name(), nil
 }
 
 func sameDirectory(path string, before fs.FileInfo) bool {
