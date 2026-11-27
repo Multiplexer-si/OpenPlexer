@@ -58,6 +58,32 @@ func serviceTestHome(t *testing.T, home string) {
 	})
 }
 
+func TestServiceCaseAlias(t *testing.T) {
+	user := t.TempDir()
+	t.Setenv("HOME", user)
+	home, alias := filepath.Join(user, "PolicyHome"), filepath.Join(user, "policyhome")
+	if err := os.Mkdir(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(alias); errors.Is(err, os.ErrNotExist) {
+		t.Skip("the test volume is case-sensitive")
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	r := &fakeServiceRunner{t: t}
+	original, err := newService(home, "darwin", r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	aliased, err := newService(alias, "darwin", r)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if aliased.Name != original.Name || aliased.Home != original.Home {
+		t.Fatal("case alias selected a different home or service")
+	}
+}
+
 func TestServiceLifecycle(t *testing.T) {
 	for _, platform := range []string{"darwin", "linux"} {
 		t.Run(platform, func(t *testing.T) {

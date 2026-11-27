@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"runtime"
 	"syscall"
+
+	"github.com/multiplexer-si/openplexer/internal/projects"
 )
 
 // Service manages the login daemon for one canonical OpenPlexer home.
@@ -72,7 +74,7 @@ func newService(home, platform string, runner serviceRunner) (*Service, error) {
 }
 
 func canonicalServiceHome(path string) (string, error) {
-	resolved, err := filepath.EvalSymlinks(path)
+	resolved, err := projects.CanonicalPath(path)
 	if !errors.Is(err, os.ErrNotExist) {
 		return resolved, err
 	}
