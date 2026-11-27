@@ -2,13 +2,16 @@ package daemon
 
 import (
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/projects"
 )
@@ -117,13 +120,18 @@ func (s *Service) Install(binary string) error {
 	if keys == nil {
 		return errors.New("configure the hub with a trusted key set (--keys)")
 	}
+	definition, err := s.definition(binary)
+	if err != nil {
+		return err
+	}
 	lock, err := s.lock()
 	if err != nil {
 		return err
 	}
 	defer lock.Close()
 
-	current, err := s.managerStatus()
+	ctx := context.Background()
+	current, err := s.managerStatus(ctx)
 	if err != nil {
 		return err
 	}
@@ -137,7 +145,7 @@ func (s *Service) Install(binary string) error {
 		default:
 			if current.loaded {
 				// The manager may have started its daemon since the first status check.
-				current, err = s.managerStatus()
+				current, err = s.managerStatus(ctx)
 				if err != nil {
 					return err
 				}
@@ -146,10 +154,6 @@ func (s *Service) Install(binary string) error {
 				return errors.New("stop the foreground openplexer daemon before installing the service for this home")
 			}
 		}
-	}
-	definition, err := s.definition(binary)
-	if err != nil {
-		return err
 	}
 	if s.platform == "darwin" {
 		if err := s.prepareLogs(); err != nil {
@@ -175,9 +179,66 @@ func (s *Service) Install(binary string) error {
 		return nil
 	}
 	if err := s.start(current); err != nil {
-		return fmt.Errorf("could not start %s: %w", s.Name, err)
+		return s.startError(err)
 	}
-	return nil
+	if current.State == "running" {
+		return nil
+	}
+	return s.waitForStart()
+}
+
+func (s *Service) waitForStart() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	poll := time.NewTicker(50 * time.Millisecond)
+	defer poll.Stop()
+	failure := "the managed daemon did not acquire the Room lock"
+	for ctx.Err() == nil {
+		status, err := s.managerStatus(ctx)
+		if ctx.Err() != nil {
+			break
+		}
+		if err != nil {
+			return s.startError(err)
+		}
+		if status.Failure != "" {
+			failure = status.Failure
+		}
+		if status.State == "running" {
+			ready, err := s.roomLockHeldBy(status.PID)
+			if err != nil {
+				return s.startError(err)
+			}
+			if ready {
+				return nil
+			}
+		}
+		select {
+		case <-poll.C:
+		case <-ctx.Done():
+		}
+	}
+	return s.startError(errors.New(failure))
+}
+
+func (s *Service) roomLockHeldBy(pid int) (bool, error) {
+	room, err := lockRoom(s.Home)
+	if err == nil {
+		room.Close()
+		return false, nil
+	}
+	if !errors.Is(err, syscall.EWOULDBLOCK) {
+		return false, err
+	}
+	owner, err := os.ReadFile(filepath.Join(s.Home, roomPIDFile))
+	if errors.Is(err, os.ErrNotExist) {
+		return false, nil
+	}
+	return string(owner) == strconv.Itoa(pid), err
+}
+
+func (s *Service) startError(err error) error {
+	return fmt.Errorf("could not start %s: %w\nlogs: %s\nIf a foreground daemon is running for this home, stop the foreground openplexer daemon and retry", s.Name, err, s.LogLocation())
 }
 
 // Uninstall stops and disables the daemon before removing its definition.
@@ -188,7 +249,8 @@ func (s *Service) Uninstall() error {
 	} else if !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	current, err := s.managerStatus()
+	ctx := context.Background()
+	current, err := s.managerStatus(ctx)
 	if err != nil {
 		return err
 	}
@@ -203,14 +265,14 @@ func (s *Service) Uninstall() error {
 		return err
 	}
 	if s.platform == "linux" {
-		_, err = s.systemctl("daemon-reload")
+		_, err = s.systemctl(ctx, "daemon-reload")
 	}
 	return err
 }
 
 // Status reports the service independently of the home policy's freshness.
 func (s *Service) Status() (ServiceStatus, error) {
-	status, err := s.managerStatus()
+	status, err := s.managerStatus(context.Background())
 	if err != nil || status.loaded {
 		return status, err
 	}

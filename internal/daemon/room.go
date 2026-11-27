@@ -18,6 +18,7 @@ import (
 
 const (
 	roomCursorFile = "room-cursor.json"
+	roomPIDFile    = "room.pid"
 	roomStreamType = "application/x-ndjson"
 )
 
@@ -66,6 +67,10 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	if found && (cursor.LastSeq <= 0 || cursor.LastSeq > 1<<53-1) {
 		return errors.New("invalid stored Room cursor")
 	}
+	if err := writeFile(home, roomPIDFile, strconv.AppendInt(nil, int64(os.Getpid()), 10)); err != nil {
+		return fmt.Errorf("publish the Room lock owner: %w", err)
+	}
+	defer os.Remove(filepath.Join(home, roomPIDFile))
 
 	ctx, cancel := context.WithCancel(ctx)
 	policyDone := make(chan struct{})

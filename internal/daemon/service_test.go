@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -22,11 +23,12 @@ type serviceCall struct {
 }
 
 type fakeServiceRunner struct {
-	t     *testing.T
-	calls []serviceCall
+	t         *testing.T
+	calls     []serviceCall
+	onSuccess func([]string)
 }
 
-func (r *fakeServiceRunner) run(name string, args ...string) ([]byte, error) {
+func (r *fakeServiceRunner) run(_ context.Context, name string, args ...string) ([]byte, error) {
 	r.t.Helper()
 	got := append([]string{name}, args...)
 	if len(r.calls) == 0 {
@@ -36,6 +38,9 @@ func (r *fakeServiceRunner) run(name string, args ...string) ([]byte, error) {
 	r.calls = r.calls[1:]
 	if !slices.Equal(got, want.args) {
 		r.t.Fatalf("manager command = %v, want %v", got, want.args)
+	}
+	if want.err == nil && r.onSuccess != nil {
+		r.onSuccess(got)
 	}
 	return []byte(want.out), want.err
 }
@@ -56,6 +61,18 @@ func serviceTestHome(t *testing.T, home string) {
 		HubURL: testHubOrigin, ProjectID: "prj-shop", MemberID: "mem-ana",
 		Token: strings.Repeat("A", 43), KeySet: newSigner(t).keySet(t),
 	})
+}
+
+func holdServiceTestRoom(t *testing.T, home string, pid int) {
+	t.Helper()
+	file, err := lockRoom(home)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { file.Close() })
+	if err := writeFile(home, roomPIDFile, strconv.AppendInt(nil, int64(pid), 10)); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestServiceCaseAlias(t *testing.T) {
@@ -196,11 +213,16 @@ WantedBy=default.target
 
 			runner.calls = append(runner.calls, missing, missing)
 			runner.calls = append(runner.calls, install...)
-			runner.calls = append(runner.calls, running, running)
+			runner.calls = append(runner.calls, running, running, running)
 			runner.calls = append(runner.calls, again...)
 			runner.calls = append(runner.calls, running)
 			runner.calls = append(runner.calls, uninstall...)
 			runner.calls = append(runner.calls, missing, missing)
+			runner.onSuccess = func(args []string) {
+				if slices.Equal(args, install[len(install)-1].args) {
+					holdServiceTestRoom(t, home, 42)
+				}
+			}
 			checkStatus := func(want string, pid int, failure string) {
 				t.Helper()
 				status, err := s.Status()
@@ -306,6 +328,12 @@ func TestServiceForegroundLockAndIsolation(t *testing.T) {
 	r2.calls = []serviceCall{
 		missingUnit(second.Name),
 		{args: []string{"systemctl", "--user", "enable", "--now", second.path}},
+		{missingUnit(second.Name).args, "LoadState=loaded\nActiveState=active\nMainPID=42\n", nil},
+	}
+	r2.onSuccess = func(args []string) {
+		if args[2] == "enable" {
+			holdServiceTestRoom(t, two, 42)
+		}
 	}
 	if first.Name == second.Name || second.path != filepath.Join(os.Getenv("HOME"), ".config", "systemd", "user", second.Name) {
 		t.Fatal("homes were not isolated in the default systemd config directory")
@@ -325,6 +353,68 @@ func TestServiceForegroundLockAndIsolation(t *testing.T) {
 	}
 	if len(r1.calls)+len(r2.calls) != 0 {
 		t.Fatal("manager calls were skipped")
+	}
+}
+
+type serviceRunnerFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
+
+func (run serviceRunnerFunc) run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	return run(ctx, name, args...)
+}
+
+func TestServiceForegroundWinsDuringStart(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	home := t.TempDir()
+	serviceTestHome(t, home)
+	starting, resume := make(chan struct{}), make(chan struct{})
+	var started, reportedPID bool
+	runner := serviceRunnerFunc(func(_ context.Context, _ string, args ...string) ([]byte, error) {
+		switch args[1] {
+		case "enable":
+			close(starting)
+			select {
+			case <-resume:
+			case <-t.Context().Done():
+			}
+			started = true
+		case "show":
+			switch {
+			case !started:
+				return []byte("LoadState=not-found\n"), nil
+			case !reportedPID:
+				reportedPID = true
+				return []byte("LoadState=loaded\nActiveState=active\nMainPID=42\n"), nil
+			default:
+				return []byte("LoadState=loaded\nActiveState=activating\nResult=exit-code\nExecMainStatus=1\n"), nil
+			}
+		}
+		return nil, nil
+	})
+	s, err := newService(home, "linux", runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- s.Install("/opt/openplexer") }()
+	select {
+	case <-starting:
+	case err := <-done:
+		t.Fatalf("install returned before the manager started: %v", err)
+	case <-time.After(5 * time.Second):
+		t.Fatal("install did not reach the manager")
+	}
+	holdServiceTestRoom(t, home, 43)
+	close(resume)
+	select {
+	case err := <-done:
+		if err == nil || !strings.Contains(err.Error(), "stop the foreground openplexer daemon") ||
+			!strings.Contains(err.Error(), "last result exit-code (status 1)") ||
+			!strings.Contains(err.Error(), s.LogLocation()) {
+			t.Fatalf("install did not report the startup failure with recovery steps: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("install did not finish within the startup timeout")
 	}
 }
 
@@ -353,8 +443,14 @@ func TestServiceFailedStartAndRetry(t *testing.T) {
 		failed,
 		failed,
 		{args: enable},
+		{missing.args, "LoadState=loaded\nActiveState=active\nMainPID=42\n", nil},
 		missing,
 		{[]string{"systemctl", "--user", "disable", s.Name}, "", errors.New("manager unavailable")},
+	}
+	r.onSuccess = func(args []string) {
+		if slices.Equal(args, enable) {
+			holdServiceTestRoom(t, home, 42)
+		}
 	}
 	if err := s.Install(binary); err == nil || !strings.Contains(err.Error(), "could not start") ||
 		strings.Contains(err.Error(), sensitive) {

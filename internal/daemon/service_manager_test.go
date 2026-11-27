@@ -54,7 +54,6 @@ func TestSystemdInstallRefusesQuotesBeforeWritingUnit(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, binary := range []string{`/opt/Lee's app %n/openplexer`, `/opt/Lee's "app"/openplexer`, `/opt/Lee "app"/openplexer`} {
-		runner.calls = []serviceCall{missingUnit(s.Name)}
 		if err := s.Install(binary); err == nil || !strings.Contains(err.Error(), "Install the binary in a path without quotes") {
 			t.Fatalf("install %q: %v; want a path without quotes", binary, err)
 		}

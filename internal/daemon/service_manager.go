@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/xml"
 	"errors"
 	"fmt"
@@ -13,13 +14,13 @@ import (
 )
 
 type serviceRunner interface {
-	run(name string, args ...string) ([]byte, error)
+	run(context.Context, string, ...string) ([]byte, error)
 }
 
 type execServiceRunner struct{}
 
-func (execServiceRunner) run(name string, args ...string) ([]byte, error) {
-	cmd := exec.Command(name, args...)
+func (execServiceRunner) run(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Env = append(cmd.Environ(), "LC_ALL=C")
 	return cmd.CombinedOutput()
 }
@@ -144,41 +145,43 @@ func (s *Service) prepareLogs() error {
 }
 
 func (s *Service) start(current ServiceStatus) error {
+	ctx := context.Background()
 	if s.platform == "linux" {
-		_, err := s.systemctl("enable", "--now", s.path)
+		_, err := s.systemctl(ctx, "enable", "--now", s.path)
 		return err
 	}
 	target := s.domain + "/" + s.Name
-	if _, err := s.launchctl("enable", target); err != nil {
+	if _, err := s.launchctl(ctx, "enable", target); err != nil {
 		return err
 	}
 	if current.PID > 0 {
 		return nil
 	}
 	if current.loaded {
-		_, err := s.launchctl("kickstart", target)
+		_, err := s.launchctl(ctx, "kickstart", target)
 		return err
 	}
-	_, err := s.launchctl("bootstrap", s.domain, s.path)
+	_, err := s.launchctl(ctx, "bootstrap", s.domain, s.path)
 	return err
 }
 
 func (s *Service) stop(current ServiceStatus) error {
+	ctx := context.Background()
 	if s.platform == "linux" {
 		if current.loaded {
-			if _, err := s.systemctl("stop", s.Name); err != nil {
+			if _, err := s.systemctl(ctx, "stop", s.Name); err != nil {
 				return err
 			}
 		}
-		_, err := s.systemctl("disable", s.Name)
+		_, err := s.systemctl(ctx, "disable", s.Name)
 		return err
 	}
 	target := s.domain + "/" + s.Name
-	if _, err := s.launchctl("disable", target); err != nil {
+	if _, err := s.launchctl(ctx, "disable", target); err != nil {
 		return err
 	}
 	if current.loaded {
-		out, err := s.launchctl("bootout", target)
+		out, err := s.launchctl(ctx, "bootout", target)
 		if err != nil && !missingLaunchService(out) {
 			return err
 		}
@@ -186,9 +189,9 @@ func (s *Service) stop(current ServiceStatus) error {
 	return nil
 }
 
-func (s *Service) managerStatus() (ServiceStatus, error) {
+func (s *Service) managerStatus(ctx context.Context) (ServiceStatus, error) {
 	if s.platform == "darwin" {
-		out, err := s.launchctl("print", s.domain+"/"+s.Name)
+		out, err := s.launchctl(ctx, "print", s.domain+"/"+s.Name)
 		if err != nil && missingLaunchService(out) {
 			return ServiceStatus{State: "missing"}, nil
 		}
@@ -217,7 +220,7 @@ func (s *Service) managerStatus() (ServiceStatus, error) {
 		}
 		return status, nil
 	}
-	out, err := s.systemctl("show", "--property=LoadState,ActiveState,MainPID,UnitFileState,Result,ExecMainStatus", s.Name)
+	out, err := s.systemctl(ctx, "show", "--property=LoadState,ActiveState,MainPID,UnitFileState,Result,ExecMainStatus", s.Name)
 	fields := managerFields(out, "=")
 	pid, _ := strconv.Atoi(fields["MainPID"])
 	if fields["LoadState"] == "not-found" && pid == 0 {
@@ -269,16 +272,16 @@ func missingLaunchService(out []byte) bool {
 	return strings.Contains(string(out), "Could not find service")
 }
 
-func (s *Service) systemctl(args ...string) ([]byte, error) {
-	return s.runManager("systemctl", args[0], append([]string{"--user"}, args...)...)
+func (s *Service) systemctl(ctx context.Context, args ...string) ([]byte, error) {
+	return s.runManager(ctx, "systemctl", args[0], append([]string{"--user"}, args...)...)
 }
 
-func (s *Service) launchctl(args ...string) ([]byte, error) {
-	return s.runManager("launchctl", args[0], args...)
+func (s *Service) launchctl(ctx context.Context, args ...string) ([]byte, error) {
+	return s.runManager(ctx, "launchctl", args[0], args...)
 }
 
-func (s *Service) runManager(name, action string, args ...string) ([]byte, error) {
-	out, err := s.runner.run(name, args...)
+func (s *Service) runManager(ctx context.Context, name, action string, args ...string) ([]byte, error) {
+	out, err := s.runner.run(ctx, name, args...)
 	if err == nil {
 		return out, nil
 	}
