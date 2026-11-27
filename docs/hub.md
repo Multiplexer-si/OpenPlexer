@@ -120,6 +120,8 @@ Use `Authorization: Bearer <token>` on every request except the two public key e
 | `POST /api/v1/rooms/{room}/claims` | Create a claim and return `granted`, `conflicts`, and the claim's `event` envelope. |
 | `POST /api/v1/rooms/{room}/claims/{claim}/renew` | Recompute a claim's expiry and return the updated lease. |
 | `POST /api/v1/rooms/{room}/claims/{claim}/release` | End a claim, append a release event, and return the released lease. |
+| `POST /api/v1/admin/members` | Add a roster member from `{id, role}` and return `{token}`. Requires a lead token. |
+| `DELETE /api/v1/admin/members/{member}` | Remove a roster member. Requires a lead token and an empty body. |
 | `POST /api/v1/admin/invites` | Create an invite. Returns `201` with the public invite and its one-use code. |
 | `GET /api/v1/admin/invites` | List up to 100 invites by ID. Accepts `after` and `limit`. Also accepts `HEAD`. |
 | `POST /api/v1/admin/invites/{id}/approve` | Approve a bound request. Returns the public invite. |
@@ -127,6 +129,8 @@ Use `Authorization: Bearer <token>` on every request except the two public key e
 | `POST /api/v1/invites/redeem` | Send `code` and `token_hash`. Returns the receipt or `202` with the public invite ID and `Retry-After: 5`. |
 
 All invite admin routes require a lead token. Invite bodies have a 64 KiB limit. Redeem returns `410` for a known expired or revoked invite. A competing claim or a spent code returns `409`. The same claimant can recover its receipt for 24 hours while the original roster entry is active. [Invite request and response fields](onboarding-design.md#1-invite-contract-92)
+
+Roster requests have a 64 KiB body limit. Roster addition rejects duplicate and unknown JSON fields with `400`. Deletion returns `400` for a nonempty body within the limit and `413` for a larger body.
 
 Give members a trusted copy of the policy JWKS through an authenticated channel. See the [agent setup](local-policy.md#connect-to-a-team-hub). The agent verifies the JWS against the configured pin and the hub's advertised JWKS. The unsigned display fields are for presentation. The docs on [policy verification](../spec/policy/README.md#the-signed-bundle) give the verification steps.
 

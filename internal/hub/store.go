@@ -26,6 +26,8 @@ var (
 	errUnauthorized = errors.New("invalid bearer token")
 	errForbidden    = errors.New("forbidden")
 	errNotFound     = errors.New("not found")
+
+	errInvalidMember = fmt.Errorf("%w: member needs a valid id and role lead or member", errInvalid)
 )
 
 type Role string
@@ -127,7 +129,7 @@ func (s *Store) AddMember(id string, role Role) (string, error) {
 
 func validateMember(id string, role Role) error {
 	if !idPattern.MatchString(id) || (role != Lead && role != Member) {
-		return fmt.Errorf("%w: member needs a valid id and role lead or member", errInvalid)
+		return errInvalidMember
 	}
 	return nil
 }

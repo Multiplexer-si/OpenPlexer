@@ -31,6 +31,17 @@ export function adminJSON(body: Uint8Array, duplicates?: WeakSet<JsonObject>) {
   throw invalid("body must be a JSON object");
 }
 
+export function strictAdminJSON(body: Uint8Array, allowed: string[], detail: string) {
+  let value: JsonObject;
+  try {
+    value = adminJSON(body, new WeakSet());
+  } catch {
+    throw invalid(detail);
+  }
+  if (Object.keys(value).some((key) => !allowed.includes(key) || value[key] === null)) throw invalid(detail);
+  return value;
+}
+
 function alreadyInitialized(sql: TransactionSQL, memberID: string, hash: ArrayBuffer): boolean {
   if (!team(sql)) return false;
   // A membership's credential is immutable. A removal ends that membership even if its ID is reused.
@@ -78,7 +89,7 @@ export async function addMember(request: Request, storage: HubStorage) {
   const body = await cappedBody(request, adminLimit);
   return storage.transaction((sql) => {
     const actor = authenticate(sql, hash, true);
-    const { id, role } = adminJSON(body);
+    const { id, role } = strictAdminJSON(body, ["id", "role"], memberInput);
     if (!validID(id) || (role !== "lead" && role !== "member")) throw invalid(memberInput);
     if (sql.exec("SELECT 1 FROM members WHERE member_id = ?", id).length || memberReserved(sql, id, Date.now())) {
       throw conflict("member " + JSON.stringify(id));
@@ -90,10 +101,12 @@ export async function addMember(request: Request, storage: HubStorage) {
   });
 }
 
-export function removeMember(request: Request, storage: HubStorage, id: string) {
+export async function removeMember(request: Request, storage: HubStorage, id: string) {
   const hash = bearer(request);
+  const body = await cappedBody(request, adminLimit);
   return storage.transaction((sql) => {
     const actor = authenticate(sql, hash, true);
+    if (body.length) throw invalid("member deletion does not accept a body");
     const [member] = sql.exec<{ role: string }>("SELECT role FROM members WHERE member_id = ?", id);
     if (!member) throw notFound();
     if (member.role === "lead" && sql.exec("SELECT 1 FROM members WHERE role = 'lead' LIMIT 2").length === 1) {

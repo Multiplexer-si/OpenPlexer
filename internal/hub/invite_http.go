@@ -6,6 +6,7 @@ import (
 	"encoding/json/jsontext"
 	jsonv2 "encoding/json/v2"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -72,8 +73,8 @@ func (s *Store) inviteRoutes(mux *http.ServeMux) {
 			ID   string `json:"id"`
 			Role Role   `json:"role"`
 		}
-		if err := jsonv2.Unmarshal(req.body, &input); err != nil {
-			return 0, nil, errInvalid
+		if err := decodeInviteBody(req.body, &input); err != nil {
+			return 0, nil, errInvalidMember
 		}
 		token, err := st.addMember(input.ID, input.Role, &req.member, s.now())
 		if err == nil {
@@ -82,6 +83,9 @@ func (s *Store) inviteRoutes(mux *http.ServeMux) {
 		return http.StatusOK, map[string]string{"token": token}, err
 	}))
 	mux.HandleFunc(admin+"members/{member}", s.inviteEndpoint(http.MethodDelete, true, func(st *state, req request) (int, any, error) {
+		if len(req.body) != 0 {
+			return 0, nil, fmt.Errorf("%w: member deletion does not accept a body", errInvalid)
+		}
 		if err := st.removeMember(req.PathValue("member"), &req.member, s.now()); err != nil {
 			return 0, nil, err
 		}

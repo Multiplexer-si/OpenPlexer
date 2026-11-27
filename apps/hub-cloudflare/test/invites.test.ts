@@ -181,6 +181,26 @@ test("revoke is idempotent and invite routes enforce strict bodies and lead auth
   expect(await head.text()).toBe("");
 });
 
+test("roster writes require strict fields and an empty delete body", async () => {
+  const lead = await setup();
+  const members = "/api/v1/admin/members";
+  for (const body of [
+    '{"id":"ana","role":"member","role":"member"}',
+    '{"id":"ana","role":"member","unknown":true}',
+  ]) {
+    const response = await call(members, "POST", lead, body);
+    expect(response.status).toBe(400);
+    expect((await response.text()).trim() === '{"error":"invalid input: member needs a valid id and role lead or member"}').toBe(true);
+  }
+  expect((await call(members, "POST", lead, '{"id":"ana","role":"member"}')).status).toBe(200);
+  const path = members + "/ana";
+  const response = await call(path, "DELETE", lead, " ".repeat(64 << 10));
+  expect(response.status).toBe(400);
+  expect((await response.text()).trim() === '{"error":"invalid input: member deletion does not accept a body"}').toBe(true);
+  expect((await call(path, "DELETE", lead, " ".repeat((64 << 10) + 1))).status).toBe(413);
+  expect((await call(path, "DELETE", lead)).status).toBe(200);
+});
+
 test("backfills enrollment IDs once on existing rows", async () => {
   await runInDurableObject(stub(), (_instance, ctx) => {
     const { sql } = ctx.storage;

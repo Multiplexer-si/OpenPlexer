@@ -205,7 +205,7 @@ export class TeamHub extends DurableObject<Env> {
       }
       if (target === "members" && suffix && suffix !== "/") {
         allow(method, ["DELETE"]);
-        return json(removeMember(request, this.storage, suffix));
+        return json(await removeMember(request, this.storage, suffix));
       }
     }
     if (collection === "audit" && target === "export" && suffix === undefined) {

@@ -63,6 +63,7 @@ func (f *fixture) invites(t *testing.T) {
 	}
 	f.call(t, post, redeemPath, "", expiringBody, 202)
 
+	t.Run("roster-request-bodies", f.rosterRequestBodies)
 	t.Run("validation-and-pagination", f.inviteValidation)
 	t.Run("races-and-receipts", f.inviteRaces)
 	t.Run("direct-race", f.directInviteRace)
@@ -79,6 +80,27 @@ func (f *fixture) invites(t *testing.T) {
 		f.call(t, post, invitePath+"/"+expiring.Invite.ID+"/approve", f.lead, "", 409)
 		f.call(t, deleteMethod, invitePath+"/"+expiring.Invite.ID, f.lead, "", 409)
 	})
+}
+
+func (f *fixture) rosterRequestBodies(t *testing.T) {
+	const members = "/api/v1/admin/members"
+	id := "roster-validation-" + rand.Text()
+	input := `{"id":` + jsonString(id) + `,"role":"member"}`
+	for _, field := range []string{`"role":"member"`, `"unknown":true`} {
+		body := strings.TrimSuffix(input, "}") + "," + field + "}"
+		res := f.call(t, post, members, f.lead, body, 400)
+		if strings.TrimSpace(string(res.body)) != `{"error":"invalid input: member needs a valid id and role lead or member"}` {
+			t.Fatal("wrong roster-add error")
+		}
+	}
+	f.call(t, post, members, f.lead, input, 200)
+	path := members + "/" + id
+	res := f.call(t, deleteMethod, path, f.lead, strings.Repeat(" ", roomLimit), 400)
+	if strings.TrimSpace(string(res.body)) != `{"error":"invalid input: member deletion does not accept a body"}` {
+		t.Fatal("wrong roster-delete error")
+	}
+	f.call(t, deleteMethod, path, f.lead, strings.Repeat(" ", roomLimit+1), 413)
+	f.call(t, deleteMethod, path, f.lead, "", 200)
 }
 
 func (f *fixture) inviteValidation(t *testing.T) {

@@ -210,6 +210,36 @@ func TestInviteRevocationAndValidation(t *testing.T) {
 	}
 }
 
+func TestRosterRequestBodies(t *testing.T) {
+	s, _, lead := inviteFixture(t)
+	h := s.Handler()
+	const members = "/api/v1/admin/members"
+	for _, tc := range []struct{ name, body string }{
+		{"duplicate", `{"id":"ana","role":"member","role":"member"}`},
+		{"unknown", `{"id":"ana","role":"member","unknown":true}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			res := inviteCall(h, "POST", members, lead, tc.body)
+			wantInviteStatus(t, res, 400)
+			if strings.TrimSpace(res.Body.String()) != `{"error":"invalid input: member needs a valid id and role lead or member"}` {
+				t.Fatal("wrong roster-add error")
+			}
+		})
+	}
+	wantInviteStatus(t, inviteCall(h, "POST", members, lead, `{"id":"ana","role":"member"}`), 200)
+
+	path := members + "/ana"
+	t.Run("delete-body", func(t *testing.T) {
+		res := inviteCall(h, "DELETE", path, lead, strings.Repeat(" ", inviteBodyLimit))
+		wantInviteStatus(t, res, 400)
+		if strings.TrimSpace(res.Body.String()) != `{"error":"invalid input: member deletion does not accept a body"}` {
+			t.Fatal("wrong roster-delete error")
+		}
+	})
+	wantInviteStatus(t, inviteCall(h, "DELETE", path, lead, strings.Repeat(" ", inviteBodyLimit+1)), 413)
+	wantInviteStatus(t, inviteCall(h, "DELETE", path, lead, ""), 200)
+}
+
 func TestLegacyMemberGetsStableEnrollment(t *testing.T) {
 	s, _, _ := inviteFixture(t)
 	raw, err := os.ReadFile(s.path())

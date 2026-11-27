@@ -1,5 +1,5 @@
 import { Buffer } from "node:buffer";
-import { adminJSON, validID } from "./admin";
+import { strictAdminJSON, validID } from "./admin";
 import { bearer, cappedBody, HubError, invalid, json, notFound, tokenHash } from "./http";
 import { activeTeam, appendAudit, authenticate, insertMember, memberReserved, newToken } from "./state";
 import type { Role } from "./state";
@@ -13,6 +13,7 @@ const retention = 30 * day;
 const inviteID = /^[0-9a-f]{32}$/;
 const hashPattern = /^[0-9a-f]{64}$/;
 const codePattern = /^[a-zA-Z0-9_-]{42}[AEIMQUYcgkosw048]$/;
+const inviteInput = "invalid invite request";
 
 type StoredState = "issued" | "pending_approval" | "approved" | "redeemed" | "revoked";
 type InviteRow = {
@@ -34,7 +35,7 @@ type StoredInvite = InviteRow & {
 type InviteRoute = { kind: "collection" | "redeem" } | { kind: "approve" | "revoke"; id: string };
 
 const inviteConflict = () => new HubError(409, "already exists or conflicts with current state");
-const badInvite = () => invalid("invalid invite request");
+const badInvite = () => invalid(inviteInput);
 
 export async function handleInvite(request: Request, storage: HubStorage, route: InviteRoute, clock = Date.now): Promise<Response> {
   const methods = route.kind === "collection" ? ["GET", "HEAD", "POST"] : [route.kind === "revoke" ? "DELETE" : "POST"];
@@ -58,17 +59,6 @@ export async function handleInvite(request: Request, storage: HubStorage, route:
   });
 }
 
-function readBody(body: Uint8Array, allowed: string[]) {
-  let value;
-  try {
-    value = adminJSON(body, new WeakSet());
-  } catch {
-    throw badInvite();
-  }
-  if (Object.keys(value).some((key) => !allowed.includes(key) || value[key] === null)) throw badInvite();
-  return value;
-}
-
 function present(row: InviteRow, now: number) {
   const { id, project_id, member_id, hub_role, require_approval, created_at_ms, expires_at_ms } = row;
   const state = row.state === "redeemed" || row.state === "revoked" || now < expires_at_ms ? row.state : "expired";
@@ -90,7 +80,7 @@ function purgeInvites(sql: TransactionSQL, now: number) {
 
 function createInvite(sql: TransactionSQL, body: Uint8Array, now: number, actor: string) {
   const { project_id, member_id, hub_role = "member", expires_in_seconds = 172800, require_approval = false } =
-    readBody(body, ["project_id", "member_id", "hub_role", "expires_in_seconds", "require_approval"]);
+    strictAdminJSON(body, ["project_id", "member_id", "hub_role", "expires_in_seconds", "require_approval"], inviteInput);
   if (!validID(project_id) || !validID(member_id) || (hub_role !== "member" && hub_role !== "lead") ||
       typeof require_approval !== "boolean" || typeof expires_in_seconds !== "number" ||
       !Number.isInteger(expires_in_seconds) || expires_in_seconds < 60 || expires_in_seconds > 604800) {
@@ -170,7 +160,7 @@ function changeInvite(sql: TransactionSQL, route: { kind: "approve" | "revoke"; 
 }
 
 function redeemInvite(sql: TransactionSQL, body: Uint8Array, now: number) {
-  const { code, token_hash } = readBody(body, ["code", "token_hash"]);
+  const { code, token_hash } = strictAdminJSON(body, ["code", "token_hash"], inviteInput);
   if (typeof code !== "string" || !codePattern.test(code) ||
       typeof token_hash !== "string" || !hashPattern.test(token_hash)) throw badInvite();
   const [row] = sql.exec<StoredInvite>("SELECT * FROM invites WHERE code_hash = ? AND COALESCE(ended_at_ms, expires_at_ms) > ?",
