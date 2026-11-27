@@ -85,3 +85,32 @@ func TestParseCallUsesExactFinalMembers(t *testing.T) {
 		t.Fatalf("file_path = %q, %v", path, err)
 	}
 }
+
+func TestPortableHookRejectsDuplicateMembers(t *testing.T) {
+	agent := Agent{Tools: Tools{"Write": FileTool("file_path")}}
+	for name, input := range map[string]string{
+		"tool name":   `{"hook_event_name":"PreToolUse","tool_name":"Write","tool_name":"Read"}`,
+		"file path":   `{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"/p","tool_input":{"file_path":"a","file_path":"b"}}`,
+		"deep member": `{"hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{"unused":[{"nested":{"x":1,"\u0078":2}}]}}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			checked := false
+			out := agent.HandleProject([]byte(input), func(Call, Effect) Verdict {
+				checked = true
+				return Verdict{}
+			})
+			if checked || out.ExitCode != 2 || out.Stdout != "" || !strings.Contains(out.Stderr, "duplicate member") {
+				t.Fatalf("checked = %v, output = %+v, want a blocking exit for duplicate input", checked, out)
+			}
+		})
+	}
+	input := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"/p","tool_input":{"file_path":"a","unused":[{"x":1},{"x":2}]}}`)
+	checked := false
+	out := agent.HandleProject(input, func(Call, Effect) Verdict {
+		checked = true
+		return Verdict{}
+	})
+	if !checked || out != (Output{}) {
+		t.Fatalf("checked = %v, output = %+v, want to allow the same name in separate objects", checked, out)
+	}
+}

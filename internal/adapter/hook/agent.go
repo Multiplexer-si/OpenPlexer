@@ -1,6 +1,7 @@
 package hook
 
 import (
+	"encoding/json/jsontext"
 	"maps"
 	"path/filepath"
 	"regexp"
@@ -32,6 +33,9 @@ func (a Agent) Handle(stdin []byte, env Env, judge Judge) Output {
 
 // HandleProject translates a covered portable call before passing it to check.
 func (a Agent) HandleProject(stdin []byte, check func(Call, Effect) Verdict) Output {
+	if !jsontext.Value(stdin).IsValid() {
+		return Render(Verdict{Refuse, "the hook input is invalid JSON or has a duplicate member"})
+	}
 	call, effect, covered, err := readEffect(stdin, a.Tools, true)
 	if err != nil {
 		return Render(Verdict{Refuse, err.Error()})
