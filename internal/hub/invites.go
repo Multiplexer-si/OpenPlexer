@@ -3,6 +3,7 @@ package hub
 import (
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
@@ -178,6 +179,14 @@ func (st *state) createInvite(input InviteInput, actor *string, now time.Time) (
 		st.Invites = make(map[string]inviteRecord)
 	}
 	st.purgeInvites(now)
+	if _, exists := st.Invites[id]; exists {
+		return CreatedInvite{}, errors.New("duplicate generated invite ID")
+	}
+	for _, existing := range st.Invites {
+		if subtle.ConstantTimeCompare(existing.CodeHash[:], r.CodeHash[:]) == 1 {
+			return CreatedInvite{}, errors.New("duplicate generated invite digest")
+		}
+	}
 	st.Invites[id] = r
 	if err := st.auditInvite(r, "invite.created", actor, now); err != nil {
 		return CreatedInvite{}, err
@@ -264,7 +273,7 @@ func (s *Store) changeInvite(st *state, id string, to inviteState, actor *string
 		if current == redeemed || current == expired {
 			return InviteResult{}, errConflict
 		}
-		r.EndedAt = &now
+		r.EndedAt, r.ClaimHash = &now, nil
 		action = "invite.revoked"
 	} else if current != pendingApproval {
 		return InviteResult{}, errConflict
@@ -290,7 +299,7 @@ func (s *Store) redeemInvite(st *state, input redeemInput) (redeemResult, error)
 	codeHash := sha256.Sum256([]byte(input.Code))
 	now := s.inviteNow()
 	for _, r := range st.Invites {
-		if r.CodeHash == codeHash && !r.pastRetention(now) {
+		if subtle.ConstantTimeCompare(r.CodeHash[:], codeHash[:]) == 1 && !r.pastRetention(now) {
 			return s.redeemKnownInvite(st, r, claim, now)
 		}
 	}
@@ -302,14 +311,14 @@ func (s *Store) redeemKnownInvite(st *state, r inviteRecord, claim [sha256.Size]
 	if current == revoked || current == expired {
 		return redeemResult{}, errInviteGone
 	}
-	if r.ClaimHash != nil && *r.ClaimHash != claim {
+	if r.ClaimHash != nil && subtle.ConstantTimeCompare(r.ClaimHash[:], claim[:]) != 1 {
 		return redeemResult{}, errConflict
 	}
 	receipt := redeemResult{State: redeemed, ProjectID: r.ProjectID, Repo: r.Repo, MemberID: r.MemberID, Role: r.Role}
 	existing, occupied := st.Members[r.MemberID]
 	if current == redeemed {
-		if !occupied || existing.EnrollmentID != r.EnrollmentID || existing.Role != r.Role ||
-			existing.TokenHash != claim || !now.Before(r.EndedAt.Add(inviteReceiptWindow)) {
+		if r.EndedAt == nil || !occupied || existing.EnrollmentID != r.EnrollmentID || existing.Role != r.Role ||
+			subtle.ConstantTimeCompare(existing.TokenHash[:], claim[:]) != 1 || !now.Before(r.EndedAt.Add(inviteReceiptWindow)) {
 			return redeemResult{}, errConflict
 		}
 		return receipt, nil

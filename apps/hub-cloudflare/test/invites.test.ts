@@ -218,3 +218,24 @@ test("counts only live invites toward the team limit", async () => {
     expect(value.next_cursor).toBe(value.invites[99].id);
   });
 });
+
+test("rolls back redemption when the member audit record cannot commit", async () => {
+  const lead = await setup();
+  const invite = await readCreated(await call(invites, "POST", lead, '{"project_id":"demo","member_id":"ana"}'));
+  const token = newToken();
+  const body = requestBody(invite.code, hexHash(token));
+  await runInDurableObject(stub(), (_instance, ctx) => {
+    ctx.storage.sql.exec("ALTER TABLE team ADD COLUMN reject_member_audit INTEGER CHECK (audit_seq < 5)");
+  });
+
+  expect((await call(redeem, "POST", undefined, body)).status).toBe(500);
+  expect((await call("/api/v1/projects/demo", "GET", token)).status).toBe(401);
+  const page = await call(invites, "GET", lead);
+  expect(await page.json()).toMatchObject({ invites: [{ id: invite.id, state: "issued" }] });
+
+  await runInDurableObject(stub(), (_instance, ctx) => {
+    expect(ctx.storage.sql.exec("SELECT audit_seq FROM team").one().audit_seq).toBe(3);
+    ctx.storage.sql.exec("ALTER TABLE team DROP COLUMN reject_member_audit");
+  });
+  expect((await call(redeem, "POST", undefined, body)).status).toBe(200);
+});

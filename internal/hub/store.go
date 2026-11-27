@@ -110,6 +110,9 @@ func (s *Store) Check() error {
 var idPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
 
 func (s *Store) AddMember(id string, role Role) (string, error) {
+	if err := validateMember(id, role); err != nil {
+		return "", err
+	}
 	var token string
 	err := s.update(func(st *state) error {
 		var err error
@@ -122,16 +125,27 @@ func (s *Store) AddMember(id string, role Role) (string, error) {
 	return token, nil
 }
 
-func (st *state) addMember(id string, role Role, actor *string, now time.Time) (string, error) {
+func validateMember(id string, role Role) error {
 	if !idPattern.MatchString(id) || (role != Lead && role != Member) {
-		return "", fmt.Errorf("%w: member needs a valid id and role lead or member", errInvalid)
+		return fmt.Errorf("%w: member needs a valid id and role lead or member", errInvalid)
+	}
+	return nil
+}
+
+func (st *state) addMember(id string, role Role, actor *string, now time.Time) (string, error) {
+	if err := validateMember(id, role); err != nil {
+		return "", err
 	}
 	_, reserved := st.liveInvites(id, now)
 	if _, exists := st.Members[id]; exists || reserved {
 		return "", fmt.Errorf("%w: member %q", errConflict, id)
 	}
 	token := base64.RawURLEncoding.EncodeToString(randomBytes(32))
-	st.Members[id] = newMember(role, sha256.Sum256([]byte(token)))
+	hash := sha256.Sum256([]byte(token))
+	if st.hasTokenHash(hash) {
+		return "", errors.New("duplicate generated member credential")
+	}
+	st.Members[id] = newMember(role, hash)
 	return token, st.appendAudit(audit.Record{Action: "member.added", Target: "member:" + id,
 		ActorMemberID: actor, Meta: map[string]any{"role": role}}, now)
 }
@@ -147,7 +161,11 @@ func (st *state) hasTokenHash(hash [sha256.Size]byte) bool {
 
 func (s *Store) RemoveMember(id string) error {
 	return s.update(func(st *state) error {
-		return st.removeMember(id, nil, s.now())
+		err := st.removeMember(id, nil, s.now())
+		if errors.Is(err, errNotFound) {
+			return fmt.Errorf("%w: member %q", err, id)
+		}
+		return err
 	})
 }
 
