@@ -8,8 +8,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 )
+
+var invalidBearerCharacter = regexp.MustCompile(`[^A-Za-z0-9_-]`)
 
 func (s *Store) Handler() http.Handler {
 	mux := http.NewServeMux()
@@ -58,9 +61,9 @@ func (r request) project() string { return r.PathValue("project") }
 
 func (s *Store) endpoint(limit int64, run func(*state, request) (any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		hash, err := bearerHash(r)
-		if err != nil {
-			respond(w, nil, err)
+		token := bearerToken(r)
+		if token == "" {
+			respond(w, nil, errUnauthorized)
 			return
 		}
 		var body []byte
@@ -77,6 +80,12 @@ func (s *Store) endpoint(limit int64, run func(*state, request) (any, error)) ht
 				return
 			}
 		}
+		// The body cap takes precedence for a single 43-byte bearer.
+		hash, err := rosterBearerHash(token)
+		if err != nil {
+			respond(w, nil, err)
+			return
+		}
 		var result any
 		err = s.view(func(st *state) error {
 			member, role, err := st.authenticate(hash)
@@ -91,14 +100,25 @@ func (s *Store) endpoint(limit int64, run func(*state, request) (any, error)) ht
 }
 
 func bearerHash(r *http.Request) ([sha256.Size]byte, error) {
+	return rosterBearerHash(bearerToken(r))
+}
+
+func bearerToken(r *http.Request) string {
 	auth := r.Header.Values("Authorization")
 	if len(auth) == 1 {
 		scheme, token, _ := strings.Cut(auth[0], " ")
 		if strings.EqualFold(scheme, "Bearer") && len(token) == base64.RawURLEncoding.EncodedLen(32) {
-			return sha256.Sum256([]byte(token)), nil
+			return token
 		}
 	}
-	return [sha256.Size]byte{}, errUnauthorized
+	return ""
+}
+
+func rosterBearerHash(token string) ([sha256.Size]byte, error) {
+	if token == "" || invalidBearerCharacter.MatchString(token) {
+		return [sha256.Size]byte{}, errUnauthorized
+	}
+	return sha256.Sum256([]byte(token)), nil
 }
 
 func (st *state) authenticate(hash [sha256.Size]byte) (string, Role, error) {

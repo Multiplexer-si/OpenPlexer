@@ -120,7 +120,7 @@ func (s *Store) inviteEndpoint(allow string, leadOnly bool, run func(*state, req
 		if leadOnly {
 			var err error
 			hash, err = bearerHash(r)
-			if err != nil || strings.Contains(r.Header.Get("Authorization"), ",") {
+			if err != nil {
 				respond(w, nil, errUnauthorized)
 				return
 			}

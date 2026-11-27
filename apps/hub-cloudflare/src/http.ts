@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 
-const utf8 = new TextEncoder();
 export const jsonHeaders = { "Content-Type": "application/json", "Cache-Control": "no-store" };
 
 export class HubError extends Error {
@@ -38,7 +37,7 @@ export function bearer(request: Request, bootstrap = false): ArrayBuffer {
   // Workerd combines repeated Authorization fields with a comma.
   if (auth.includes(",") || !/^Bearer /i.test(auth)) throw unauthorized();
   const token = auth.slice(7);
-  if (bootstrap ? !token || /\s/u.test(token) : utf8.encode(token).length !== 43) throw unauthorized();
+  if (bootstrap ? !token || /\s/u.test(token) : token.length !== 43 || /[^A-Za-z0-9_-]/.test(token)) throw unauthorized();
   return tokenHash(token);
 }
 

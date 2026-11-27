@@ -5,7 +5,7 @@ On startup, the object applies any pending schema migrations.
 `GET /healthz` returns `{"ok":true,"schema":3}` on a fresh object.
 The Worker serves team setup, member and project administration, signed policies, Room events, claims, and signed audit exports.
 
-On authenticated routes, the Worker rejects bearer tokens containing a comma with 401 before reading the body. The capped Go policy and Room routes apply the body cap before rejecting a single 43-byte comma bearer. The Go invite and roster routes reject the header before reading the body. The public JWKS routes check no bearer.
+Both hubs require roster bearers to use 43 characters from `A-Z`, `a-z`, `0-9`, `-`, and `_`. The Worker returns 401 for a malformed bearer header before reading the body. On capped Go policy and Room routes, a single Bearer header with a 43-byte token reaches the body cap before the alphabet check. Go invite and roster routes check the bearer format before reading the body. The JWKS routes are public.
 
 Use the Room events endpoint to post and replay events, and the claim endpoints to create, renew, and release leases. To follow a Room, open `GET /api/v1/rooms/{room}/stream?last_seq=0` with a member bearer. The stream sends v1 NDJSON envelopes after the cursor and blank lines while caught up. It checks membership on every page read. If an in-stream page read detects revocation before the deadline while the response is writable, the Worker sends an `unauthorized` envelope and closes the stream. The stream can end with clean EOF before a page read detects revocation. The next GET returns HTTP `401` if its first authenticated page read detects the revocation before that GET's deadline. If the deadline arrives first, the Worker returns an empty HTTP `200`.
 

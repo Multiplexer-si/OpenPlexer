@@ -130,6 +130,8 @@ Use `Authorization: Bearer <token>` on every request except the two public key e
 
 All invite admin routes require a lead token. Invite bodies have a 64 KiB limit. Redeem returns `404` for an unknown code and `410` for a known expired or revoked invite. A competing claim or a spent code returns `409`. The same claimant can recover its receipt for 24 hours while the original roster entry is active. [Invite request and response fields](onboarding-design.md#1-invite-contract-92)
 
+To redeem an invite, generate 32 random bytes on the laptop and encode them as unpadded base64url. The bearer has 43 characters from `A-Z`, `a-z`, `0-9`, `-`, and `_`. Send the SHA-256 digest of those 43 characters as 64 lowercase hex characters in `token_hash`.
+
 Each team can receive 20 redeem failures in a 60-second window that starts with the first failure. The limit counts `404`, `409`, and `410` outcomes. Further failures return `429` with `Retry-After` set to the remaining seconds, rounded up. Valid claims, approval polls, and receipt retries still work during that window.
 
 Roster requests have a 64 KiB body limit. Roster addition rejects duplicate and unknown JSON fields with `400`. Deletion returns `400` for a nonempty body within the limit and `413` for a larger body.
