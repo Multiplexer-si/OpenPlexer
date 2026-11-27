@@ -25,6 +25,7 @@ const usage = `usage:
   openplexer configure --project-root <dir> [--home <dir>]
   openplexer configure --hub <url> --project <id> --member <id> --keys <jwks.json> --token-file <file>
   openplexer daemon [--quiet]
+  openplexer service install|uninstall|status [--home <dir>]
   openplexer room post < event.json
   openplexer policy sync
   openplexer policy load <signed-bundle.json>
@@ -94,6 +95,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() ti
 			return c.install(args[1:])
 		case "uninstall":
 			return c.uninstall(args[1:])
+		case "service":
+			return c.service(args[1:])
 		case "hook":
 			return c.runHook(args[1:])
 		}

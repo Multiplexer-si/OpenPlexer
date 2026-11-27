@@ -30,6 +30,18 @@ type roomCursor struct {
 
 var errRoomBehind = errors.New("hub reported behind")
 
+func lockRoom(home string) (*os.File, error) {
+	file, err := os.OpenFile(filepath.Join(home, "room.lock"), os.O_CREATE|os.O_RDWR, 0o600)
+	if err != nil {
+		return nil, err
+	}
+	if err := tryLockFileExclusive(file); err != nil {
+		file.Close()
+		return nil, fmt.Errorf("cannot lock the Room cursor: %w", err)
+	}
+	return file, nil
+}
+
 // Run keeps policy fresh and delivers Room events until ctx is canceled.
 // A local delivery or cursor write failure stops the process. An unavailable
 // hub leaves the policy and cursor on disk for the next attempt.
@@ -41,14 +53,11 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	if _, err := cfg.client(); err != nil {
 		return err
 	}
-	file, err := os.OpenFile(filepath.Join(home, "room.lock"), os.O_CREATE|os.O_RDWR, 0600)
+	file, err := lockRoom(home)
 	if err != nil {
 		return err
 	}
 	defer file.Close()
-	if err := tryLockFileExclusive(file); err != nil {
-		return fmt.Errorf("cannot lock the Room cursor: %w", err)
-	}
 	var cursor roomCursor
 	found, err := readJSON(home, roomCursorFile, map[string]any{"last_seq": &cursor.LastSeq})
 	if err != nil {
