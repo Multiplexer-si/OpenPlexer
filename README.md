@@ -36,6 +36,7 @@ OpenPlexer is the open-source foundation for this coordination, licensed under A
 | Load a signed policy on your machine and check an action against it | [Local policy gate](docs/local-policy.md) |
 | Choose a hub for your team | [Compare the Go and Cloudflare hubs](docs/hub.md#choose-a-hub) · [Self-host the Go hub](docs/self-host.md) · [Deploy to Cloudflare](docs/cloudflare.md) |
 | See the design for running a team hub on Cloudflare | [Cloudflare hub design](docs/cloudflare-hub-design.md) |
+| See the design for invites, joining, and policy freshness | [Onboarding design](docs/onboarding-design.md) |
 | Connect Claude Code to the gate, remove it, or see what its hook cannot see | [Claude Code hooks](docs/hooks-claude-code.md) |
 | Connect Codex to the gate, remove it, or see what its hook cannot see | [Codex hooks](docs/hooks-codex.md) |
 | Find a binary, a package, or a make target | [Repository layout](docs/repository-layout.md) |
