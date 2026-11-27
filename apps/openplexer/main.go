@@ -22,6 +22,8 @@ import (
 
 const usage = `usage:
   openplexer --version
+  openplexer join [--link-stdin] [--project-root <dir>] [--home <dir>] [--install-hook] [--install-service]
+  openplexer join --discard-pending [--project-root <dir>]
   openplexer configure [--keys <jwks.json>] [--member <member-id>] [--stale-after-days <days>] [--max-policy-age <duration>]
   openplexer configure --project-root <dir> [--home <dir>]
   openplexer configure --hub <url> --project <id> --member <id> --keys <jwks.json> --token-file <file>
@@ -91,6 +93,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() ti
 	}
 	if len(args) > 0 {
 		switch args[0] {
+		case "join":
+			return c.join(args[1:])
 		case "configure":
 			return c.configure(args[1:])
 		case "install":
