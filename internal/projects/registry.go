@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -48,7 +49,7 @@ func Directory(path string) (string, fs.FileInfo, error) {
 	if err != nil {
 		return "", nil, err
 	}
-	resolved, err := filepath.EvalSymlinks(path)
+	resolved, err := CanonicalPath(path)
 	if err != nil {
 		return "", nil, err
 	}
@@ -82,10 +83,11 @@ func registryDir(userHome string) (string, error) {
 
 func read(dir string) (Registry, error) {
 	r := Registry{Path: filepath.Join(dir, "projects.json")}
-	file, err := os.Lstat(r.Path)
+	file, err := openRegistry(r.Path)
 	if err != nil {
 		return r, err
 	}
+	defer file.Close()
 	info, err := os.Lstat(dir)
 	if err != nil {
 		return r, err
@@ -93,10 +95,14 @@ func read(dir string) (Registry, error) {
 	if !info.IsDir() || !ownedWithMode(info, 0o022) {
 		return r, errors.New("the project registry directory must be writable only by its owner")
 	}
-	if !file.Mode().IsRegular() || !ownedWithMode(file, 0o077) {
+	info, err = file.Stat()
+	if err != nil {
+		return r, err
+	}
+	if !info.Mode().IsRegular() || !ownedWithMode(info, 0o077) {
 		return r, errors.New("the project registry must be a private regular file")
 	}
-	data, err := os.ReadFile(r.Path)
+	data, err := io.ReadAll(file)
 	if err != nil {
 		return r, err
 	}
@@ -109,6 +115,9 @@ func read(dir string) (Registry, error) {
 		root := member.Key
 		if doc.Decode(member.Value, &home) != nil || !absoluteClean(root) || !absoluteClean(home) {
 			return r, errors.New("the project registry must contain absolute checkout and home paths")
+		}
+		if spelled, err := diskPath(home); err == nil {
+			home = spelled
 		}
 		_, info, _ := Directory(root)
 		r.claims = append(r.claims, claim{Project{root, home}, info})
