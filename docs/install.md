@@ -89,6 +89,18 @@ gh attestation verify "$archive" --repo Multiplexer-si/OpenPlexer --signer-workf
 - Run a hub for your team. [Self-host the OpenPlexer hub](self-host.md)
 - Connect a coding agent. [Claude Code hooks](hooks-claude-code.md) or [Codex hooks](hooks-codex.md)
 
+## Join a team from an invite
+
+The `join` command needs a build newer than `v0.1.0-rc.1`. Run `make build` from a source commit that includes `openplexer join`. Put the resulting binary on your `PATH`.
+
+Open your checkout and run `openplexer join`. Paste the link from your lead at the hidden prompt. For scripts, save the link in an owner-only file and use `openplexer join --link-stdin < invite.link`. Keep the link out of shell commands and browser windows.
+
+Join shows `policy: verified` and the current policy version. You can sync again with `openplexer policy sync` after your lead publishes your role. If join reports `pending_approval`, confirm the public invite ID with your lead. Run join again with the same link after approval.
+
+Join offers portable hooks when the Git origin matches the project repository. Review and trust each hook in your agent before use. It also offers to install and start the login service. With standard input, join prints the commands for later. Use `--install-hook` to install both supported hooks for a matching checkout. Use `--install-service` to start the service on macOS or Linux.
+
+Use `--project-root <dir>` to select a checkout and `--home <dir>` to choose the home. If you abandon an unfinished join, run `openplexer join --discard-pending` for that checkout. If the home is already in place and awaits registration, rerun join with the same link. [Invite link format](hub.md#invite-links)
+
 ## Run the daemon as a login service
 
 The `service` command needs a build newer than `v0.1.0-rc.1`.

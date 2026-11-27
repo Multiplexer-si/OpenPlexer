@@ -79,6 +79,9 @@ func (f *fixture) invites(t *testing.T) {
 			t.Fatal("cancelled while waiting for invite expiry")
 		}
 		f.call(t, post, redeemPath, "", expiringBody, 410)
+		checkout := newJoinCheckout(t, joinBinary(t), "team/demo")
+		mustReport(t, checkout.join(t, 1, f.origin, expiring.Code, f.joinFingerprint(t)), "HTTP 410")
+		mustReport(t, checkout.run(t, 0, "", "join", "--discard-pending"), "no pending join")
 		f.call(t, post, invitePath+"/"+expiring.Invite.ID+"/approve", f.lead, "", 409)
 		f.call(t, deleteMethod, invitePath+"/"+expiring.Invite.ID, f.lead, "", 409)
 	})

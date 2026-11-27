@@ -209,6 +209,14 @@ Send one lead bearer to sign in. Use `Origin` set to the hub's exact origin, `Co
 
 Project, policy history, Room, and audit pages default to 25 items and allow up to 100. For replay, start at `last_seq=0`. For the next page, pass `next_cursor` as the route's cursor parameter. A null cursor marks the end. Dashboard policy and Room reads leave member sync observations unchanged.
 
+## Invite links
+
+The lead shares `https://hub.example.com/join/<code>#fp=<fingerprint>` through a trusted private channel. The code is 32 random bytes in unpadded base64url. The CLI sends it only in the redeem POST body. Paste the link into the hidden join prompt. Opening it in a browser can expose the code in access logs. HTTPS is required away from loopback. The CLI refuses redirects. [Join a team from an invite](install.md#join-a-team-from-an-invite)
+
+The fingerprint is the lowercase SHA-256 hex digest of the canonical UTF-8 JSON for `{"keys":[...]}` from the policy JWKS at `/.well-known/jwks.json`. The CLI accepts a nonempty public P-256 key set up to 64 KiB. It checks the coordinates and requires unique, nonempty key IDs. Each normalized key has only `kty`, `crv`, `kid`, `x`, and `y`. The keys are sorted by `kid` in UTF-8 byte order. JSON whitespace and input key order do not change the fingerprint. The audit JWKS has a separate trust path. [Canonical JSON](../spec/canonical-json/README.md)
+
+When staging changes the advertised key set, give members the new fingerprint through the same trusted channel. For a pending invite or a receipt within its recovery window, update the fingerprint on the original link so the same laptop can retry. [Join and key rotation design](onboarding-design.md#3-link-key-trust-and-join-95)
+
 ## Export the audit log
 
 The hub writes one chain for the team. It writes each audit record in the same state update as its action. The log covers `member.added`, `member.removed`, `project.added`, `policy.updated`, and `event.policy-denied`. The log also covers invite creation, requests, approval, redemption, and revocation. A denial record links to its Room event and includes the member's claimed decision time in `meta.decided_at` when available.
