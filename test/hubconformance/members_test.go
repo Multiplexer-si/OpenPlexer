@@ -75,10 +75,7 @@ func (f *fixture) memberSync(t *testing.T) {
 	f.call(t, head, membersPath+"?limit=0", f.lead, "", 400)
 	f.call(t, get, membersPath+"?project_id="+f.missing, f.lead, "", 404)
 	wrong := f.call(t, put, membersPath, f.lead, "", 405)
-	allow := wrong.header.Get("Allow")
-	if allow != "GET, HEAD" && allow != "GET, HEAD, POST" ||
-		f.target == localWrangler && allow != "GET, HEAD, POST" ||
-		f.target == builtInGo && allow != "GET, HEAD" {
+	if wrong.header.Get("Allow") != "GET, HEAD, POST" {
 		t.Fatal("incorrect Allow for the member list")
 	}
 	for _, bad := range []string{
@@ -196,23 +193,8 @@ func (f *fixture) reAddObservedMember(t *testing.T, projectID, bundleURL string)
 	active := false
 	add := func() string {
 		t.Helper()
-		if f.target == builtInGo {
-			token, err := hub.Open(f.dataDir).AddMember(id, hub.Member)
-			if err != nil {
-				t.Fatal("could not add a temporary member to the data directory")
-			}
-			active = true
-			return token
-		}
 		body, _ := json.Marshal(map[string]string{"id": id, "role": "member"})
-		res, err := f.send(t.Context(), post, membersPath, f.lead, string(body), "")
-		if err != nil {
-			t.Fatal("could not add a temporary member over HTTP")
-		}
-		if f.target == externalHub && res.status == 405 {
-			t.Skip("the seeded Go hub requires local access for roster changes")
-		}
-		res.expect(t, post, membersPath, 200)
+		res := f.call(t, post, membersPath, f.lead, string(body), 200)
 		active = true
 		var reply struct {
 			Token string `json:"token"`
@@ -225,12 +207,6 @@ func (f *fixture) reAddObservedMember(t *testing.T, projectID, bundleURL string)
 	remove := func() {
 		t.Helper()
 		active = false
-		if f.target == builtInGo {
-			if err := hub.Open(f.dataDir).RemoveMember(id); err != nil {
-				t.Fatal("could not remove the temporary member from the data directory")
-			}
-			return
-		}
 		f.call(t, http.MethodDelete, membersPath+"/"+id, f.lead, "", 200)
 	}
 	defer func() {

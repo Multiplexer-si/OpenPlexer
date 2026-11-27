@@ -76,7 +76,7 @@ The Wrangler run uses requests without upload bodies and checks the same GET fra
 
 ## Member sync state
 
-Select the section with `go test -count=1 ./test/hubconformance -run '^TestHub$/^member-sync$'`. The suite checks lead access, project filtering, cursor paging, and both observations over HTTP. It publishes a policy for the second project. It checks that a member still shows the older version until the next fetch. On the built-in Go hub and the Worker, it also removes and re-adds a temporary member to check that observations are cleared.
+Select the section with `go test -count=1 ./test/hubconformance -run '^TestHub$/^member-sync$'`. The suite checks lead access, project filtering, cursor paging, and both observations over HTTP. It publishes a policy for the second project. It checks that a member still shows the older version until the next fetch. It also removes and re-adds a temporary member over HTTP to check that observations are cleared.
 
 ## Coverage limits
 
