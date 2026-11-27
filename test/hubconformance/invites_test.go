@@ -65,6 +65,7 @@ func (f *fixture) invites(t *testing.T) {
 	f.call(t, post, redeemPath, "", expiringBody, 202)
 
 	t.Run("roster-request-bodies", f.rosterRequestBodies)
+	t.Run("redeemed-bearer-format", f.redeemedBearerFormat)
 	t.Run("validation-and-pagination", f.inviteValidation)
 	t.Run("races-and-receipts", f.inviteRaces)
 	t.Run("direct-race", f.directInviteRace)

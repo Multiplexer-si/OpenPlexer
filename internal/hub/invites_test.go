@@ -64,6 +64,30 @@ func redeemBody(code, hash string) string {
 	return string(body)
 }
 
+func TestInviteBearerBodyOrder(t *testing.T) {
+	s, _, lead := inviteFixture(t)
+	h := s.Handler()
+	invite := inviteCreate(t, h, lead, `{"project_id":"demo","member_id":"ana","hub_role":"lead"}`)
+	token := base64.RawURLEncoding.EncodeToString(randomBytes(32))
+	token = token[:21] + "." + token[22:]
+	digest := sha256.Sum256([]byte(token))
+	wantInviteStatus(t, inviteCall(h, http.MethodPost, redeemPath, "", redeemBody(invite.Code, hex.EncodeToString(digest[:]))), http.StatusOK)
+
+	for _, route := range []struct {
+		method, path string
+		limit        int
+	}{
+		{http.MethodPut, "/api/v1/projects/demo/policy", MaxPolicyBytes},
+		{http.MethodPost, "/api/v1/rooms/demo/events", maxRoomBody},
+	} {
+		t.Run(route.path, func(t *testing.T) {
+			wantInviteStatus(t, inviteCall(h, route.method, route.path, token, strings.Repeat(" ", route.limit+1)), http.StatusRequestEntityTooLarge)
+			wantInviteStatus(t, inviteCall(h, route.method, route.path, token, "{}"), http.StatusUnauthorized)
+		})
+	}
+	wantInviteStatus(t, inviteCall(h, http.MethodHead, "/api/v1/rooms/demo/stream", token, ""), http.StatusUnauthorized)
+}
+
 func TestInviteExpiryAndRetention(t *testing.T) {
 	s, now, lead := inviteFixture(t)
 	h := s.Handler()
