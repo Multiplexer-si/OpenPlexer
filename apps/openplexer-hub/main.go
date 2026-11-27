@@ -20,6 +20,7 @@ Commands:
   init            Initialize a data directory or a Worker team
   add-member      Add a member and print a bearer token
   remove-member   Revoke a member's bearer token
+  members         Show member policy and Room sync state
   add-project     Scope a project to one repository
   publish-policy  Publish a JSON policy bundle
   export-audit    Write the audit export, checkpoint, and public keys (alias: export)
@@ -85,6 +86,14 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer, tran
 		id := flags.String("id", "", "Member ID")
 		action = func(s *hub.Store) error { return s.RemoveMember(*id) }
 		remoteAction = func(h remoteAdmin) error { return h.removeMember(*id) }
+	case "members":
+		project := flags.String("project", "", "Only show observations for this project")
+		action = func(s *hub.Store) error {
+			return printMembers(stdout, *project, time.Now(), s.ListMembers, s.PolicyVersion)
+		}
+		remoteAction = func(h remoteAdmin) error {
+			return printMembers(stdout, *project, time.Now(), h.listMembers, h.policyVersion)
+		}
 	case "add-project":
 		id := flags.String("id", "", "Project ID and Room ID")
 		repo := flags.String("repo", "", "Repository identifier used in the bundle")
@@ -115,7 +124,7 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer, tran
 	}
 	var address, tokenFile string
 	if remoteAction != nil {
-		flags.StringVar(&address, "hub", "", "Worker hub origin")
+		flags.StringVar(&address, "hub", "", "Hub origin")
 		flags.StringVar(&tokenFile, "token-file", "-", "Private credential file or - for stdin with --hub")
 	}
 	if err := flags.Parse(args[1:]); err != nil {
