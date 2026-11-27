@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -98,14 +99,30 @@ func TestRealDaemonService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	if state, err := s.Status(); err != nil || state.State != "missing" {
+		t.Fatalf("expected an unused service name %s, got %s: %v", s.Name, state.State, err)
+	}
+	definition := filepath.Join(dir, "Library", "LaunchAgents", s.Name+".plist")
+	if runtime.GOOS == "linux" {
+		definition = filepath.Join(dir, "config", "systemd", "user", s.Name)
+	}
+	var created os.FileInfo
+	ownsDefinition := func() bool {
+		info, err := os.Lstat(definition)
+		return err == nil && created != nil && os.SameFile(created, info)
+	}
 	c := cli{t: t, bin: binary}
 	var uninstalled bool
 	t.Cleanup(func() {
-		if uninstalled {
+		if uninstalled || created == nil {
 			return
 		}
 		// Cleanup runs after the test context has been canceled.
 		for range 2 {
+			if !ownsDefinition() {
+				t.Error("the disposable service definition changed before cleanup")
+				return
+			}
 			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			err := exec.CommandContext(ctx, binary, "service", "uninstall", "--home", home).Run()
 			cancel()
@@ -116,7 +133,11 @@ func TestRealDaemonService(t *testing.T) {
 		t.Errorf("could not clean up the disposable service %s", s.Name)
 	})
 
-	c.must(exitOK, "service", "install", "--home", home)
+	status, _, _ := c.run("service", "install", "--home", home)
+	created, err = os.Lstat(definition)
+	if status != exitOK || err != nil {
+		t.Fatalf("disposable service install exited %d, definition lookup: %v", status, err)
+	}
 	var first int
 	waitForService(t, 20*time.Second, "service to start and sync policy version 1", func() bool {
 		state, err := s.Status()
@@ -127,6 +148,9 @@ func TestRealDaemonService(t *testing.T) {
 			strings.Contains(policy, "version 1 of project "+project) && strings.Contains(policy, "home: "+home) &&
 			strings.Contains(policy, s.LogLocation())
 	})
+	if !ownsDefinition() {
+		t.Fatal("the disposable service definition changed before reinstall")
+	}
 	c.must(exitOK, "service", "install", "--home", home)
 	if state, err := s.Status(); err != nil || state.State != "running" || state.PID != first {
 		t.Fatal("the second install did not preserve the running daemon")
@@ -150,8 +174,21 @@ func TestRealDaemonService(t *testing.T) {
 		return err == nil && json.Unmarshal(data, &cursor) == nil && cursor.LastSeq > 0
 	})
 
-	if err := syscall.Kill(first, syscall.SIGKILL); err != nil {
-		t.Fatal(err)
+	if !ownsDefinition() {
+		t.Fatal("the disposable service definition changed before the restart test")
+	}
+	if state, err := s.Status(); err != nil || state.State != "running" || state.PID != first {
+		t.Fatal("the disposable service no longer owns the original daemon PID")
+	}
+	// Signal the manager's service target so PID reuse cannot signal another process.
+	var kill *exec.Cmd
+	if runtime.GOOS == "darwin" {
+		kill = exec.CommandContext(t.Context(), "launchctl", "kill", "SIGKILL", fmt.Sprintf("gui/%d/%s", os.Getuid(), s.Name))
+	} else {
+		kill = exec.CommandContext(t.Context(), "systemctl", "--user", "kill", "--signal=SIGKILL", s.Name)
+	}
+	if err := kill.Run(); err != nil {
+		t.Fatalf("could not signal the disposable service: %v", err)
 	}
 	var restarted int
 	waitForService(t, 30*time.Second, "manager to restart the daemon", func() bool {
@@ -187,13 +224,16 @@ func TestRealDaemonService(t *testing.T) {
 		}
 		return bytes.Contains(logs, []byte("Room stream: hub returned HTTP 503"))
 	})
+	if !ownsDefinition() {
+		t.Fatal("the disposable service definition changed before uninstall")
+	}
 	c.must(exitOK, "service", "uninstall", "--home", home)
+	uninstalled = true
 	waitForService(t, 20*time.Second, "service and daemon process to stop", func() bool {
 		status, err := s.Status()
 		return err == nil && status.State == "missing" && status.PID == 0 &&
 			errors.Is(syscall.Kill(restarted, syscall.Signal(0)), syscall.ESRCH)
 	})
-	uninstalled = true
 	if out := c.must(exitOK, "service", "status", "--home", home); !strings.Contains(out, "service: missing") ||
 		!strings.Contains(out, "version 2 of project "+project) {
 		t.Fatal("status did not preserve the local policy after uninstall")
