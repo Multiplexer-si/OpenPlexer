@@ -1,7 +1,10 @@
 import { Buffer } from "node:buffer";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, expect, test } from "vitest";
+import { isJsonObject, parseJSON } from "../src/canonical";
+import { generateSigningKey, signCanonicalJWS } from "../src/jws";
 import { membersPage, observeMember, parseMembersQuery, pruneMemberObservations } from "../src/members";
+import { readPolicy } from "../src/publication";
 import { schemaMigrations } from "../src/storage";
 import type { TransactionSQL } from "../src/storage";
 
@@ -24,6 +27,25 @@ function setup(): TransactionSQL {
     },
   };
 }
+
+test("records the signed payload version when the stored display version differs", async () => {
+  const sql = setup();
+  const { privateKey } = await generateSigningKey();
+  const payload = '{"areas":[],"members":{},"project_id":"shop","repos":["api"],"roles":{},"version":1}';
+  const signature = await signCanonicalJWS(payload, privateKey, "policy", "policy");
+  const [header, , signed] = signature.split(".");
+  sql.exec(`INSERT INTO policies (project_id, version, bundle_json, kid, jws_header, jws_signature)
+    VALUES ('shop', 9, ?, 'policy', ?, ?)`, payload, header, signed);
+
+  const response = readPolicy(sql, "shop", "ana");
+  expect(response.status).toBe(200);
+  const served = parseJSON(await response.text());
+  if (!isJsonObject(served)) throw new Error("invalid signed policy response");
+  expect(served.version).toBe(9);
+  expect(served.signature === signature).toBe(true);
+  const page = membersPage(sql, parseMembersQuery("project_id=shop"), Date.now());
+  expect(page.members[0].policy_version).toBe(1);
+});
 
 test("retains and prunes the two observations independently at 30 days", () => {
   const sql = setup();

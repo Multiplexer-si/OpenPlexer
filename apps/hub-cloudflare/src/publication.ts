@@ -35,7 +35,8 @@ export function readPolicy(sql: TransactionSQL, id: string, fetchingMember?: str
   const latest = latestPolicy(sql, id);
   if (!latest) throw notFound();
   if (fetchingMember !== undefined) {
-    observeMember(sql, fetchingMember, id, Date.now(), { kind: "fetch", version: latest.version });
+    const { version } = parsePolicyBundle(latest.bundle_json);
+    observeMember(sql, fetchingMember, id, Date.now(), { kind: "fetch", version });
   }
   return signedResponse(latest, { "OpenPlexer-Policy-Version": String(latest.version) });
 }

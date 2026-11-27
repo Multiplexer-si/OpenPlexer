@@ -183,7 +183,15 @@ func (s *Store) policyBundleEndpoint(w http.ResponseWriter, r *http.Request) {
 			return nil, errNotFound
 		}
 		if req.Method == http.MethodGet {
-			if err := s.observe(st.Members[req.member].EnrollmentID, req.project(), &signed.Version); err != nil {
+			jws, err := policy.ReadSignedBundle(signed.Signature)
+			if err != nil {
+				return nil, err
+			}
+			bundle, _, err := jws.ParseUnverifiedPayload()
+			if err != nil {
+				return nil, err
+			}
+			if err := s.observe(st.Members[req.member].EnrollmentID, req.project(), &bundle.Version); err != nil {
 				return nil, err
 			}
 		}

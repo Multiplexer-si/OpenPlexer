@@ -153,6 +153,30 @@ func TestMemberSyncIgnoresFilesLeftAfterRosterRemoval(t *testing.T) {
 	assertSync(t, syncRow(t, h, lead), s.now().UTC().Format(timestampFmt), "", 1)
 }
 
+func TestMemberSyncRecordsSignedPolicyVersion(t *testing.T) {
+	s, token, lead, _ := syncStore(t)
+	h := s.Handler()
+	syncPublish(t, s, "shop", 1)
+	var signature string
+	if err := s.update(func(st *state) error {
+		signed := st.Policies["shop"]
+		signature = signed.Signature
+		signed.Version = 9
+		signed.Bundle = json.RawMessage(`{"version":9}`)
+		st.Policies["shop"] = signed
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	fetch := call(h, http.MethodGet, syncPolicy, token, nil, "")
+	var served SignedBundle
+	if fetch.Code != http.StatusOK || json.Unmarshal(fetch.Body.Bytes(), &served) != nil ||
+		served.Version != 9 || served.Signature != signature {
+		t.Fatal("expected the published signature and the stored display version")
+	}
+	assertSync(t, syncRow(t, h, lead), s.now().UTC().Format(timestampFmt), "", 1)
+}
+
 func TestMemberSyncFetchExpiryAndRevocation(t *testing.T) {
 	s, token, lead, clock := syncStore(t)
 	h := s.Handler()
