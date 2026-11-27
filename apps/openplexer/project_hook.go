@@ -18,7 +18,7 @@ type projectQueries struct {
 	commands []policy.Query
 }
 
-func (c command) checkProjectCall(agent, userHome string, call hook.Call, effect hook.Effect) hook.Verdict {
+func (c command) checkProjectCall(agent, userHome string, call hook.Call, translate hook.Translate) hook.Verdict {
 	registry, err := projects.Read(userHome)
 	if err != nil {
 		return projectBlock(fmt.Errorf("cannot read the project registry: %w", err))
@@ -29,6 +29,27 @@ func (c command) checkProjectCall(agent, userHome string, call hook.Call, effect
 	cwd, _, err := projects.Directory(call.Cwd)
 	if err != nil {
 		return projectBlock(fmt.Errorf("cannot resolve the hook input cwd: %w", err))
+	}
+	lookup := func(path string) (projects.Project, error) {
+		project, err := registry.Lookup(path)
+		if err != nil {
+			return project, fmt.Errorf("cannot select a home for %s: %w", path, err)
+		}
+		return project, nil
+	}
+	var shellProject projects.Project
+	if call.Tool == "Bash" {
+		shellProject, err = lookup(cwd)
+		if err != nil {
+			return projectBlock(err)
+		}
+		if err := shellProject.CheckHome(); err != nil {
+			return projectBlock(err)
+		}
+	}
+	effect, err := translate(call)
+	if err != nil {
+		return hook.Verdict{Outcome: hook.Refuse, Reason: err.Error()}
 	}
 
 	guards := projectGuards(registry, userHome)
@@ -48,28 +69,30 @@ func (c command) checkProjectCall(agent, userHome string, call hook.Call, effect
 
 	var groups []*projectQueries
 	byHome := map[string]*projectQueries{}
-	groupFor := func(path string) (projects.Project, *projectQueries, error) {
-		project, err := registry.Lookup(path)
-		if err != nil {
-			return project, nil, fmt.Errorf("cannot select a home for %s: %w", path, err)
-		}
+	groupFor := func(project projects.Project) (*projectQueries, error) {
 		group, ok := byHome[project.Home]
 		if !ok {
-			if err := project.CheckHome(); err != nil {
-				return project, nil, err
+			if project.Home != shellProject.Home {
+				if err := project.CheckHome(); err != nil {
+					return nil, err
+				}
 			}
 			group = &projectQueries{home: project.Home}
 			byHome[project.Home] = group
 			groups = append(groups, group)
 		}
-		return project, group, nil
+		return group, nil
 	}
 	var session *string
 	if call.Session != "" {
 		session = &call.Session
 	}
 	for _, write := range writes {
-		project, group, err := groupFor(write.Path)
+		project, err := lookup(write.Path)
+		if err != nil {
+			return projectBlock(err)
+		}
+		group, err := groupFor(project)
 		if err != nil {
 			return projectBlock(err)
 		}
@@ -80,7 +103,7 @@ func (c command) checkProjectCall(agent, userHome string, call hook.Call, effect
 		group.writes = append(group.writes, policy.Query{Action: policy.Write, Path: filepath.ToSlash(rel), AgentSessionID: session})
 	}
 	if len(effect.Commands) > 0 {
-		_, group, err := groupFor(cwd)
+		group, err := groupFor(shellProject)
 		if err != nil {
 			return projectBlock(err)
 		}

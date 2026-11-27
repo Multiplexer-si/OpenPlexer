@@ -58,8 +58,8 @@ func (c command) hook(agent hook.Agent, portable bool) int {
 	}
 	userHome, _ := os.UserHomeDir()
 	if portable {
-		return c.emit(agent.HandleProject(input, func(call hook.Call, effect hook.Effect) hook.Verdict {
-			return c.checkProjectCall(agent.Name, userHome, call, effect)
+		return c.emit(agent.HandleProject(input, func(call hook.Call, translate hook.Translate) hook.Verdict {
+			return c.checkProjectCall(agent.Name, userHome, call, translate)
 		}))
 	}
 	gate, openErr := daemon.Open(c.home, c.now)

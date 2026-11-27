@@ -261,12 +261,16 @@ type Verdict struct {
 // and a tool that the table does not name, are allowed. Input that is not JSON,
 // and a call to a gated tool that cannot be read, are refused.
 func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
-	call, effect, covered, err := readEffect(stdin, tools, false)
+	call, translate, err := coveredCall(stdin, tools)
 	if err != nil {
 		return Verdict{Refuse, err.Error()}
 	}
-	if !covered {
+	if translate == nil {
 		return Verdict{}
+	}
+	effect, err := translate(call)
+	if err != nil {
+		return Verdict{Refuse, err.Error()}
 	}
 	var root string
 	var noRoot error
@@ -295,21 +299,19 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	return judge(queries[0], queries[1:]...)
 }
 
-func readEffect(stdin []byte, tools Tools, projectHome bool) (Call, Effect, bool, error) {
+func coveredCall(stdin []byte, tools Tools) (Call, Translate, error) {
 	call, err := ParseCall(stdin)
 	if err != nil {
-		return Call{}, Effect{}, false, err
+		return Call{}, nil, err
 	}
 	translate, gated := tools[call.Tool]
 	if call.Event != "PreToolUse" || !gated {
-		return call, Effect{}, false, nil
+		return call, nil, nil
 	}
 	if call.Cwd == "" {
-		return call, Effect{}, false, errors.New("the hook input has no cwd, so the paths of the call cannot be placed in the project")
+		return call, nil, errors.New("the hook input has no cwd, so the paths of the call cannot be placed in the project")
 	}
-	call.ProjectHome = projectHome
-	effect, err := translate(call)
-	return call, effect, true, err
+	return call, translate, nil
 }
 
 // Output is what the adapter makes the hook process do.

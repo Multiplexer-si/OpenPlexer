@@ -31,19 +31,20 @@ func (a Agent) Handle(stdin []byte, env Env, judge Judge) Output {
 	return Render(Decide(stdin, env, judge, a.Tools))
 }
 
-// HandleProject translates a covered portable call before passing it to check.
-func (a Agent) HandleProject(stdin []byte, check func(Call, Effect) Verdict) Output {
+// HandleProject passes a covered call and its translator to the portable check.
+func (a Agent) HandleProject(stdin []byte, check func(Call, Translate) Verdict) Output {
 	if !jsontext.Value(stdin).IsValid() {
 		return Render(Verdict{Refuse, "the hook input is invalid JSON or has a duplicate member"})
 	}
-	call, effect, covered, err := readEffect(stdin, a.Tools, true)
+	call, translate, err := coveredCall(stdin, a.Tools)
 	if err != nil {
 		return Render(Verdict{Refuse, err.Error()})
 	}
-	if !covered {
+	if translate == nil {
 		return Output{}
 	}
-	return Render(check(call, effect))
+	call.ProjectHome = true
+	return Render(check(call, translate))
 }
 
 func (a Agent) Handler(executable string) Handler {

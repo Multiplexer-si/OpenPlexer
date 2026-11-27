@@ -95,7 +95,7 @@ func TestPortableHookRejectsDuplicateMembers(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			checked := false
-			out := agent.HandleProject([]byte(input), func(Call, Effect) Verdict {
+			out := agent.HandleProject([]byte(input), func(Call, Translate) Verdict {
 				checked = true
 				return Verdict{}
 			})
@@ -106,7 +106,7 @@ func TestPortableHookRejectsDuplicateMembers(t *testing.T) {
 	}
 	input := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":"/p","tool_input":{"file_path":"a","unused":[{"x":1},{"x":2}]}}`)
 	checked := false
-	out := agent.HandleProject(input, func(Call, Effect) Verdict {
+	out := agent.HandleProject(input, func(Call, Translate) Verdict {
 		checked = true
 		return Verdict{}
 	})
