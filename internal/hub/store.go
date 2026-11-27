@@ -36,8 +36,9 @@ const (
 )
 
 type member struct {
-	Role      Role              `json:"role"`
-	TokenHash [sha256.Size]byte `json:"token_hash"`
+	Role         Role              `json:"role"`
+	EnrollmentID string            `json:"enrollment_id"`
+	TokenHash    [sha256.Size]byte `json:"token_hash"`
 }
 
 type Project struct {
@@ -52,6 +53,7 @@ type state struct {
 	Audit          []audit.Record           `json:"audit,omitempty"`
 	SigningKey     []byte                   `json:"signing_key"`
 	Members        map[string]member        `json:"members"`
+	Invites        map[string]inviteRecord  `json:"invites,omitempty"`
 	Projects       map[string]Project       `json:"projects"`
 	Policies       map[string]SignedBundle  `json:"policies"`
 	Rooms          map[string][]eventRecord `json:"rooms,omitempty"`
@@ -108,21 +110,11 @@ func (s *Store) Check() error {
 var idPattern = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$`)
 
 func (s *Store) AddMember(id string, role Role) (string, error) {
-	if !idPattern.MatchString(id) || (role != Lead && role != Member) {
-		return "", fmt.Errorf("%w: member needs a valid id and role lead or member", errInvalid)
-	}
-	var secret [32]byte
-	if _, err := rand.Read(secret[:]); err != nil {
-		return "", err
-	}
-	token := base64.RawURLEncoding.EncodeToString(secret[:])
+	var token string
 	err := s.update(func(st *state) error {
-		if _, exists := st.Members[id]; exists {
-			return fmt.Errorf("%w: member %q", errConflict, id)
-		}
-		st.Members[id] = member{Role: role, TokenHash: sha256.Sum256([]byte(token))}
-		return st.appendAudit(audit.Record{Action: "member.added", Target: "member:" + id,
-			Meta: map[string]any{"role": role}}, s.now())
+		var err error
+		token, err = st.addMember(id, role, nil, s.now())
+		return err
 	})
 	if err != nil {
 		return "", err
@@ -130,14 +122,53 @@ func (s *Store) AddMember(id string, role Role) (string, error) {
 	return token, nil
 }
 
+func (st *state) addMember(id string, role Role, actor *string, now time.Time) (string, error) {
+	if !idPattern.MatchString(id) || (role != Lead && role != Member) {
+		return "", fmt.Errorf("%w: member needs a valid id and role lead or member", errInvalid)
+	}
+	_, reserved := st.liveInvites(id, now)
+	if _, exists := st.Members[id]; exists || reserved {
+		return "", fmt.Errorf("%w: member %q", errConflict, id)
+	}
+	token := base64.RawURLEncoding.EncodeToString(randomBytes(32))
+	st.Members[id] = newMember(role, sha256.Sum256([]byte(token)))
+	return token, st.appendAudit(audit.Record{Action: "member.added", Target: "member:" + id,
+		ActorMemberID: actor, Meta: map[string]any{"role": role}}, now)
+}
+
+func newMember(role Role, hash [sha256.Size]byte) member {
+	return member{Role: role, TokenHash: hash, EnrollmentID: rand.Text()}
+}
+
+func (st *state) hasTokenHash(hash [sha256.Size]byte) bool {
+	_, _, err := st.authenticate(hash)
+	return err == nil
+}
+
 func (s *Store) RemoveMember(id string) error {
 	return s.update(func(st *state) error {
-		if _, exists := st.Members[id]; !exists {
-			return fmt.Errorf("%w: member %q", errNotFound, id)
-		}
-		delete(st.Members, id)
-		return st.appendAudit(audit.Record{Action: "member.removed", Target: "member:" + id}, s.now())
+		return st.removeMember(id, nil, s.now())
 	})
+}
+
+func (st *state) removeMember(id string, actor *string, now time.Time) error {
+	m, exists := st.Members[id]
+	if !exists {
+		return errNotFound
+	}
+	if actor != nil && m.Role == Lead {
+		leads := 0
+		for _, candidate := range st.Members {
+			if candidate.Role == Lead {
+				leads++
+			}
+		}
+		if leads == 1 {
+			return fmt.Errorf("%w: cannot remove the last lead", errConflict)
+		}
+	}
+	delete(st.Members, id)
+	return st.appendAudit(audit.Record{Action: "member.removed", Target: "member:" + id, ActorMemberID: actor}, now)
 }
 
 func (s *Store) AddProject(id, repo string) error {
@@ -196,6 +227,18 @@ func (s *Store) load() (*state, error) {
 	}
 	if st.Claims == nil {
 		st.Claims = make(map[string]lease)
+	}
+	upgraded := false
+	for id, m := range st.Members {
+		if m.EnrollmentID == "" {
+			st.Members[id] = newMember(m.Role, m.TokenHash)
+			upgraded = true
+		}
+	}
+	if upgraded {
+		if err := s.save(&st); err != nil {
+			return nil, err
+		}
 	}
 	return &st, nil
 }
