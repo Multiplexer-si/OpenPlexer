@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -77,6 +78,14 @@ func removeObservations(path string) error {
 	return nil
 }
 
+func (s *Store) deleteRemovedObservations(name string) bool {
+	if err := removeObservations(filepath.Join(s.observationsDir(), name)); err != nil {
+		log.Print("openplexer-hub: could not delete removed member sync state. Maintenance will retry.")
+		return false
+	}
+	return true
+}
+
 // observe runs under the store lock, after the caller authenticates the active credential.
 func (s *Store) observe(enrollmentID, projectID string, version *int64) error {
 	dir := s.observationsDir()
@@ -108,11 +117,15 @@ func (s *Store) PruneMemberObservations() error {
 	return s.view(func(st *state) error {
 		dir := s.observationsDir()
 		files, err := os.ReadDir(dir)
+		if err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		queuedDeletes := st.PendingObservationDeletes
+		if err := s.pruneRemovedObservations(st, files); err != nil {
+			return err
+		}
 		if errors.Is(err, os.ErrNotExist) {
 			return nil
-		}
-		if err != nil {
-			return err
 		}
 		active := make(map[string]struct{}, len(st.Members))
 		for _, member := range st.Members {
@@ -121,6 +134,9 @@ func (s *Store) PruneMemberObservations() error {
 		cutoff := s.observationCutoff()
 		for _, file := range files {
 			name := file.Name()
+			if _, queued := queuedDeletes[name]; queued {
+				continue
+			}
 			if !file.Type().IsRegular() || !strings.HasSuffix(name, ".json") && !strings.HasPrefix(name, ".snapshot-") {
 				continue
 			}
@@ -158,6 +174,24 @@ func (s *Store) PruneMemberObservations() error {
 		}
 		return nil
 	})
+}
+
+func (s *Store) pruneRemovedObservations(st *state, files []os.DirEntry) error {
+	if len(st.PendingObservationDeletes) == 0 {
+		return nil
+	}
+	remaining := make(map[string]struct{})
+	for _, file := range files {
+		name := file.Name()
+		if _, pending := st.PendingObservationDeletes[name]; pending && !s.deleteRemovedObservations(name) {
+			remaining[name] = struct{}{}
+		}
+	}
+	if len(remaining) == len(st.PendingObservationDeletes) {
+		return nil
+	}
+	st.PendingObservationDeletes = remaining
+	return s.save(st)
 }
 
 const memberPageSize = 100

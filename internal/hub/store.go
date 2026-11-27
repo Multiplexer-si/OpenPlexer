@@ -61,6 +61,8 @@ type state struct {
 	Rooms          map[string][]eventRecord `json:"rooms,omitempty"`
 	Claims         map[string]lease         `json:"claims,omitempty"`
 	RedeemFailures *redeemFailureWindow     `json:"redeem_failures,omitempty"`
+
+	PendingObservationDeletes map[string]struct{} `json:"pending_observation_deletes,omitempty"`
 }
 
 // Store is a data directory shared by the server and local admin commands.
@@ -192,11 +194,16 @@ func (s *Store) removeMember(st *state, id string, actor *string) error {
 	if err := st.appendAudit(audit.Record{Action: "member.removed", Target: "member:" + id, ActorMemberID: actor}, s.now()); err != nil {
 		return err
 	}
+	// Commit the cleanup record with the roster so a crash cannot lose it.
+	name := observationFilename(m.EnrollmentID)
+	if st.PendingObservationDeletes == nil {
+		st.PendingObservationDeletes = make(map[string]struct{})
+	}
+	st.PendingObservationDeletes[name] = struct{}{}
 	if err := s.save(st); err != nil {
 		return err
 	}
-	// Maintenance removes any file left after the roster commit.
-	_ = removeObservations(s.observationsPath(m.EnrollmentID))
+	s.deleteRemovedObservations(name)
 	return nil
 }
 
