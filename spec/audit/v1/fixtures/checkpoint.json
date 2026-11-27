@@ -1695,6 +1695,158 @@
         "entries": 0,
         "ok": true
       }
+    },
+    {
+      "name": "invite enrollment and revocation",
+      "why": "The signed tip covers each invite transition and the member added on redemption.",
+      "input": {
+        "checkpoints": [
+          "eyJhbGciOiJFUzI1NiIsImtpZCI6ImNoZWNrcG9pbnQtdGVzdC1uZXciLCJ0eXAiOiJvcGVucGxleGVyLWF1ZGl0LWNoZWNrcG9pbnQrandzIn0.eyJlbnRyaWVzIjo3LCJpc3N1ZWRfYXQiOiIyMDI2LTExLTE5VDEyOjAwOjAwLjAwMFoiLCJ0aXBfaGFzaCI6IjRmOTMwMmRiNTY1NzhiODA2OTIyZDEyODRlMTk0NTZkNDZjN2VmYjMzYWE4MGE5NDMyMDlhODM4Y2NhYjViMTIiLCJ2IjoxLCJ3b3Jrc3BhY2VfaWQiOiJ3c3AtY2hlY2twb2ludC10ZXN0In0.fu_xT7NxyD3aMelFmos9U4L_FIWqaoeX0cWTq_WWmkofWpw3sIBubGvc-DSUMuSQn2SCkWZp5OwQznU5ipWz1w"
+        ],
+        "export": {
+          "entries": [
+            {
+              "id": "7",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "invite.revoked",
+              "target": "invite:22222222222222222222222222222222",
+              "reason": null,
+              "meta": {
+                "hub_role": "lead",
+                "member_id": "mem-bo",
+                "project_id": "prj-checkpoint-test"
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "b3343fcac11ec4ad439c765f5123b60c4aece41624cc4deebf2df901afea8dd9",
+              "hash": "4f9302db56578b806922d1284e19456d46c7efb33aa80a943209a838ccab5b12",
+              "result": "revoked"
+            },
+            {
+              "id": "6",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "invite.created",
+              "target": "invite:22222222222222222222222222222222",
+              "reason": null,
+              "meta": {
+                "hub_role": "lead",
+                "member_id": "mem-bo",
+                "project_id": "prj-checkpoint-test"
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0bc88e9db323c2b1bfcfcdfb17a71d6a1bb85acd1218c30754774d92feda7c83",
+              "hash": "b3343fcac11ec4ad439c765f5123b60c4aece41624cc4deebf2df901afea8dd9",
+              "result": "created"
+            },
+            {
+              "id": "5",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": null,
+              "agent_session_id": null,
+              "action": "member.added",
+              "target": "member:mem-ana",
+              "reason": null,
+              "meta": {
+                "invite_id": "11111111111111111111111111111111",
+                "role": "member"
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "a4ed3b7f0673aad4150df3788c0233919e981f8ca7e4bb6ccd831cfd59ce8bc3",
+              "hash": "0bc88e9db323c2b1bfcfcdfb17a71d6a1bb85acd1218c30754774d92feda7c83",
+              "result": "added"
+            },
+            {
+              "id": "4",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": "mem-ana",
+              "agent_session_id": null,
+              "action": "invite.redeemed",
+              "target": "invite:11111111111111111111111111111111",
+              "reason": null,
+              "meta": {
+                "hub_role": "member",
+                "member_id": "mem-ana",
+                "project_id": "prj-checkpoint-test"
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "dbd5049fc5c2eaeca8777a5a79f4cca891a5463add11d6bf0e56811f8b37b045",
+              "hash": "a4ed3b7f0673aad4150df3788c0233919e981f8ca7e4bb6ccd831cfd59ce8bc3",
+              "result": "redeemed"
+            },
+            {
+              "id": "3",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": "mem-lee",
+              "agent_session_id": null,
+              "action": "invite.approved",
+              "target": "invite:11111111111111111111111111111111",
+              "reason": null,
+              "meta": {
+                "hub_role": "member",
+                "member_id": "mem-ana",
+                "project_id": "prj-checkpoint-test"
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "b224e20818c5532180d61c1bc873ce6ea6155f336c961e36ac459b4f95f37988",
+              "hash": "dbd5049fc5c2eaeca8777a5a79f4cca891a5463add11d6bf0e56811f8b37b045",
+              "result": "approved"
+            },
+            {
+              "id": "2",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": "mem-ana",
+              "agent_session_id": null,
+              "action": "invite.requested",
+              "target": "invite:11111111111111111111111111111111",
+              "reason": null,
+              "meta": {
+                "hub_role": "member",
+                "member_id": "mem-ana",
+                "project_id": "prj-checkpoint-test"
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "77dbd723afe98da0c8cc115960b407070edab773a90c7212bce61905d2598c40",
+              "hash": "b224e20818c5532180d61c1bc873ce6ea6155f336c961e36ac459b4f95f37988",
+              "result": "requested"
+            },
+            {
+              "id": "1",
+              "workspace_id": "wsp-checkpoint-test",
+              "actor_member_id": "mem-lee",
+              "agent_session_id": null,
+              "action": "invite.created",
+              "target": "invite:11111111111111111111111111111111",
+              "reason": null,
+              "meta": {
+                "hub_role": "member",
+                "member_id": "mem-ana",
+                "project_id": "prj-checkpoint-test"
+              },
+              "flagged": false,
+              "created_at": "2026-11-19T12:00:00.000Z",
+              "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+              "hash": "77dbd723afe98da0c8cc115960b407070edab773a90c7212bce61905d2598c40",
+              "result": "created"
+            }
+          ],
+          "next_cursor": null
+        }
+      },
+      "expected": {
+        "checkpoint_entries": 7,
+        "completeness": "through_checkpoint",
+        "entries": 7,
+        "ok": true
+      }
     }
   ],
   "contract": "audit",
