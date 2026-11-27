@@ -144,7 +144,10 @@ func ShellTool(call Call) (Effect, error) {
 	}
 	var effect Effect
 	if call.ProjectHome {
-		effect.Targets = projectShellTargets(command)
+		effect.Targets, err = projectShellTargets(command)
+		if err != nil {
+			return Effect{}, err
+		}
 	} else {
 		effect.Writes = WriteTargets(command)
 		for _, path := range MovedPaths(command) {

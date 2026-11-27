@@ -7,6 +7,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/multiplexer-si/openplexer/internal/projects"
 )
 
 type WriteKind int
@@ -14,15 +16,19 @@ type WriteKind int
 const (
 	WriteThrough WriteKind = iota
 	WriteEntry
+	WriteLink
 )
 
-// WriteTarget describes one file operation. If Source is set and Path is a
-// directory, the destination is the source's base name inside that directory.
+// WriteTarget describes one file operation. A directory destination normally
+// takes the source's base name. NoFollowDir tests the entry for a directory.
 type WriteTarget struct {
 	Path              string
 	Kind              WriteKind
 	Source            string
 	RequiresDirectory bool
+	NoTargetDir       bool
+	NoFollowDir       bool
+	CopyLink          bool
 }
 
 type ResolvedWrite struct {
@@ -39,9 +45,7 @@ func ResolveWrite(target WriteTarget, cwd, home string) (ResolvedWrite, error) {
 	if path == "" || strings.IndexByte(path, 0) >= 0 {
 		return ResolvedWrite{}, errors.New("the write path is empty or invalid")
 	}
-	if path == "~" || strings.HasPrefix(path, "~/") {
-		path = rawJoin(home, strings.TrimPrefix(strings.TrimPrefix(path, "~"), "/"))
-	}
+	path = expandHome(path, home)
 	if target.Source != "" && strings.IndexByte(target.Source, 0) >= 0 {
 		return ResolvedWrite{}, errors.New("the source path is invalid")
 	}
@@ -49,8 +53,12 @@ func ResolveWrite(target WriteTarget, cwd, home string) (ResolvedWrite, error) {
 	if err != nil {
 		return ResolvedWrite{}, err
 	}
-	if target.Source != "" {
-		info, err := os.Stat(entry)
+	if target.Source != "" && !target.NoTargetDir {
+		stat := os.Stat
+		if target.NoFollowDir {
+			stat = os.Lstat
+		}
+		info, err := stat(entry)
 		if err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return ResolvedWrite{}, err
 		}
@@ -63,11 +71,30 @@ func ResolveWrite(target WriteTarget, cwd, home string) (ResolvedWrite, error) {
 			return ResolvedWrite{}, errors.New("the destination directory does not exist")
 		}
 	}
-	if target.Kind == WriteEntry {
-		return ResolvedWrite{target.Path, entry, entry, true}, nil
+	writeEntry := target.Kind == WriteEntry
+	if target.CopyLink && !writeEntry {
+		source, err := resolvePath(expandHome(target.Source, home), cwd, false)
+		if err != nil {
+			return ResolvedWrite{}, err
+		}
+		info, err := os.Lstat(source)
+		if err != nil {
+			return ResolvedWrite{}, err
+		}
+		writeEntry = info.Mode()&os.ModeSymlink != 0
+	}
+	if writeEntry || target.Kind == WriteLink {
+		return ResolvedWrite{target.Path, entry, entry, writeEntry}, nil
 	}
 	resolved, err := resolvePath(path, cwd, true)
 	return ResolvedWrite{target.Path, resolved, entry, false}, err
+}
+
+func expandHome(path, home string) string {
+	if path == "~" || strings.HasPrefix(path, "~/") {
+		return rawJoin(home, strings.TrimPrefix(strings.TrimPrefix(path, "~"), "/"))
+	}
+	return path
 }
 
 // ResolveGuardPaths returns the directory entry and referent of a guarded path
@@ -135,7 +162,7 @@ func resolvePath(path, base string, followFinal bool) (string, error) {
 			continue
 		}
 		next := filepath.Join(base, name)
-		if missing || len(pending) == 0 && !followFinal {
+		if missing {
 			base = next
 			continue
 		}
@@ -147,7 +174,12 @@ func resolvePath(path, base string, followFinal bool) (string, error) {
 		if err != nil {
 			return "", err
 		}
-		if info.Mode()&os.ModeSymlink != 0 {
+		name, err = projects.EntryName(next, info)
+		if err != nil {
+			return "", err
+		}
+		next = filepath.Join(base, name)
+		if info.Mode()&os.ModeSymlink != 0 && (followFinal || len(pending) > 0) {
 			links++
 			if links > 255 {
 				return "", errors.New("too many symlinks in the write path")

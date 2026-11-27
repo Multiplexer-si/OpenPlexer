@@ -95,6 +95,32 @@ func TestPortableHooks(t *testing.T) {
 			check("resolve symlink before dot dot", writeCall(agent, outer, "alias/src/../denied.txt"), "denied a write to denied.txt")
 			check("use actual rename destination in a directory", shell(outer, "mv link alias"), "denied a write to link")
 			check("use actual rename destination in an allowed directory", shell(outer, "mv link alias/src"), "")
+			check("BSD mv replaces the destination link entry", shell(outer, "mv -fh link alias"), "")
+			check("GNU mv replaces the destination link entry", shell(outer, "mv --no-target-directory link alias"), "")
+			check("BSD mv still moves into a real directory", shell(outer, "mv -h link alias/src"), "")
+			check("git mv uses the destination link entry", shell(outer, "git mv -f link alias"), "")
+			check("ln does not follow a directory link with -n", shell(outer, "ln -sfn link alias"), "")
+			check("ln normally uses the destination directory", shell(outer, "ln -sf link alias"), "denied a write to link")
+			symlink(t, filepath.Join(sibling, "denied.txt"), filepath.Join(outer, "copy-dest"))
+			check("cp -P replaces a link when copying a link", shell(outer, "cp -P link copy-dest"), "")
+			writeFile(t, filepath.Join(outer, "regular"), "file")
+			check("cp -P follows a link when copying a regular file", shell(outer, "cp -P regular copy-dest"), "denied a write to denied.txt")
+			check("GNU cp removes the link before writing", shell(outer, "cp --remove-destination regular copy-dest"), "")
+			check("install replaces the link entry", shell(outer, "install regular copy-dest"), "")
+			check("touch -h acts on the link entry", shell(outer, "touch -h link"), "")
+			check("touch normally acts on the referent", shell(outer, "touch link"), "denied a write to denied.txt")
+			guardedLink := ".claude/settings.local.json"
+			mkdir(t, filepath.Join(outer, ".claude"))
+			guardedReferent := mkdir(t, filepath.Join(sibling, "src", "settings-referent"))
+			symlink(t, guardedReferent, filepath.Join(outer, guardedLink))
+			check("guard the destination entry of BSD mv", shell(outer, "mv -h link "+guardedLink), "configures the hooks")
+			check("guard the destination entry of BSD ln", shell(outer, "ln -sfh link "+guardedLink), "configures the hooks")
+			for _, line := range []string{"mv --unknown link alias", "cp -Z regular copy-dest", "touch --unknown regular", "git mv -h link alias"} {
+				out, errOut, status := c.run(t, user, outer, shell(outer, line), "/bin/sh", "-c", command)
+				if status != 2 || out != "" || !strings.Contains(errOut, "unsupported option") {
+					t.Fatalf("hook for %q returned exit %d, stdout %q and stderr %q, want an option refusal", line, status, out, errOut)
+				}
+			}
 			check("use actual rename destination for git mv", shell(outer, "git mv link alias/src"), "")
 			check("home under another checkout", writeCall(agent, outer, filepath.Join(outerHome, "keys.json")), "it holds the policy")
 			check("move a directory containing a home", shell(outer, "mv alias/homes trash"), "it holds the policy")
@@ -103,6 +129,20 @@ func TestPortableHooks(t *testing.T) {
 			check("settings guard precedes policy", writeCall(agent, outer, settings), "configures the hooks")
 			check("guard the actual copy destination", shell(outer, "cp "+filepath.Base(settings)+" "+filepath.Dir(settings)), "configures the hooks")
 			check("registry guard precedes lookup", writeCall(agent, outer, filepath.Join(user, ".openplexer", "projects.json")), "project registry")
+			t.Run("case aliases use the same policy and guards", func(t *testing.T) {
+				outerAlias := filepath.Join(base, "OUTER")
+				if _, err := os.Stat(outerAlias); os.IsNotExist(err) {
+					t.Skip("the test volume is case-sensitive")
+				} else if err != nil {
+					t.Fatal(err)
+				}
+				c.hook(t, user, outer, command, writeCall(agent, outerAlias, filepath.Join(outerAlias, "INNER", "new.txt")), "")
+				c.hook(t, user, outer, command, writeCall(agent, outerAlias, filepath.Join(sibling, "SRC", "new.txt")), "")
+				c.hook(t, user, outer, command, writeCall(agent, outerAlias, filepath.Join(sibling, "HOMES", "OUTER", "keys.json")), "it holds the policy")
+				c.hook(t, user, outer, command, writeCall(agent, outerAlias, filepath.Join(user, ".OPENPLEXER", "PROJECTS.JSON")), "project registry")
+				c.hook(t, user, outer, command, writeCall(agent, outerAlias, strings.ToUpper(settings)), "configures the hooks")
+				c.hook(t, user, outer, command, writeCall(agent, outerAlias, ".CODEX/CONFIG.TOML"), "configures the hooks")
+			})
 			check("registry ancestor is guarded", shell(outer, "rm -r '"+filepath.Join(user, ".openplexer")+"'"), "project registry")
 			check("all guards precede the first policy denial", shell(outer, "touch alias/denied.txt '"+filepath.Join(outerHome, "keys.json")+"'"), "it holds the policy")
 			c.policy(t, user, outer, outerHome, 2, []string{"app:src/**", "app:worktree/**"}, nil)
