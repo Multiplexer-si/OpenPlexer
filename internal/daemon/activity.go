@@ -41,9 +41,13 @@ func ReadDaemonActivity(home string) (DaemonActivity, error) {
 	return activity, nil
 }
 
-func (a DaemonActivity) running() bool {
+func (a DaemonActivity) heartbeatFresh() bool {
 	age := time.Since(a.HeartbeatAt)
-	if a.PID == 0 || age < 0 || age > 3*heartbeatInterval {
+	return age >= 0 && age <= 3*heartbeatInterval
+}
+
+func (a DaemonActivity) running() bool {
+	if a.PID == 0 || !a.heartbeatFresh() {
 		return false
 	}
 	process, err := os.FindProcess(a.PID)

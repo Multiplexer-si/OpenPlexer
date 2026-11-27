@@ -170,15 +170,20 @@ func (s *Service) Install(binary string) error {
 			return err
 		}
 	}
+	var existingPID int
+	if current.State == "running" {
+		existingPID = current.PID
+	}
+	requestedAt := time.Now()
 	if s.platform != "linux" || current.State != "running" || !current.enabled {
 		if err := s.start(current); err != nil {
 			return s.startError(err)
 		}
 	}
-	return s.waitForStart()
+	return s.waitForStart(requestedAt, existingPID)
 }
 
-func (s *Service) waitForStart() error {
+func (s *Service) waitForStart(requestedAt time.Time, existingPID int) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	poll := time.NewTicker(50 * time.Millisecond)
@@ -200,7 +205,8 @@ func (s *Service) waitForStart() error {
 			if err != nil {
 				return s.startError(err)
 			}
-			if activity.PID == status.PID {
+			if activity.PID == status.PID && activity.heartbeatFresh() &&
+				(activity.PID == existingPID || !activity.StartedAt.Before(requestedAt)) {
 				return nil
 			}
 		}
