@@ -64,6 +64,8 @@ Codex also reads hooks written inline in `config.toml`. If the same layer has bo
 
 ## Portable project hooks
 
+Portable hooks need a build newer than `v0.1.0-rc.1`, so build from `main` with `make build` until the next release.
+
 Put `openplexer` on the agent's `PATH`. From the checkout, select your configured home and install the portable hook.
 
 ```sh

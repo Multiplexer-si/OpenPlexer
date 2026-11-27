@@ -72,6 +72,8 @@ The matcher is the value of `claudecode.Agent.Matcher()`, and a test pins the en
 
 ## Portable project hooks
 
+Portable hooks need a build newer than `v0.1.0-rc.1`, so build from `main` with `make build` until the next release.
+
 Put `openplexer` on the agent's `PATH`. From the checkout, select your configured home and install the portable hook.
 
 ```sh
