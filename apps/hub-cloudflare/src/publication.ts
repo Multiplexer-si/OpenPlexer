@@ -34,11 +34,11 @@ function signedResponse(row: SignedPolicy, headers?: HeadersInit): Response {
 export function readPolicy(sql: TransactionSQL, id: string, fetchingMember?: string): Response {
   const latest = latestPolicy(sql, id);
   if (!latest) throw notFound();
+  const { version } = parsePolicyBundle(latest.bundle_json);
   if (fetchingMember !== undefined) {
-    const { version } = parsePolicyBundle(latest.bundle_json);
     observeMember(sql, fetchingMember, id, Date.now(), { kind: "fetch", version });
   }
-  return signedResponse(latest, { "OpenPlexer-Policy-Version": String(latest.version) });
+  return signedResponse(latest, { "OpenPlexer-Policy-Version": String(version) });
 }
 
 function quotedRepo(repo: string): string {

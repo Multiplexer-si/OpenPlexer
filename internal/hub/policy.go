@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -156,7 +157,19 @@ func publicJWK(key *ecdsa.PublicKey, kid string) map[string]string {
 	}
 }
 
-// PolicyVersion reads the current published version without recording a fetch.
+func (signed SignedBundle) payloadVersion() (int64, error) {
+	jws, err := policy.ReadSignedBundle(signed.Signature)
+	if err != nil {
+		return 0, err
+	}
+	bundle, _, err := jws.ParseUnverifiedPayload()
+	if err != nil {
+		return 0, err
+	}
+	return bundle.Version, nil
+}
+
+// PolicyVersion reads the current signed payload version without recording a fetch.
 func (s *Store) PolicyVersion(project string) (int64, error) {
 	var version int64
 	err := s.view(func(st *state) error {
@@ -164,7 +177,11 @@ func (s *Store) PolicyVersion(project string) (int64, error) {
 		if !ok {
 			return errNotFound
 		}
-		version = signed.Version
+		current, err := signed.payloadVersion()
+		if err != nil {
+			return errors.New("could not read signed policy version")
+		}
+		version = current
 		return nil
 	})
 	return version, err
@@ -182,20 +199,16 @@ func (s *Store) policyBundleEndpoint(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return nil, errNotFound
 		}
+		version, err := signed.payloadVersion()
+		if err != nil {
+			return nil, err
+		}
 		if req.Method == http.MethodGet {
-			jws, err := policy.ReadSignedBundle(signed.Signature)
-			if err != nil {
-				return nil, err
-			}
-			bundle, _, err := jws.ParseUnverifiedPayload()
-			if err != nil {
-				return nil, err
-			}
-			if err := s.observe(st.Members[req.member].EnrollmentID, req.project(), &bundle.Version); err != nil {
+			if err := s.observe(st.Members[req.member].EnrollmentID, req.project(), &version); err != nil {
 				return nil, err
 			}
 		}
-		w.Header().Set(PolicyVersionHeader, strconv.FormatInt(signed.Version, 10))
+		w.Header().Set(PolicyVersionHeader, strconv.FormatInt(version, 10))
 		return signed, nil
 	})(w, r)
 }
