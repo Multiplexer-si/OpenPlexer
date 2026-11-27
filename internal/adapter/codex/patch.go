@@ -1,6 +1,10 @@
 package codex
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
+)
 
 const (
 	beginMarker = "*** Begin Patch"
@@ -122,17 +126,31 @@ func updateEnd(lines []string, at int, add func(string) bool) int {
 // to, in patch order, with no repeat. It returns false if Codex would not
 // accept the text as a patch, or if a path is empty.
 func ParsePatch(text string) ([]string, bool) {
+	writes, ok := patchTargets(text)
+	if !ok {
+		return nil, false
+	}
+	var paths []string
+	seen := map[string]bool{}
+	for _, write := range writes {
+		if !seen[write.Path] {
+			seen[write.Path] = true
+			paths = append(paths, write.Path)
+		}
+	}
+	return paths, true
+}
+
+func patchTargets(text string) ([]hook.WriteTarget, bool) {
 	lines, ok := body(linesOf(trim(text)))
 	if !ok {
 		return nil, false
 	}
-	var targets []string
-	seen := map[string]bool{}
-	add := func(raw string) bool {
+	var targets []hook.WriteTarget
+	add := func(raw string, kind hook.WriteKind) bool {
 		path := trim(raw)
-		if path != "" && !seen[path] {
-			seen[path] = true
-			targets = append(targets, path)
+		if path != "" {
+			targets = append(targets, hook.WriteTarget{Path: path, Kind: kind})
 		}
 		return path != ""
 	}
@@ -147,21 +165,25 @@ func ParsePatch(text string) ([]string, bool) {
 		header := trim(lines[i])
 		switch {
 		case strings.HasPrefix(header, addFile):
-			if !add(header[len(addFile):]) {
+			if !add(header[len(addFile):], hook.WriteThrough) {
 				return nil, false
 			}
 			for i++; i < len(lines) && strings.HasPrefix(lines[i], "+"); i++ {
 			}
 		case strings.HasPrefix(header, deleteFile):
-			if !add(header[len(deleteFile):]) {
+			if !add(header[len(deleteFile):], hook.WriteEntry) {
 				return nil, false
 			}
 			i++
 		case strings.HasPrefix(header, updateFile):
-			if !add(header[len(updateFile):]) {
+			kind := hook.WriteThrough
+			if i+1 < len(lines) && strings.HasPrefix(lines[i+1], moveTo) {
+				kind = hook.WriteEntry
+			}
+			if !add(header[len(updateFile):], kind) {
 				return nil, false
 			}
-			next := updateEnd(lines, i+1, add)
+			next := updateEnd(lines, i+1, func(path string) bool { return add(path, hook.WriteEntry) })
 			if next < 0 {
 				return nil, false
 			}

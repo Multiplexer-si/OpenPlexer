@@ -124,6 +124,26 @@ func readKeys(home string) (*policy.KeySet, error) {
 	return &keys, nil
 }
 
+// ValidateConfiguredHome checks the settings of an existing local or hub home.
+// A home can be registered before its first policy load.
+func ValidateConfiguredHome(home string) error {
+	if _, err := readConfig(home); err != nil {
+		return err
+	}
+	keys, err := readKeys(home)
+	if err != nil {
+		return err
+	}
+	if keys != nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(home, configFile)); errors.Is(err, fs.ErrNotExist) {
+		return errors.New("the OpenPlexer home has no configuration. Run `openplexer configure` with a key set or member first")
+	} else {
+		return err
+	}
+}
+
 func readStoredPolicy(home string) (*storedPolicy, error) {
 	var stored storedPolicy
 	found, err := readJSON(home, policyFile, map[string]any{
@@ -188,6 +208,16 @@ type Settings struct {
 
 // Configure applies a change to the configuration in the home directory.
 func Configure(home string, change Settings) error {
+	return configureSettings(home, change, nil)
+}
+
+// ConfigureAndRegister saves settings and publishes the prepared project registration.
+// The home lock covers both writes and any restoration if publication fails.
+func ConfigureAndRegister(home string, change Settings, publish func() error) error {
+	return configureSettings(home, change, publish)
+}
+
+func configureSettings(home string, change Settings, publish func() error) error {
 	if change.StaleAfterDays < 0 {
 		return errors.New("stale-after-days must not be negative")
 	}
@@ -232,15 +262,84 @@ func Configure(home string, change Settings) error {
 			return errors.New("use a separate OpenPlexer home to change the hub, project or member")
 		}
 	}
+	var files []settingsFile
 	if change.KeySet != nil {
-		if err := writeFile(home, keysFile, change.KeySet); err != nil {
+		files = append(files, settingsFile{keysFile, change.KeySet})
+	}
+	if next != current {
+		data, err := json.MarshalIndent(next, "", "  ")
+		if err != nil {
 			return err
 		}
+		files = append(files, settingsFile{configFile, append(data, '\n')})
 	}
-	if next == current {
-		return nil
+	if publish != nil {
+		if len(files) == 0 {
+			if err := ValidateConfiguredHome(home); err != nil {
+				return err
+			}
+			return publish()
+		}
+		if change.KeySet == nil {
+			if _, err := readKeys(home); err != nil {
+				return err
+			}
+		}
 	}
-	return writeJSON(home, configFile, next)
+	return saveSettings(home, files, publish)
+}
+
+type settingsFile struct {
+	name string
+	data []byte
+}
+
+func saveSettings(home string, files []settingsFile, publish func() error) (err error) {
+	written := 0
+	if publish != nil {
+		backup, backupErr := os.MkdirTemp(home, ".configure-")
+		if backupErr != nil {
+			return backupErr
+		}
+		defer os.RemoveAll(backup)
+		saved := make(map[string]string, len(files))
+		for _, file := range files {
+			path := filepath.Join(backup, file.name)
+			linkErr := os.Link(filepath.Join(home, file.name), path)
+			if linkErr == nil {
+				saved[file.name] = path
+			} else if !errors.Is(linkErr, fs.ErrNotExist) {
+				return linkErr
+			}
+		}
+		defer func() {
+			if err == nil {
+				return
+			}
+			for _, file := range files[:written] {
+				path := filepath.Join(home, file.name)
+				var restoreErr error
+				if original := saved[file.name]; original != "" {
+					restoreErr = os.Rename(original, path)
+				} else if removeErr := os.Remove(path); !errors.Is(removeErr, fs.ErrNotExist) {
+					restoreErr = removeErr
+				}
+				if restoreErr != nil {
+					err = errors.Join(err, fmt.Errorf("cannot restore %s: %w", file.name, restoreErr))
+				}
+			}
+		}()
+	}
+	for _, file := range files {
+		if err := writeFile(home, file.name, file.data); err != nil {
+			return err
+		}
+		written++
+	}
+	if publish != nil {
+		return publish()
+	}
+	return nil
 }
 
 func lockHome(home string) (unlock func(), err error) {

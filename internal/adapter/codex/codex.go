@@ -30,6 +30,13 @@ func applyPatch(call hook.Call) (hook.Effect, error) {
 	if err != nil {
 		return hook.Effect{}, err
 	}
+	if call.ProjectHome {
+		targets, ok := patchTargets(text)
+		if !ok {
+			return hook.Effect{}, errUnreadablePatch
+		}
+		return hook.Effect{Targets: targets}, nil
+	}
 	paths, ok := ParsePatch(text)
 	if !ok {
 		return hook.Effect{}, errUnreadablePatch

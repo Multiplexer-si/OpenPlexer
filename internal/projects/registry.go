@@ -1,0 +1,335 @@
+// Package projects stores the local mapping from checkout roots to OpenPlexer homes.
+package projects
+
+import (
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"io/fs"
+	"os"
+	"path/filepath"
+
+	"github.com/multiplexer-si/openplexer/internal/jsonedit"
+)
+
+// ErrUnregistered means that no registered root contains the path.
+var ErrUnregistered = errors.New("no registered checkout contains the path")
+
+type Project struct {
+	Root string
+	Home string
+}
+
+type claim struct {
+	Project
+	info fs.FileInfo
+}
+
+// Registry is a snapshot of the claims, including conflicting claims.
+type Registry struct {
+	Path   string
+	claims []claim
+	info   fs.FileInfo
+}
+
+// Directory resolves a directory and verifies that the original spelling and
+// the resolved spelling identify the same directory.
+func Directory(path string) (string, fs.FileInfo, error) {
+	if path == "" {
+		return "", nil, errors.New("a directory path is required")
+	}
+	if !filepath.IsAbs(path) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return "", nil, err
+		}
+		path = cwd + string(filepath.Separator) + path
+	}
+	before, err := os.Stat(path)
+	if err != nil {
+		return "", nil, err
+	}
+	resolved, err := CanonicalPath(path)
+	if err != nil {
+		return "", nil, err
+	}
+	after, err := os.Stat(resolved)
+	if err != nil {
+		return "", nil, err
+	}
+	if !after.IsDir() || !os.SameFile(before, after) {
+		return "", nil, fmt.Errorf("%s does not identify a stable directory", path)
+	}
+	return resolved, after, nil
+}
+
+// Read loads one private registry snapshot. Readers rely on atomic replacement
+// and can proceed while another process updates the registry.
+func Read(userHome string) (Registry, error) {
+	dir, err := registryDir(userHome)
+	if err != nil {
+		return Registry{}, err
+	}
+	return read(dir)
+}
+
+func registryDir(userHome string) (string, error) {
+	home, _, err := Directory(userHome)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, ".openplexer"), nil
+}
+
+func read(dir string) (Registry, error) {
+	r := Registry{Path: filepath.Join(dir, "projects.json")}
+	file, err := openRegistry(r.Path)
+	if err != nil {
+		return r, err
+	}
+	defer file.Close()
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return r, err
+	}
+	if !info.IsDir() || !ownedWithMode(info, 0o022) {
+		return r, errors.New("the project registry directory must be writable only by its owner")
+	}
+	info, err = file.Stat()
+	if err != nil {
+		return r, err
+	}
+	if !info.Mode().IsRegular() || !ownedWithMode(info, 0o077) {
+		return r, errors.New("the project registry must be a private regular file")
+	}
+	r.info = info
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return r, err
+	}
+	doc, err := jsonedit.Parse(data)
+	if err != nil || doc.Root().Kind != jsonedit.Object {
+		return r, errors.New("the project registry must be a JSON object mapping checkout roots to homes")
+	}
+	for _, member := range doc.Root().Members {
+		var home string
+		root := member.Key
+		if doc.Decode(member.Value, &home) != nil || !absoluteClean(root) || !absoluteClean(home) {
+			return r, errors.New("the project registry must contain absolute checkout and home paths")
+		}
+		if spelled, err := diskPath(home); err == nil {
+			home = spelled
+		}
+		_, info, _ := Directory(root)
+		r.claims = append(r.claims, claim{Project{root, home}, info})
+	}
+	return r, nil
+}
+
+func absoluteClean(path string) bool {
+	return filepath.IsAbs(path) && filepath.Clean(path) == path
+}
+
+// Projects returns every recorded path pair, including claims that conflict.
+func (r Registry) Projects() []Project {
+	projects := make([]Project, 0, len(r.claims))
+	for _, c := range r.claims {
+		projects = append(projects, c.Project)
+	}
+	return projects
+}
+
+// Lookup selects the deepest registered ancestor of a resolved absolute path.
+// If that root has conflicting claims, Lookup returns the conflict.
+func (r Registry) Lookup(path string) (Project, error) {
+	for dir := path; ; dir = filepath.Dir(dir) {
+		var match Project
+		info, _ := os.Lstat(dir)
+		for _, c := range r.claims {
+			if c.Root != dir && (info == nil || !info.IsDir() || c.info == nil || !os.SameFile(info, c.info)) {
+				continue
+			}
+			if match.Root != "" {
+				return match, fmt.Errorf("conflicting homes claim the checkout %s. Repair projects.json", dir)
+			}
+			match = Project{dir, c.Home}
+		}
+		if match.Root != "" {
+			return match, nil
+		}
+		if dir == filepath.Dir(dir) {
+			return Project{}, ErrUnregistered
+		}
+	}
+}
+
+// CheckHome verifies that the registered home still exists as recorded.
+func (p Project) CheckHome() error {
+	home, _, err := Directory(p.Home)
+	if err != nil {
+		return fmt.Errorf("cannot use the registered home: %w", err)
+	}
+	if home != p.Home {
+		return fmt.Errorf("the registered home %s no longer names its canonical directory", p.Home)
+	}
+	return nil
+}
+
+// Register atomically adds a claim, or keeps the same existing claim. The
+// caller can validate the contents of the canonical home before publication.
+func Register(userHome, root, home string, validate func(string) error) error {
+	return register(userHome, root, home, false, func(home string, publish func() error) error {
+		if validate != nil {
+			if err := validate(home); err != nil {
+				return err
+			}
+		}
+		return publish()
+	})
+}
+
+// RegisterAfter prepares a claim under the registry lock. Install calls publish
+// after writing the hook file and restores the hook if publication fails.
+func RegisterAfter(userHome, root, home string, install func(publish func() error) error) error {
+	return register(userHome, root, home, false, func(_ string, publish func() error) error {
+		return install(publish)
+	})
+}
+
+// RegisterConfigured prepares a claim before changing the selected home's settings.
+// Configure calls publish after saving the settings and restores them if publication fails.
+func RegisterConfigured(userHome, root, home string, configure func(home string, publish func() error) error) error {
+	return register(userHome, root, home, true, configure)
+}
+
+func register(userHome, root, home string, createHome bool, apply func(home string, publish func() error) error) error {
+	canonicalRoot, rootInfo, err := Directory(root)
+	if err != nil {
+		return fmt.Errorf("cannot register the checkout: %w", err)
+	}
+	canonicalHome, homeInfo, err := Directory(home)
+	if err != nil && !(createHome && errors.Is(err, fs.ErrNotExist)) {
+		return fmt.Errorf("cannot register the OpenPlexer home: %w", err)
+	}
+	dir, err := registryDir(userHome)
+	if err != nil {
+		return err
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() || !ownedWithMode(info, 0o022) {
+		return errors.New("the project registry directory must be writable only by its owner")
+	}
+	lock, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer lock.Close()
+	if err := lockRegistry(lock); err != nil {
+		return err
+	}
+	locked, err := lock.Stat()
+	if err != nil {
+		return err
+	}
+	if !os.SameFile(info, locked) || !sameDirectory(dir, locked) {
+		return errors.New("the registry directory changed while acquiring its lock")
+	}
+	r, err := read(dir)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	homes := make(map[string]string, len(r.claims)+1)
+	for _, c := range r.claims {
+		if _, found := homes[c.Root]; found {
+			return fmt.Errorf("conflicting homes claim the checkout %s. Repair projects.json", c.Root)
+		}
+		homes[c.Root] = c.Home
+	}
+	claimed := false
+	for _, c := range r.claims {
+		if c.Root != canonicalRoot && (c.info == nil || !os.SameFile(rootInfo, c.info)) {
+			continue
+		}
+		if claimed {
+			return fmt.Errorf("conflicting homes claim the checkout %s. Repair projects.json", canonicalRoot)
+		}
+		claimed = true
+		_, registeredHome, err := Directory(c.Home)
+		if err != nil || homeInfo == nil || !os.SameFile(homeInfo, registeredHome) {
+			return fmt.Errorf("checkout %s is already registered with another home", canonicalRoot)
+		}
+	}
+	if homeInfo == nil {
+		if err := os.MkdirAll(home, 0o700); err != nil {
+			return err
+		}
+		canonicalHome, homeInfo, err = Directory(home)
+		if err != nil {
+			return fmt.Errorf("cannot register the OpenPlexer home: %w", err)
+		}
+	}
+	var temp string
+	if !claimed {
+		homes[canonicalRoot] = canonicalHome
+		temp, err = prepareRegistry(dir, homes)
+		if err != nil {
+			return err
+		}
+		defer os.Remove(temp)
+	}
+	check := func() error {
+		current, err := os.Lstat(r.Path)
+		if r.info == nil && !errors.Is(err, fs.ErrNotExist) ||
+			r.info != nil && (err != nil || !os.SameFile(r.info, current)) {
+			return errors.New("the project registry changed while registering the checkout")
+		}
+		if !sameDirectory(root, rootInfo) || !sameDirectory(canonicalRoot, rootInfo) ||
+			!sameDirectory(home, homeInfo) || !sameDirectory(canonicalHome, homeInfo) ||
+			!sameDirectory(dir, info) {
+			return errors.New("a directory changed while registering the checkout")
+		}
+		return nil
+	}
+	if err := check(); err != nil {
+		return err
+	}
+	return apply(canonicalHome, func() error {
+		if err := check(); err != nil || claimed {
+			return err
+		}
+		return os.Rename(temp, r.Path)
+	})
+}
+
+func prepareRegistry(dir string, homes map[string]string) (string, error) {
+	data, err := json.MarshalIndent(homes, "", "  ")
+	if err != nil {
+		return "", err
+	}
+	temp, err := os.CreateTemp(dir, ".projects-*.tmp")
+	if err != nil {
+		return "", err
+	}
+	_, writeErr := temp.Write(append(data, '\n'))
+	if writeErr == nil {
+		writeErr = temp.Sync()
+	}
+	closeErr := temp.Close()
+	if err := errors.Join(writeErr, closeErr); err != nil {
+		os.Remove(temp.Name())
+		return "", err
+	}
+	return temp.Name(), nil
+}
+
+func sameDirectory(path string, before fs.FileInfo) bool {
+	after, err := os.Stat(path)
+	return err == nil && os.SameFile(before, after)
+}

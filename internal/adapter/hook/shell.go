@@ -249,11 +249,19 @@ var (
 	installDirs  = regexp.MustCompile(`^-[a-zA-Z]*d`)
 )
 
-func argTargets(verb string, args []string) []string {
+type shellOperands struct {
+	paths       []string
+	targetDir   *string
+	dirsOnly    bool
+	inPlace     bool
+	hasScript   bool
+	noTargetDir bool
+}
+
+func parseOperands(verb string, args []string) shellOperands {
 	valueOpt := valueOptions[verb]
-	var operands []string
-	inPlace, hasScript, dirsOnly, ended := false, false, false, false
-	var dirTarget *string
+	var out shellOperands
+	ended := false
 	for k := 0; k < len(args); k++ {
 		a := args[k]
 		if !ended && a == "--" {
@@ -261,29 +269,31 @@ func argTargets(verb string, args []string) []string {
 			continue
 		}
 		if ended || !strings.HasPrefix(a, "-") || len(a) == 1 {
-			operands = append(operands, a)
+			out.paths = append(out.paths, a)
 			continue
 		}
 		switch {
 		case verb == "sed":
-			inPlace = inPlace || sedInPlace.MatchString(a)
+			out.inPlace = out.inPlace || sedInPlace.MatchString(a)
 			if sedScriptOpt.MatchString(a) {
-				hasScript = true
+				out.hasScript = true
 				k++
 			} else if sedScriptEq.MatchString(a) {
-				hasScript = true
+				out.hasScript = true
 			}
 		case destLastVerbs[verb]:
 			if m := targetDirEq.FindStringSubmatch(a); m != nil {
-				dirTarget = &m[1]
+				out.targetDir = &m[1]
 			} else if targetDirOpt.MatchString(a) {
 				k++
-				dirTarget = nil
+				out.targetDir = nil
 				if k < len(args) {
-					dirTarget = &args[k]
+					out.targetDir = &args[k]
 				}
+			} else if a == "--no-target-directory" || !strings.HasPrefix(a, "--") && strings.ContainsRune(a, 'T') {
+				out.noTargetDir = true
 			} else if verb == "install" && installDirs.MatchString(a) {
-				dirsOnly = true
+				out.dirsOnly = true
 			} else if valueOpt != nil && valueOpt.MatchString(a) {
 				k++
 			}
@@ -293,16 +303,22 @@ func argTargets(verb string, args []string) []string {
 			}
 		}
 	}
+	return out
+}
+
+func argTargets(verb string, args []string) []string {
+	parsed := parseOperands(verb, args)
+	operands := parsed.paths
 	var written []string
 	switch {
-	case verb == "sed" && inPlace && hasScript:
+	case verb == "sed" && parsed.inPlace && parsed.hasScript:
 		written = operands
-	case verb == "sed" && inPlace && len(operands) > 0:
+	case verb == "sed" && parsed.inPlace && len(operands) > 0:
 		written = operands[1:]
 	case verb == "sed":
-	case destLastVerbs[verb] && dirTarget != nil:
-		written = []string{*dirTarget}
-	case destLastVerbs[verb] && dirsOnly:
+	case destLastVerbs[verb] && parsed.targetDir != nil:
+		written = []string{*parsed.targetDir}
+	case destLastVerbs[verb] && parsed.dirsOnly:
 		written = operands
 	case destLastVerbs[verb] && len(operands) >= 2:
 		written = []string{operands[len(operands)-1]}
@@ -332,14 +348,23 @@ func WriteTargets(command string) []string {
 			targets = append(targets, path)
 		}
 	}
+	walkShellWrites(command, add, func(verb string, args []string) {
+		if mutatingVerbs[verb] || destLastVerbs[verb] || verb == "sed" {
+			for _, path := range argTargets(verb, args) {
+				add(path)
+			}
+		}
+	})
+	return targets
+}
+
+func walkShellWrites(command string, redirectTarget func(string), operands func(string, []string)) {
 	verb, hasVerb := "", false
 	var args []string
 	var redirect *token
 	flush := func() {
-		if hasVerb && (mutatingVerbs[verb] || destLastVerbs[verb] || verb == "sed") {
-			for _, path := range argTargets(verb, args) {
-				add(path)
-			}
+		if hasVerb {
+			operands(verb, args)
 		}
 		verb, hasVerb, args, redirect = "", false, nil, nil
 	}
@@ -351,7 +376,7 @@ func WriteTargets(command string) []string {
 			redirect = &token{kind: t.kind, text: t.text, reads: t.reads}
 		case t.kind == wordToken && redirect != nil:
 			if !redirect.reads && !dynamic.MatchString(t.text) {
-				add(t.text)
+				redirectTarget(t.text)
 			}
 			redirect = nil
 		case t.kind == wordToken && !hasVerb:
@@ -361,7 +386,6 @@ func WriteTargets(command string) []string {
 		}
 	}
 	flush()
-	return targets
 }
 
 var gitValueOptions = map[string]bool{"-C": true, "-c": true, "--git-dir": true, "--work-tree": true, "--namespace": true, "--config-env": true, "--attr-source": true}

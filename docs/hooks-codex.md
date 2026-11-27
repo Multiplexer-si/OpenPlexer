@@ -62,6 +62,26 @@ Codex also reads hooks written inline in `config.toml`. If the same layer has bo
 
 `install` refuses a file that is not valid JSON, and a file whose top level, `hooks`, or `hooks.PreToolUse` has another type. It also refuses a file in which a key appears twice at the top level, in `hooks`, in a group, or in a handler, because readers disagree on which value wins. It leaves the file unchanged, names the line and column of the problem, and exits with status 1.
 
+## Portable project hooks
+
+Portable hooks need a build newer than `v0.1.0-rc.1`, so build from `main` with `make build` until the next release.
+
+Put `openplexer` on the agent's `PATH`. From the checkout, select your configured home and install the portable hook.
+
+```sh
+openplexer --home <dir> install codex --project . --portable
+```
+
+Commit `.codex/hooks.json`. It runs `openplexer hook codex pre-tool --project-home`. Each teammate with a configured home registers their own checkout.
+
+```sh
+openplexer configure --home <dir> --project-root .
+```
+
+The hook reads `~/.openplexer/projects.json`. It uses the deepest registered root for each write and the resolved working directory for command checks. Any denial blocks the call. A rename or unlink checks the link entry. A write through a link checks its referent. The hook protects the registry, all registered homes, and agent settings. A covered call with no registration gets a message with the registration command. The agent can start without `OPENPLEXER_HOME`.
+
+Trust the hook in `/hooks` after you install it. Codex can let a call run if it cannot start the hook.
+
 ## Remove
 
 1. Run `openplexer uninstall codex`, with the same `--scope`, `--project`, or `--file` as the install.
@@ -82,7 +102,7 @@ Every other byte stays as it was, including key order, a top-level `description`
 
 ## The project root
 
-The hook reads each path of a call from a project root. It finds the root of `cwd`, and the root of each file that the call writes, in this order.
+A legacy hook reads each path of a call from a project root. It finds the root of `cwd`, and the root of each file that the call writes, in this order.
 
 1. The nearest directory at or above `cwd` that a project-scope `install` recorded. A hook of the user scope uses the record too. A submodule, a worktree, or another `.git` below a recorded root does not move the root, wherever the agent runs `cd`.
 2. With no recorded root, the outermost directory at or above `cwd` that holds `.git`. A submodule lies below that directory, and so does a repository that `git init` or `mkdir` makes in a subfolder, so neither moves the root. In a submodule at `web`, a write to `web/src/a.go` is judged as `web/src/a.go`, and `rm ../api/server.ts` is judged as `api/server.ts`.
@@ -149,7 +169,7 @@ There is no check after the command. A write that the hook did not name stays un
 
 **Commands that the policy matches by their first words.** A granted `npm test` allows whatever script `npm test` runs. A granted command with a quoted `;`, `|`, `&`, `<`, or `>` is denied, as [the open questions of the adapter contract](../spec/adapter/README.md#open-questions) say.
 
-**A hook that does not run.** Codex runs no hook of a project until the project is trusted and the hook is trusted, and it skips a changed hook until you trust it again. A person who sets `hooks = false` under `[features]` in `config.toml` turns every hook off. The hook denies a write through `apply_patch` or `Bash` to `hooks.json` and `config.toml` of the user and of the project, to the settings files of Claude Code, and to the OpenPlexer home, whatever the policy says. For a shell command, that is a write that the hook finds, as the list above says, and it includes a move of one of these files to another place. A write that the hook does not find is not seen. More ways reach these files: a command that removes or moves a directory above a settings file, such as `rm -rf ~/.claude`, a command that copies or moves a file into that directory and names only the directory, such as `cp settings.json ~/.claude/`, a path through a symbolic link, and on macOS a path through `/System/Volumes/Data` or the `/tmp` spelling of `/private/tmp`. [The trust model](trust-model.md#decisions-settled-by-install-and-the-hook-command) gives the list. A write by anything else than these tools is not seen.
+**A hook that does not run.** Codex runs no hook of a project until the project is trusted and the hook is trusted, and it skips a changed hook until you trust it again. A person who sets `hooks = false` under `[features]` in `config.toml` turns every hook off. The hook denies a write through `apply_patch` or `Bash` to `hooks.json` and `config.toml` of the user and of the project, to the settings files of Claude Code, and to the OpenPlexer home, whatever the policy says. For a shell command, that is a write that the hook finds, as the list above says, and it includes a move of one of these files to another place. A write that the hook does not find is not seen. A legacy hook can miss a command that reaches these files: a command that removes or moves a directory above a settings file, such as `rm -rf ~/.claude`, a command that copies or moves a file into that directory and names only the directory, such as `cp settings.json ~/.claude/`, a path through a symbolic link, and on macOS a path through `/System/Volumes/Data` or the `/tmp` spelling of `/private/tmp`. [The trust model](trust-model.md#decisions-settled-by-install-and-the-hook-command) gives the list. A write by anything else than these tools is not seen.
 
 **A failed hook.** The Codex documentation says that a `PreToolUse` error, a timeout, or a malformed response can let the tool run. Codex has no option that blocks the call when a hook fails, so a hook that cannot start, is killed, or runs past its `timeout` lets the call run. The hook blocks on its own errors with exit status 2, and it ends itself with exit status 2 after 4 seconds, before the `timeout` of 5 seconds. It cannot block when the binary is missing or the process never starts.
 
@@ -159,6 +179,6 @@ There is no check after the command. A write that the hook did not name stays un
 
 **The project root.** The hook reads the paths of a call from the project root, as [The project root](#the-project-root) describes. A call that the hook cannot place in a project is denied, if it writes a file or runs a judged command.
 
-**A path in another spelling.** The hook finds the project of a written file from the path as the call spells it. On a file system that ignores case, it finds the same project for a path in another case. With the root at `/Users/dev/CaseProj`, a write to `/Users/dev/caseproj/api/server.ts` is judged as `api/server.ts`. A path through a symbolic link to a project directory is judged in the same way. A path through a symbolic link that lies outside every project, to a file inside a project, is not judged.
+**A path in another spelling.** A legacy hook finds the project of a written file from the path as the call spells it. On a file system that ignores case, it finds the same project for a path in another case. With the root at `/Users/dev/CaseProj`, a write to `/Users/dev/caseproj/api/server.ts` is judged as `api/server.ts`. A path through a symbolic link to a project directory is judged in the same way. A path through a symbolic link that lies outside every project, to a file inside a project, is not judged.
 
 **The repository.** The hook does not know which repository of the bundle the project is. The gate then allows a write only when every repository of the bundle allows it, as [Local policy gate](local-policy.md) describes.

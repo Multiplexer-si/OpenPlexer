@@ -84,6 +84,16 @@ func (j Journal) put(r record) error {
 // file, so a run that is killed leaves a record too many and never a hook
 // without one.
 func (j Journal) Install(path string, h Handler, root string) (Change, error) {
+	return j.install(path, h, root, nil)
+}
+
+// InstallAndRegister publishes a portable registration after the hook write.
+// If publication fails, it tries to restore the hook file and its install record.
+func (j Journal) InstallAndRegister(path string, h Handler, publish func() error) (Change, error) {
+	return j.install(path, h, "", publish)
+}
+
+func (j Journal) install(path string, h Handler, root string, publish func() error) (Change, error) {
 	if err := os.MkdirAll(j.Dir, 0o700); err != nil {
 		return Unchanged, fmt.Errorf("%w. The file is unchanged", err)
 	}
@@ -93,6 +103,7 @@ func (j Journal) Install(path string, h Handler, root string) (Change, error) {
 	}
 	defer unlock()
 	was, known := j.get(h.Agent, path)
+	recordWritten := false
 	change, err := editFile(path, func(text []byte, exists bool) ([]byte, bool, Change, error) {
 		out, change, added, err := Install(text, exists, h)
 		if err != nil {
@@ -104,18 +115,26 @@ func (j Journal) Install(path string, h Handler, root string) (Change, error) {
 		}
 		if !known || was != next {
 			err = j.put(next)
+			recordWritten = err == nil
 		}
 		return out, false, change, err
-	})
-	if err != nil {
-		if known {
-			j.put(was)
-		} else {
-			os.Remove(j.recordPath(h.Agent, path))
-		}
-		return Unchanged, fmt.Errorf("%w. The file is unchanged", err)
+	}, publish)
+	if err == nil || change != Unchanged {
+		return change, err
 	}
-	return change, nil
+	err = fmt.Errorf("%w. The file is unchanged", err)
+	if recordWritten {
+		var rollbackErr error
+		if known {
+			rollbackErr = j.put(was)
+		} else {
+			rollbackErr = os.Remove(j.recordPath(h.Agent, path))
+		}
+		if rollbackErr != nil {
+			err = errors.Join(err, fmt.Errorf("cannot restore the hook install record: %w", rollbackErr))
+		}
+	}
+	return Unchanged, err
 }
 
 // Uninstall removes the handlers of ours for agent from the hook file at
@@ -134,7 +153,7 @@ func (j Journal) Uninstall(path, agent string) (Change, error) {
 			return nil, false, Unchanged, nil
 		}
 		return Uninstall(text, agent, was.Added)
-	})
+	}, nil)
 	if err != nil {
 		return Unchanged, fmt.Errorf("%w. The file is unchanged", err)
 	}

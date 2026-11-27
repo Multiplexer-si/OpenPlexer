@@ -11,19 +11,18 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
-	"github.com/multiplexer-si/openplexer/internal/adapter"
-	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
 	"github.com/multiplexer-si/openplexer/internal/daemon"
 	"github.com/multiplexer-si/openplexer/internal/policy"
+	"github.com/multiplexer-si/openplexer/internal/projects"
 )
 
 const usage = `usage:
   openplexer --version
   openplexer configure [--keys <jwks.json>] [--member <member-id>] [--stale-after-days <days>]
+  openplexer configure --project-root <dir> [--home <dir>]
   openplexer configure --hub <url> --project <id> --member <id> --keys <jwks.json> --token-file <file>
   openplexer daemon
   openplexer room post < event.json
@@ -31,16 +30,18 @@ const usage = `usage:
   openplexer policy load <signed-bundle.json>
   openplexer policy status
   openplexer policy check [--agent <name>] [--session <id>] [--repo <repo>] <action> <target>
-  openplexer install <agent> [--scope user|project] [--project <dir>] [--file <path>]
+  openplexer install <agent> [--scope user|project] [--project <dir>] [--file <path>] [--portable]
   openplexer uninstall <agent> [--scope user|project] [--project <dir>] [--file <path>]
-  openplexer hook <agent> pre-tool
+  openplexer hook <agent> pre-tool [--project-home]
 
 An agent is claude-code or codex.
 
 An action is read, write, exec, or git.push. The target is a path for read
 and write, a command for exec, and a repo for git.push.
 
-The home directory is $OPENPLEXER_HOME, or .openplexer in your home directory.
+Use --home <dir> before the command to select a home. The other choices, in
+order, are $OPENPLEXER_HOME, the registry for the current directory, and
+~/.openplexer. Legacy hooks use $OPENPLEXER_HOME or ~/.openplexer.
 
 install adds the OpenPlexer hook to the hook file of the agent, and uninstall
 removes it. The user scope is the file in $CLAUDE_CONFIG_DIR or ~/.claude for
@@ -48,6 +49,7 @@ claude-code, and in $CODEX_HOME or ~/.codex for codex. The project scope is
 the file in the .claude or .codex directory of the project, the current
 directory by default. --project means the project scope, and install records
 the project as a project root. --file names the hook file itself.
+--portable registers the checkout and writes a command that uses PATH.
 `
 
 const (
@@ -78,8 +80,26 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() ti
 		return exitOK
 	}
 	c := command{stdin: stdin, stdout: stdout, stderr: stderr, now: now}
+	switch {
+	case len(args) >= 2 && args[0] == "--home":
+		c.home, args = args[1], args[2:]
+	case len(args) > 0 && strings.HasPrefix(args[0], "--home="):
+		c.home, args = strings.TrimPrefix(args[0], "--home="), args[1:]
+	}
+	if len(args) > 0 {
+		switch args[0] {
+		case "configure":
+			return c.configure(args[1:])
+		case "install":
+			return c.install(args[1:])
+		case "uninstall":
+			return c.uninstall(args[1:])
+		case "hook":
+			return c.runHook(args[1:])
+		}
+	}
 	var err error
-	if c.home, err = homeDirectory(); err != nil {
+	if c.home, err = projects.ResolveHome(c.home); err != nil {
 		return c.fail(err)
 	}
 	switch {
@@ -87,8 +107,6 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() ti
 		return c.post()
 	case len(args) == 1 && args[0] == "daemon":
 		return c.daemon()
-	case len(args) >= 1 && args[0] == "configure":
-		return c.configure(args[1:])
 	case len(args) == 3 && args[0] == "policy" && args[1] == "load":
 		return c.load(args[2])
 	case len(args) == 2 && args[0] == "policy" && args[1] == "sync":
@@ -97,28 +115,9 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() ti
 		return c.status()
 	case len(args) >= 2 && args[0] == "policy" && args[1] == "check":
 		return c.check(args[2:])
-	case len(args) >= 1 && args[0] == "install":
-		return c.install(args[1:])
-	case len(args) >= 1 && args[0] == "uninstall":
-		return c.uninstall(args[1:])
-	case len(args) == 3 && args[0] == "hook" && args[2] == hook.PreTool:
-		if agent, ok := adapter.Lookup(args[1]); ok {
-			return c.hook(agent)
-		}
 	}
 	fmt.Fprint(stderr, usage)
 	return exitUsage
-}
-
-func homeDirectory() (string, error) {
-	if home := os.Getenv("OPENPLEXER_HOME"); home != "" {
-		return home, nil
-	}
-	user, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("OPENPLEXER_HOME is not set, and the home directory is not known: %w", err)
-	}
-	return filepath.Join(user, ".openplexer"), nil
 }
 
 func (c command) fail(err error) int {
@@ -140,10 +139,30 @@ func (c command) configure(args []string) int {
 	hub := flags.String("hub", "", "")
 	project := flags.String("project", "", "")
 	tokenFile := flags.String("token-file", "", "")
+	projectRoot := flags.String("project-root", "", "")
+	home := flags.String("home", c.home, "")
 	staleAfterDays := flags.Int("stale-after-days", 0, "")
 	if flags.Parse(args) != nil || flags.NArg() != 0 || flags.NFlag() == 0 {
 		fmt.Fprint(c.stderr, usage)
 		return exitUsage
+	}
+	var configuring, registering bool
+	flags.Visit(func(f *flag.Flag) {
+		switch f.Name {
+		case "project-root":
+			registering = true
+		case "home":
+		default:
+			configuring = true
+		}
+	})
+	if !configuring && !registering {
+		fmt.Fprint(c.stderr, usage)
+		return exitUsage
+	}
+	var err error
+	if c.home, err = projects.ResolveHome(*home); err != nil {
+		return c.fail(err)
 	}
 	change := daemon.Settings{MemberID: *member, StaleAfterDays: *staleAfterDays, HubURL: *hub, ProjectID: *project}
 	if *tokenFile != "" {
@@ -162,7 +181,12 @@ func (c command) configure(args []string) int {
 			return c.fail(err)
 		}
 	}
-	if err := daemon.Configure(c.home, change); err != nil {
+	if registering {
+		err = c.configureProject(*projectRoot, change, configuring)
+	} else {
+		err = daemon.Configure(c.home, change)
+	}
+	if err != nil {
 		return c.fail(err)
 	}
 	return exitOK
