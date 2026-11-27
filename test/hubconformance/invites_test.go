@@ -247,18 +247,23 @@ func (f *fixture) inviteRaces(t *testing.T) {
 	if competing[0].status != 202 {
 		win = 1
 	}
-	competing[win].expect(t, post, redeemPath, 202)
-	competing[1-win].expect(t, post, redeemPath, 409)
+	// These copies work around a go1.27.2 liveness bug with variable-indexed
+	// local arrays. Keep the copies for later use.
+	winner, loser := competing[win], competing[1-win]
+	winBody, loseBody := bodies[win], bodies[1-win]
+	winToken, loseToken, winHash := tokens[win], tokens[1-win], hashes[win]
+	winner.expect(t, post, redeemPath, 202)
+	loser.expect(t, post, redeemPath, 409)
 	var pending map[string]string
-	decodeWire(t, competing[win].body, &pending)
-	if competing[win].header.Get("Retry-After") != "5" || len(pending) != 2 ||
+	decodeWire(t, winner.body, &pending)
+	if winner.header.Get("Retry-After") != "5" || len(pending) != 2 ||
 		pending["state"] != "pending_approval" || pending["invite_id"] != invite.Invite.ID {
 		t.Fatal("pending reply did not identify the bound invite")
 	}
-	f.call(t, post, redeemPath, "", bodies[win], 202)
+	f.call(t, post, redeemPath, "", winBody, 202)
 	f.call(t, post, approve, f.lead, "", 200)
 	f.call(t, post, approve, f.lead, "", 200)
-	identical := f.raceInvite(t, [2]string{bodies[win], bodies[win]})
+	identical := f.raceInvite(t, [2]string{winBody, winBody})
 	for _, res := range identical {
 		res.expect(t, post, redeemPath, 200)
 		var receipt map[string]string
@@ -271,9 +276,9 @@ func (f *fixture) inviteRaces(t *testing.T) {
 	if !bytes.Equal(identical[0].body, identical[1].body) {
 		t.Fatal("identical redeems returned different receipts")
 	}
-	f.call(t, get, projectPath(*project), tokens[win], "", 200)
-	f.call(t, get, projectPath(*project), tokens[1-win], "", 401)
-	f.call(t, post, redeemPath, "", bodies[1-win], 409)
+	f.call(t, get, projectPath(*project), winToken, "", 200)
+	f.call(t, get, projectPath(*project), loseToken, "", 401)
+	f.call(t, post, redeemPath, "", loseBody, 409)
 	f.call(t, deleteMethod, invitePath+"/"+invite.Invite.ID, f.lead, "", 409)
 	var approved hub.InviteResult
 	decodeWire(t, f.call(t, post, approve, f.lead, "", 200).body, &approved)
@@ -309,13 +314,13 @@ func (f *fixture) inviteRaces(t *testing.T) {
 	}
 
 	f.call(t, deleteMethod, "/api/v1/admin/members/"+memberID, f.lead, "", 200)
-	f.call(t, post, redeemPath, "", bodies[win], 409)
+	f.call(t, post, redeemPath, "", winBody, 409)
 	replacement := f.issueInvite(t, createInviteJSON(*project, memberID, 3600, false))
-	f.call(t, post, redeemPath, "", redeemJSON(replacement.Code, hashes[win]), 200)
-	f.call(t, post, redeemPath, "", bodies[win], 409)
+	f.call(t, post, redeemPath, "", redeemJSON(replacement.Code, winHash), 200)
+	f.call(t, post, redeemPath, "", winBody, 409)
 
 	live := f.issueInvite(t, createInviteJSON(*project, "unique-"+rand.Text(), 3600, false))
-	f.call(t, post, redeemPath, "", redeemJSON(live.Code, hashes[win]), 409)
+	f.call(t, post, redeemPath, "", redeemJSON(live.Code, winHash), 409)
 	f.call(t, deleteMethod, invitePath+"/"+live.Invite.ID, f.lead, "", 200)
 }
 
