@@ -163,6 +163,20 @@ export const schemaMigrations: readonly Migration[] = [
       ALTER TABLE team ADD COLUMN redeem_failure_count INTEGER NOT NULL DEFAULT 0;
     `,
   },
+  {
+    version: 4,
+    sql: `
+      CREATE TABLE member_observations (
+        member_id TEXT NOT NULL,
+        project_id TEXT NOT NULL,
+        policy_fetch_ms INTEGER,
+        policy_version INTEGER,
+        room_connected_ms INTEGER,
+        PRIMARY KEY (member_id, project_id),
+        CHECK ((policy_fetch_ms IS NULL) = (policy_version IS NULL))
+      ) STRICT;
+    `,
+  },
 ];
 
 export function migrate(storage: HubStorage, migrations = schemaMigrations): number {

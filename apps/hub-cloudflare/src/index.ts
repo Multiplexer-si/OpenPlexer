@@ -4,6 +4,7 @@ import { handleClaim } from "./claims";
 import { exportAudit } from "./export";
 import { handleInvite } from "./invites";
 import { bearer, HubError, invalid, json, notFound, unauthorized } from "./http";
+import { memberMaintenanceIntervalMs, observeMember, pruneMemberObservations, readMembers } from "./members";
 import { publishPolicy, readPolicy, readProject } from "./publication";
 import { eventPage, postEvent, replayCursor, replayEvents } from "./room";
 import { authenticate, publicKeys } from "./state";
@@ -55,9 +56,11 @@ export async function fetchHub(
   try {
     allow(request.method, ["GET", "HEAD"]);
     const hash = bearer(request);
-    const read = (after: RoomRead["after"]) => stub.readRoomPage({ hash, room, after });
+    const read = (after: number) => stub.readRoomPage({ hash, room, after });
     const remainingMs = () => deadline - now();
-    const initial = await readFirstPage(() => read(request.url), remainingMs);
+    const initial = await readFirstPage(() => stub.readRoomPage({
+      hash, room, after: request.url, observe: request.method === "GET",
+    }), remainingMs);
     if (initial === undefined) return new Response(null, { headers: streamHeaders });
     if (!initial.ok) {
       throw initial.status === 401 ? unauthorized() : new HubError(initial.status, initial.message);
@@ -92,17 +95,30 @@ export class TeamHub extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     this.storage = new HubStorage(ctx.storage);
-    this.schemaVersion = ctx.blockConcurrencyWhile(async () => migrate(this.storage));
+    this.schemaVersion = ctx.blockConcurrencyWhile(async () => {
+      const version = migrate(this.storage);
+      if (await ctx.storage.getAlarm() === null) await ctx.storage.setAlarm(Date.now() + memberMaintenanceIntervalMs);
+      return version;
+    });
   }
 
-  async readRoomPage({ room, hash, after }: RoomRead): Promise<RoomPage> {
+  async alarm(): Promise<void> {
+    await this.schemaVersion;
+    this.storage.transaction((sql) => pruneMemberObservations(sql, Date.now()));
+    await this.ctx.storage.setAlarm(Date.now() + memberMaintenanceIntervalMs);
+  }
+
+  async readRoomPage(read: RoomRead): Promise<RoomPage> {
+    const { room, hash, after } = read;
     await this.schemaVersion;
     try {
       return this.storage.transaction((sql) => {
-        authenticate(sql, hash);
+        const member = authenticate(sql, hash);
         readProject(sql, room);
         const cursor = typeof after === "string" ? replayCursor(after) : after;
-        return { ok: true, cursor, frames: eventPage(sql, room, cursor) };
+        const frames = eventPage(sql, room, cursor);
+        if ("observe" in read && read.observe) observeMember(sql, member, room, Date.now(), { kind: "room" });
+        return { ok: true, cursor, frames };
       });
     } catch (error) {
       if (error instanceof HubError) return { ok: false, status: error.status, message: error.message };
@@ -184,8 +200,8 @@ export class TeamHub extends DurableObject<Env> {
         allow(method, ["GET", "HEAD"]);
         const hash = bearer(request);
         return this.storage.transaction((sql) => {
-          authenticate(sql, hash);
-          return suffix ? readPolicy(sql, target) : json(readProject(sql, target));
+          const member = authenticate(sql, hash);
+          return suffix ? readPolicy(sql, target, method === "GET" ? member : undefined) : json(readProject(sql, target));
         });
       }
     }
@@ -196,8 +212,8 @@ export class TeamHub extends DurableObject<Env> {
             allow(method, ["POST"]);
             return json(await initialize(request, this.storage, this.env));
           case "members":
-            allow(method, ["POST"]);
-            return json(await addMember(request, this.storage));
+            allow(method, ["GET", "HEAD", "POST"]);
+            return method === "POST" ? json(await addMember(request, this.storage)) : readMembers(request, this.storage);
           case "projects":
             allow(method, ["POST"]);
             return json(await addProject(request, this.storage));

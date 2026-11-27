@@ -2,6 +2,7 @@ import { Buffer } from "node:buffer";
 import { canonicalJSON } from "./canonical";
 import { bearer, cappedBody, conflict, invalid, jsonText, notFound } from "./http";
 import { maxBundleBytes, signCanonicalJWS } from "./jws";
+import { observeMember } from "./members";
 import { parsePolicyBundle } from "./policy";
 import { activeSigningKey, activeTeam, appendAudit, authenticate, signingKey } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
@@ -23,17 +24,20 @@ function latestPolicy(sql: TransactionSQL, id: string): SignedPolicy | undefined
   return latest;
 }
 
-function signedResponse(row: SignedPolicy): Response {
+function signedResponse(row: SignedPolicy, headers?: HeadersInit): Response {
   const payload = Buffer.from(row.bundle_json).toString("base64url");
   const signature = row.jws_header + "." + payload + "." + row.jws_signature;
   // The canonical bundle is already JSON, including at the maximum supported depth.
-  return jsonText(`{"version":${row.version},"bundle":${row.bundle_json},"signature":${JSON.stringify(signature)}}\n`);
+  return jsonText(`{"version":${row.version},"bundle":${row.bundle_json},"signature":${JSON.stringify(signature)}}\n`, 200, headers);
 }
 
-export function readPolicy(sql: TransactionSQL, id: string): Response {
+export function readPolicy(sql: TransactionSQL, id: string, fetchingMember?: string): Response {
   const latest = latestPolicy(sql, id);
   if (!latest) throw notFound();
-  return signedResponse(latest);
+  if (fetchingMember !== undefined) {
+    observeMember(sql, fetchingMember, id, Date.now(), { kind: "fetch", version: latest.version });
+  }
+  return signedResponse(latest, { "OpenPlexer-Policy-Version": String(latest.version) });
 }
 
 function quotedRepo(repo: string): string {
