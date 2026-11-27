@@ -23,6 +23,7 @@ Commands:
   add-project     Scope a project to one repository
   publish-policy  Publish a JSON policy bundle
   export-audit    Write the audit export, checkpoint, and public keys (alias: export)
+  invite          Create, list, approve, or revoke invites
   stage-key       Stage a Worker signing key and print its ID
   activate-key    Activate a staged Worker signing key
   serve           Start the HTTP server
@@ -51,6 +52,10 @@ func runWithInput(args []string, stdin io.Reader, stdout, stderr io.Writer, tran
 	if args[0] == "-h" || args[0] == "--help" {
 		fmt.Fprint(stdout, usage)
 		return 0
+	}
+	switch args[0] {
+	case "invite", "invites", "approve-invite", "revoke-invite":
+		return runInvite(args, stdin, stdout, stderr, transport)
 	}
 	command := args[0]
 	flags := flag.NewFlagSet(command, flag.ContinueOnError)

@@ -14,12 +14,7 @@ import (
 func (s *Store) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /.well-known/jwks.json", func(w http.ResponseWriter, r *http.Request) {
-		var keys map[string]any
-		err := s.view(func(st *state) error {
-			var err error
-			keys, err = publicKeys(st)
-			return err
-		})
+		keys, err := s.PolicyKeys()
 		respond(w, keys, err)
 	})
 	mux.HandleFunc("GET /api/v1/projects/{project}", s.endpoint(0, func(st *state, req request) (any, error) {

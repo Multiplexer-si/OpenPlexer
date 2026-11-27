@@ -143,6 +143,10 @@ func firstLeadToken(path string) (string, error) {
 }
 
 func (h remoteAdmin) request(method, path string, body []byte) (*http.Response, error) {
+	return h.requestStatus(method, path, body, http.StatusOK)
+}
+
+func (h remoteAdmin) requestStatus(method, path string, body []byte, status int) (*http.Response, error) {
 	req, err := http.NewRequest(method, h.origin+path, bytes.NewReader(body))
 	if err != nil {
 		return nil, errors.New("could not create the hub request")
@@ -158,7 +162,7 @@ func (h remoteAdmin) request(method, path string, body []byte) (*http.Response, 
 	if err != nil {
 		return nil, errors.New("hub request failed")
 	}
-	if res.StatusCode != http.StatusOK {
+	if res.StatusCode != status {
 		res.Body.Close()
 		return nil, fmt.Errorf("hub returned HTTP %d", res.StatusCode)
 	}
