@@ -367,6 +367,10 @@ func TestServiceWaitsForDaemonAfterManagerReportsPID(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "")
 	home := t.TempDir()
 	serviceTestHome(t, home)
+	stale := time.Date(2001, time.January, 1, 0, 0, 0, 0, time.UTC)
+	if err := writeJSON(home, daemonPIDFile, DaemonActivity{PID: os.Getpid(), StartedAt: stale, HeartbeatAt: stale}); err != nil {
+		t.Fatal(err)
+	}
 	streaming := make(chan struct{})
 	useHubTransport(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
 		if strings.HasSuffix(r.URL.Path, "/stream") {
@@ -398,7 +402,16 @@ func TestServiceWaitsForDaemonAfterManagerReportsPID(t *testing.T) {
 			return []byte("LoadState=not-found\n"), nil
 		}
 		polls++
-		if polls == 2 {
+		switch polls {
+		case 2, 3:
+			activity := DaemonActivity{PID: os.Getpid(), StartedAt: stale, HeartbeatAt: time.Now().UTC()}
+			if polls == 3 {
+				activity.StartedAt, activity.HeartbeatAt = activity.HeartbeatAt, activity.StartedAt
+			}
+			if err := writeJSON(home, daemonPIDFile, activity); err != nil {
+				t.Fatal(err)
+			}
+		case 4:
 			if _, err := os.Stat(filepath.Join(home, "room.lock")); !errors.Is(err, os.ErrNotExist) {
 				t.Fatalf("installer touched the Room lock before the daemon started: %v", err)
 			}
@@ -422,8 +435,8 @@ func TestServiceWaitsForDaemonAfterManagerReportsPID(t *testing.T) {
 	if err := s.Install("/opt/openplexer"); err != nil {
 		t.Fatal(err)
 	}
-	if polls < 2 {
-		t.Fatal("install returned before the daemon started")
+	if !launched {
+		t.Fatalf("install accepted a stale record for the live PID on poll %d", polls)
 	}
 	path := filepath.Join(home, daemonPIDFile)
 	info, err := os.Stat(path)
