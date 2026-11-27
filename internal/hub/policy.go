@@ -9,6 +9,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"strconv"
 
 	"github.com/multiplexer-si/openplexer/internal/audit"
 	"github.com/multiplexer-si/openplexer/internal/policy"
@@ -152,4 +154,40 @@ func publicJWK(key *ecdsa.PublicKey, kid string) map[string]string {
 		"x": base64URL(key.X.FillBytes(make([]byte, 32))),
 		"y": base64URL(key.Y.FillBytes(make([]byte, 32))),
 	}
+}
+
+// PolicyVersion reads the current published version without recording a fetch.
+func (s *Store) PolicyVersion(project string) (int64, error) {
+	var version int64
+	err := s.view(func(st *state) error {
+		signed, ok := st.Policies[project]
+		if !ok {
+			return errNotFound
+		}
+		version = signed.Version
+		return nil
+	})
+	return version, err
+}
+
+// PolicyVersionHeader names the version header for policy downloads and HEAD requests.
+const PolicyVersionHeader = "OpenPlexer-Policy-Version"
+
+func (s *Store) policyBundleEndpoint(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodHead {
+		w = headWriter{w}
+	}
+	s.endpoint(0, func(st *state, req request) (any, error) {
+		signed, ok := st.Policies[req.project()]
+		if !ok {
+			return nil, errNotFound
+		}
+		if req.Method == http.MethodGet {
+			if err := s.observe(req.member, req.project(), &signed.Version); err != nil {
+				return nil, err
+			}
+		}
+		w.Header().Set(PolicyVersionHeader, strconv.FormatInt(signed.Version, 10))
+		return signed, nil
+	})(w, r)
 }

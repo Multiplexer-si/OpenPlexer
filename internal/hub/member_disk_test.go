@@ -14,11 +14,6 @@ import (
 
 func BenchmarkMemberObservationDisk(b *testing.B) {
 	const members, projects, eventsPerRoom = 50, 5, 1000
-	type observation struct {
-		FetchAt time.Time `json:"last_policy_fetch_at"`
-		Version int64     `json:"policy_version"`
-		RoomAt  time.Time `json:"last_room_connected_at"`
-	}
 	now := time.Date(2026, 10, 1, 12, 0, 0, 0, time.UTC)
 	s := Open(b.TempDir())
 	if err := s.Init(); err != nil {
@@ -29,16 +24,17 @@ func BenchmarkMemberObservationDisk(b *testing.B) {
 		b.Fatal(err)
 	}
 
-	team := make(map[string]map[string]observation)
+	seenAt, version := now.Format(timestampFmt), int64(42)
+	team := make(map[string]memberObservations)
 	for i := range members {
 		id := fmt.Sprintf("mem-%02d", i)
 		st.Members[id] = member{Role: Member}
 		if err := st.appendAudit(audit.Record{Action: "member.added", Target: "member:" + id}, now); err != nil {
 			b.Fatal(err)
 		}
-		team[id] = make(map[string]observation)
+		team[id] = make(memberObservations)
 		for j := range projects {
-			team[id][fmt.Sprintf("project-%d", j)] = observation{now, 42, now}
+			team[id][fmt.Sprintf("project-%d", j)] = observation{&seenAt, &version, &seenAt}
 		}
 	}
 	for i := range projects {
@@ -87,7 +83,8 @@ func BenchmarkMemberObservationDisk(b *testing.B) {
 			dir := b.TempDir()
 			path := filepath.Join(dir, "snapshot.json")
 			for i := range b.N {
-				team["mem-00"]["project-0"] = observation{now.Add(time.Duration(i) * time.Millisecond), 42, now}
+				fetchAt := now.Add(time.Duration(i) * time.Millisecond).Format(timestampFmt)
+				team["mem-00"]["project-0"] = observation{&fetchAt, &version, &seenAt}
 				if err := saveJSON(dir, path, tc.data); err != nil {
 					b.Fatal(err)
 				}

@@ -168,7 +168,10 @@ func (s *Store) RemoveMember(id string) error {
 		if errors.Is(err, errNotFound) {
 			return fmt.Errorf("%w: member %q", err, id)
 		}
-		return err
+		if err != nil {
+			return err
+		}
+		return removeObservations(s.observationsPath(id))
 	})
 }
 

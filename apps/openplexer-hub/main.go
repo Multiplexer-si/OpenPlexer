@@ -222,6 +222,25 @@ func serve(s *hub.Store, addr string) error {
 	if err := s.Check(); err != nil {
 		return err
 	}
+	if err := s.PruneMemberObservations(); err != nil {
+		return err
+	}
+	tick := time.NewTicker(24 * time.Hour)
+	defer tick.Stop()
+	done := make(chan struct{})
+	defer close(done)
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case <-tick.C:
+				if err := s.PruneMemberObservations(); err != nil {
+					fmt.Fprintln(os.Stderr, "openplexer-hub: could not prune member sync state")
+				}
+			}
+		}
+	}()
 	server := &http.Server{
 		Addr:              addr,
 		Handler:           s.Handler(),
