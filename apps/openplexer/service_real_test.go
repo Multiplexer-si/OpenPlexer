@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/xml"
 	"errors"
 	"fmt"
 	"net/http"
@@ -14,6 +15,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
@@ -38,7 +40,10 @@ func TestRealDaemonService(t *testing.T) {
 		t.Fatalf("build openplexer: %v\n%s", err, out)
 	}
 
-	home := filepath.Join(dir, "openplexer home")
+	home, err := os.MkdirTemp(dir, "openplexer home-")
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Setenv("HOME", dir)
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(dir, "config"))
 	t.Setenv("OPENPLEXER_HOME", filepath.Join(dir, "unused-home"))
@@ -99,17 +104,36 @@ func TestRealDaemonService(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if state, err := s.Status(); err != nil || state.State != "missing" {
-		t.Fatalf("expected an unused service name %s, got %s: %v", s.Name, state.State, err)
-	}
 	definition := filepath.Join(dir, "Library", "LaunchAgents", s.Name+".plist")
+	var executable string
 	if runtime.GOOS == "linux" {
 		definition = filepath.Join(dir, "config", "systemd", "user", s.Name)
+		executable = "ExecStart=" + strconv.Quote(":"+strings.ReplaceAll(binary, "%", "%%")) + " daemon --quiet\n"
+	} else {
+		var escaped bytes.Buffer
+		if err := xml.EscapeText(&escaped, []byte(binary)); err != nil {
+			t.Fatal(err)
+		}
+		executable = "<string>" + escaped.String() + "</string>"
+	}
+	checkUnused := func() {
+		t.Helper()
+		if state, err := s.Status(); err != nil || state.State != "missing" {
+			t.Fatalf("expected an unused service name %s, got %s: %v", s.Name, state.State, err)
+		}
+		if _, err := os.Lstat(definition); !errors.Is(err, os.ErrNotExist) {
+			t.Fatalf("expected no service definition for %s: %v", s.Name, err)
+		}
+	}
+	checkUnused()
+	usesTestExecutable := func() bool {
+		data, err := os.ReadFile(definition)
+		return err == nil && bytes.Contains(data, []byte(executable))
 	}
 	var created os.FileInfo
 	ownsDefinition := func() bool {
 		info, err := os.Lstat(definition)
-		return err == nil && created != nil && os.SameFile(created, info)
+		return err == nil && created != nil && os.SameFile(created, info) && usesTestExecutable()
 	}
 	c := cli{t: t, bin: binary}
 	var uninstalled bool
@@ -133,20 +157,30 @@ func TestRealDaemonService(t *testing.T) {
 		t.Errorf("could not clean up the disposable service %s", s.Name)
 	})
 
+	checkUnused()
 	status, _, _ := c.run("service", "install", "--home", home)
-	created, err = os.Lstat(definition)
-	if status != exitOK || err != nil {
-		t.Fatalf("disposable service install exited %d, definition lookup: %v", status, err)
+	info, err := os.Lstat(definition)
+	if err != nil || !info.Mode().IsRegular() {
+		t.Fatalf("disposable service install exited %d, expected a regular definition: %v", status, err)
+	}
+	if !usesTestExecutable() {
+		t.Fatal("the disposable service definition does not use this test's executable")
+	}
+	created = info
+	if status != exitOK || !ownsDefinition() {
+		t.Fatalf("disposable service install exited %d or its definition changed", status)
 	}
 	var first int
+	var firstHeartbeat time.Time
 	waitForService(t, 20*time.Second, "service to start and sync policy version 1", func() bool {
 		state, err := s.Status()
 		first = state.PID
+		firstHeartbeat = state.Activity.HeartbeatAt
 		status, policy, _ := c.run("service", "status", "--home", home)
 		return err == nil && state.State == "running" && first > 0 && status == exitOK &&
 			strings.Contains(policy, "service: running") && strings.Contains(policy, "policy: verified") &&
 			strings.Contains(policy, "version 1 of project "+project) && strings.Contains(policy, "home: "+home) &&
-			strings.Contains(policy, s.LogLocation())
+			strings.Contains(policy, s.LogLocation()) && !firstHeartbeat.IsZero() && strings.Contains(policy, "daemon heartbeat: ")
 	})
 	if !ownsDefinition() {
 		t.Fatal("the disposable service definition changed before reinstall")
@@ -156,9 +190,11 @@ func TestRealDaemonService(t *testing.T) {
 		t.Fatal("the second install did not preserve the running daemon")
 	}
 	publish(2)
-	waitForService(t, 17*time.Second, "policy version 2 to sync", func() bool {
+	waitForService(t, 17*time.Second, "policy version 2 to sync and the heartbeat to advance", func() bool {
 		gate, err := daemon.Open(home, time.Now)
-		return err == nil && gate.Status().State == daemon.Verified && gate.Status().Version == 2
+		activity, activityErr := daemon.ReadDaemonActivity(home)
+		return err == nil && gate.Status().State == daemon.Verified && gate.Status().Version == 2 &&
+			activityErr == nil && activity.PID == first && activity.HeartbeatAt.After(firstHeartbeat)
 	})
 
 	const eventBody = "disposable-service-room-event"
@@ -194,7 +230,7 @@ func TestRealDaemonService(t *testing.T) {
 	waitForService(t, 30*time.Second, "manager to restart the daemon", func() bool {
 		state, err := s.Status()
 		restarted = state.PID
-		return err == nil && state.State == "running" && restarted > 0 && restarted != first
+		return err == nil && state.State == "running" && restarted > 0 && restarted != first && state.Activity.PID == restarted
 	})
 	rejectRoom.Store(true)
 	server.CloseClientConnections()
