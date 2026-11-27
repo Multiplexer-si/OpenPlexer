@@ -60,6 +60,7 @@ type state struct {
 	Policies       map[string]SignedBundle  `json:"policies"`
 	Rooms          map[string][]eventRecord `json:"rooms,omitempty"`
 	Claims         map[string]lease         `json:"claims,omitempty"`
+	RedeemFailures *redeemFailureWindow     `json:"redeem_failures,omitempty"`
 }
 
 // Store is a data directory shared by the server and local admin commands.

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -80,6 +81,43 @@ func (f *fixture) invites(t *testing.T) {
 		f.call(t, post, invitePath+"/"+expiring.Invite.ID+"/approve", f.lead, "", 409)
 		f.call(t, deleteMethod, invitePath+"/"+expiring.Invite.ID, f.lead, "", 409)
 	})
+	t.Run("redeem-failure-limit", f.redeemFailureLimit)
+}
+
+func (f *fixture) redeemFailureLimit(t *testing.T) {
+	invite := f.issueInvite(t, createInviteJSON(*project, "rate-limit-"+rand.Text(), 3600, true))
+	hash := memberDigest(newInviteBearer())
+	valid := redeemJSON(invite.Code, hash)
+	for range 21 {
+		res := f.call(t, post, redeemPath, "", valid, 202)
+		if res.header.Get("Retry-After") != "5" {
+			t.Fatal("pending approval must keep its retry interval")
+		}
+	}
+	f.call(t, post, redeemPath, "", redeemJSON(newInviteBearer(), hash), 404)
+	// Allow one window to end while the requests are in flight.
+	for range 42 {
+		body := redeemJSON(newInviteBearer(), hash)
+		res, err := f.send(t.Context(), post, redeemPath, "", body, "")
+		if err != nil {
+			t.Fatal("redeem transport error")
+		}
+		if res.status == 404 {
+			res.expect(t, post, redeemPath, 404)
+			continue
+		}
+		res.expect(t, post, redeemPath, 429)
+		retry, err := strconv.Atoi(res.header.Get("Retry-After"))
+		if err != nil || retry < 1 || retry > 60 || strings.TrimSpace(string(res.body)) != `{"error":"too many failed redeem attempts"}` {
+			t.Fatal("wrong throttle response")
+		}
+		f.call(t, post, redeemPath, "", valid, 202)
+		f.call(t, post, invitePath+"/"+invite.Invite.ID+"/approve", f.lead, "", 200)
+		f.call(t, post, redeemPath, "", valid, 200)
+		f.call(t, post, redeemPath, "", valid, 200)
+		return
+	}
+	t.Fatal("team did not limit failed redeems")
 }
 
 func (f *fixture) rosterRequestBodies(t *testing.T) {

@@ -10,6 +10,8 @@ const liveLimit = 1024;
 const pageLimit = 100;
 const day = 86_400_000;
 const retention = 30 * day;
+const redeemFailureLimit = 20;
+const redeemWindowMs = 60_000;
 const inviteID = /^[0-9a-f]{32}$/;
 const hashPattern = /^[0-9a-f]{64}$/;
 const codePattern = /^[a-zA-Z0-9_-]{42}[AEIMQUYcgkosw048]$/;
@@ -46,7 +48,8 @@ export async function handleInvite(request: Request, storage: HubStorage, route:
     const now = clock();
     if (hash === undefined) {
       activeTeam(sql);
-      return redeemInvite(sql, body, now);
+      const result = redeemInvite(sql, body, now);
+      return result instanceof HubError ? limitRedeemFailure(sql, now, result) : result;
     }
     const actor = authenticate(sql, hash, true);
     if (route.kind === "collection" && request.method === "POST") {
@@ -159,17 +162,35 @@ function changeInvite(sql: TransactionSQL, route: { kind: "approve" | "revoke"; 
   return json({ invite });
 }
 
-function redeemInvite(sql: TransactionSQL, body: Uint8Array, now: number) {
+function limitRedeemFailure(sql: TransactionSQL, now: number, failure: HubError): Response {
+  let [{ redeem_window_end_ms: end, redeem_failure_count: count }] = sql.exec<{
+    redeem_window_end_ms: number | null;
+    redeem_failure_count: number;
+  }>("SELECT redeem_window_end_ms, redeem_failure_count FROM team WHERE singleton = 1");
+  if (end === null || now >= end || now < end - redeemWindowMs) {
+    end = now + redeemWindowMs;
+    count = 0;
+  }
+  if (count >= redeemFailureLimit) {
+    const retryAfter = String(Math.ceil((end - now) / 1000));
+    return json({ error: "too many failed redeem attempts" }, 429, { "Retry-After": retryAfter });
+  }
+  sql.exec("UPDATE team SET redeem_window_end_ms = ?, redeem_failure_count = ? WHERE singleton = 1",
+    end, count + 1);
+  return failure.response();
+}
+
+function redeemInvite(sql: TransactionSQL, body: Uint8Array, now: number): Response | HubError {
   const { code, token_hash } = strictAdminJSON(body, ["code", "token_hash"], inviteInput);
   if (typeof code !== "string" || !codePattern.test(code) ||
       typeof token_hash !== "string" || !hashPattern.test(token_hash)) throw badInvite();
   const [row] = sql.exec<StoredInvite>("SELECT * FROM invites WHERE code_hash = ? AND COALESCE(ended_at_ms, expires_at_ms) > ?",
     tokenHash(code), now - retention);
-  if (!row) throw notFound();
+  if (!row) return notFound();
   const { state, project_id, member_id, hub_role } = present(row, now);
-  if (state === "revoked" || state === "expired") throw new HubError(410, "invite expired or revoked");
+  if (state === "revoked" || state === "expired") return new HubError(410, "invite expired or revoked");
   const claim = Uint8Array.from(Buffer.from(token_hash, "hex")).buffer;
-  if (row.claim_hash && !crypto.subtle.timingSafeEqual(row.claim_hash, claim)) throw inviteConflict();
+  if (row.claim_hash && !crypto.subtle.timingSafeEqual(row.claim_hash, claim)) return inviteConflict();
 
   const [member] = sql.exec<{ enrollment_id: string; role: Role; token_hash: ArrayBuffer }>(
     "SELECT enrollment_id, role, token_hash FROM members WHERE member_id = ?", member_id);
@@ -177,14 +198,14 @@ function redeemInvite(sql: TransactionSQL, body: Uint8Array, now: number) {
   if (state === "redeemed") {
     if (row.ended_at_ms === null || now >= row.ended_at_ms + day ||
         !member || member.enrollment_id !== row.enrollment_id || member.role !== hub_role ||
-        !crypto.subtle.timingSafeEqual(member.token_hash, claim)) throw inviteConflict();
+        !crypto.subtle.timingSafeEqual(member.token_hash, claim)) return inviteConflict();
     return json({ ...receipt, repo: row.repo });
   }
   const pending = () => json({ state: "pending_approval", invite_id: row.id }, 202, { "Retry-After": "5" });
   if (state === "pending_approval") return pending();
 
   const [project] = sql.exec<{ repo: string }>("SELECT repo FROM projects WHERE project_id = ?", project_id);
-  if (!project || member || sql.exec("SELECT 1 FROM members WHERE token_hash = ?", claim).length) throw inviteConflict();
+  if (!project || member || sql.exec("SELECT 1 FROM members WHERE token_hash = ?", claim).length) return inviteConflict();
   if (row.require_approval && state === "issued") {
     sql.exec("UPDATE invites SET state = 'pending_approval', claim_hash = ? WHERE id = ?", claim, row.id);
     auditInvite(sql, row, "invite.requested", member_id, now);

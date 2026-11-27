@@ -3,6 +3,7 @@ package hub
 import (
 	"bytes"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"net/http"
@@ -208,6 +209,56 @@ func TestInviteRevocationAndValidation(t *testing.T) {
 	if head.Body.Len() != 0 {
 		t.Fatal("HEAD returned a body")
 	}
+}
+
+func TestRedeemFailureLimit(t *testing.T) {
+	s, now, lead := inviteFixture(t)
+	h := s.Handler()
+	start := *now
+	redeem := func(body string) *httptest.ResponseRecorder {
+		return inviteCall(h, "POST", redeemPath, "", body)
+	}
+	pending := inviteCreate(t, h, lead, `{"project_id":"demo","member_id":"ana","require_approval":true}`)
+	revoked := inviteCreate(t, h, lead, `{"project_id":"demo","member_id":"bo"}`)
+	wantInviteStatus(t, inviteCall(h, "DELETE", inviteAdminPath+"/"+revoked.Invite.ID, lead, ""), 200)
+	hash := hex.EncodeToString(randomBytes(32))
+	valid := redeemBody(pending.Code, hash)
+	unknown := redeemBody(base64.RawURLEncoding.EncodeToString(randomBytes(32)), hash)
+	for range 21 {
+		res := redeem(valid)
+		wantInviteStatus(t, res, 202)
+		if res.Header().Get("Retry-After") != "5" {
+			t.Fatal("pending approval must keep its retry interval")
+		}
+	}
+	wantInviteStatus(t, redeem("{}"), 400)
+	wantInviteStatus(t, redeem(redeemBody(pending.Code, hex.EncodeToString(randomBytes(32)))), 409)
+	wantInviteStatus(t, redeem(redeemBody(revoked.Code, hash)), 410)
+	for range 18 {
+		wantInviteStatus(t, redeem(unknown), 404)
+	}
+
+	reopened := Open(s.dir)
+	reopened.now = s.now
+	h = reopened.Handler()
+	assertThrottled := func(retry string) {
+		t.Helper()
+		res := redeem(unknown)
+		wantInviteStatus(t, res, 429)
+		if res.Header().Get("Retry-After") != retry || res.Header().Get("Cache-Control") != "no-store" ||
+			strings.TrimSpace(res.Body.String()) != `{"error":"too many failed redeem attempts"}` {
+			t.Fatal("wrong throttle response")
+		}
+	}
+	assertThrottled("60")
+	wantInviteStatus(t, redeem(valid), 202)
+	wantInviteStatus(t, inviteCall(h, "POST", inviteAdminPath+"/"+pending.Invite.ID+"/approve", lead, ""), 200)
+	wantInviteStatus(t, redeem(valid), 200)
+	wantInviteStatus(t, redeem(valid), 200)
+	*now = start.Add(time.Minute - time.Millisecond)
+	assertThrottled("1")
+	*now = start.Add(time.Minute)
+	wantInviteStatus(t, redeem(unknown), 404)
 }
 
 func TestRosterRequestBodies(t *testing.T) {

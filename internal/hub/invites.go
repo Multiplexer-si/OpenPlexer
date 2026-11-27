@@ -22,6 +22,8 @@ const (
 	inviteLiveLimit     = 1024
 	inviteRetention     = 30 * 24 * time.Hour
 	inviteReceiptWindow = 24 * time.Hour
+	redeemFailureLimit  = 20
+	redeemWindowLength  = time.Minute
 )
 
 var (
@@ -96,6 +98,32 @@ type redeemResult struct {
 	Repo      string      `json:"repo,omitempty"`
 	MemberID  string      `json:"member_id,omitempty"`
 	Role      Role        `json:"hub_role,omitempty"`
+}
+
+type redeemFailureWindow struct {
+	Until time.Time `json:"until"`
+	Count int       `json:"count"`
+}
+
+type redeemThrottled struct{ retryAfter int }
+
+func (redeemThrottled) Error() string { return "too many failed redeem attempts" }
+
+func (s *Store) limitRedeemFailure(st *state, now time.Time, failure error) error {
+	window := st.RedeemFailures
+	if window == nil || !now.Before(window.Until) || now.Before(window.Until.Add(-redeemWindowLength)) {
+		window = &redeemFailureWindow{Until: now.Add(redeemWindowLength)}
+		st.RedeemFailures = window
+	}
+	if window.Count >= redeemFailureLimit {
+		remaining := window.Until.Sub(now)
+		return redeemThrottled{retryAfter: int((remaining + time.Second - 1) / time.Second)}
+	}
+	window.Count++
+	if err := s.save(st); err != nil {
+		return err
+	}
+	return failure
 }
 
 func (r inviteRecord) at(now time.Time) Invite {
@@ -286,7 +314,7 @@ func (s *Store) changeInvite(st *state, id string, to inviteState, actor *string
 	return InviteResult{r.Invite}, s.save(st)
 }
 
-func (s *Store) redeemInvite(st *state, input redeemInput) (redeemResult, error) {
+func (s *Store) redeemInvite(st *state, input redeemInput, now time.Time) (redeemResult, error) {
 	if len(input.Code) != 43 || !hashPattern.MatchString(input.TokenHash) {
 		return redeemResult{}, errInvalidInvite
 	}
@@ -297,7 +325,6 @@ func (s *Store) redeemInvite(st *state, input redeemInput) (redeemResult, error)
 	var claim [sha256.Size]byte
 	_, _ = hex.Decode(claim[:], []byte(input.TokenHash))
 	codeHash := sha256.Sum256([]byte(input.Code))
-	now := s.inviteNow()
 	for _, r := range st.Invites {
 		if subtle.ConstantTimeCompare(r.CodeHash[:], codeHash[:]) == 1 && !r.pastRetention(now) {
 			return s.redeemKnownInvite(st, r, claim, now)

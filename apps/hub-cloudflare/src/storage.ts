@@ -156,6 +156,13 @@ export const schemaMigrations: readonly Migration[] = [
       CREATE INDEX invites_retention ON invites (COALESCE(ended_at_ms, expires_at_ms));
     `,
   },
+  {
+    version: 3,
+    sql: `
+      ALTER TABLE team ADD COLUMN redeem_window_end_ms INTEGER;
+      ALTER TABLE team ADD COLUMN redeem_failure_count INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 export function migrate(storage: HubStorage, migrations = schemaMigrations): number {

@@ -46,7 +46,7 @@ health_status=$(curl -fsS -o "$state/health.json" -w '%{http_code}' --max-time 2
 kill -0 "$wrangler_pid"
 test "$health_status" = 200
 health_body=$(cat "$state/health.json")
-test "$health_body" = '{"ok":true,"schema":2}'
+test "$health_body" = '{"ok":true,"schema":3}'
 foreign_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 -H 'Host: foreign.example' "$origin/healthz")
 test "$foreign_status" = 404
 grep -Fq 'env.BOOTSTRAP_TOKEN' "$state/wrangler.log"

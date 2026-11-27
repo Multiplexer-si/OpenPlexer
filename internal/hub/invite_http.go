@@ -60,7 +60,12 @@ func (s *Store) inviteRoutes(mux *http.ServeMux) {
 		if err := decodeInviteBody(req.body, &input); err != nil {
 			return 0, nil, err
 		}
-		result, err := s.redeemInvite(st, input)
+		now := s.inviteNow()
+		result, err := s.redeemInvite(st, input, now)
+		switch err {
+		case errNotFound, errConflict, errInviteGone:
+			err = s.limitRedeemFailure(st, now, err)
+		}
 		if result.State == pendingApproval {
 			return http.StatusAccepted, result, err
 		}
@@ -148,11 +153,16 @@ func (s *Store) inviteEndpoint(allow string, leadOnly bool, run func(*state, req
 			status, result, err = run(st, req)
 			return err
 		})
-		if errors.Is(err, errInviteGone) {
+		var throttled redeemThrottled
+		switch {
+		case errors.As(err, &throttled):
+			w.Header().Set("Retry-After", strconv.Itoa(throttled.retryAfter))
+			writeError(w, http.StatusTooManyRequests, throttled.Error())
+		case errors.Is(err, errInviteGone):
 			writeError(w, http.StatusGone, errInviteGone.Error())
-		} else if err != nil {
+		case err != nil:
 			respond(w, nil, err)
-		} else {
+		default:
 			if status == http.StatusAccepted {
 				w.Header().Set("Retry-After", "5")
 			}

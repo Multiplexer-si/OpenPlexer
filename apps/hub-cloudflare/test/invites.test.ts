@@ -201,18 +201,73 @@ test("roster writes require strict fields and an empty delete body", async () =>
   expect((await call(path, "DELETE", lead)).status).toBe(200);
 });
 
+test("limits failed redeems per team without limiting pending polls or receipts", async () => {
+  const lead = await setup();
+  await runInDurableObject(stub(), async (_instance, ctx) => {
+    const storage = new HubStorage(ctx.storage);
+    const start = Date.parse("2026-11-25T10:00:00Z");
+    let now = start;
+    const clock = () => now;
+    const pending = await readCreated(await handleInvite(incoming(invites, "POST", lead,
+      '{"project_id":"demo","member_id":"ana","require_approval":true}'), storage, { kind: "collection" }, clock));
+    const revoked = await readCreated(await handleInvite(incoming(invites, "POST", lead,
+      '{"project_id":"demo","member_id":"bo"}'), storage, { kind: "collection" }, clock));
+    expect((await handleInvite(incoming(invites + "/" + revoked.id, "DELETE", lead), storage,
+      { kind: "revoke", id: revoked.id }, clock)).status).toBe(200);
+    const hash = hexHash(newToken());
+    const valid = requestBody(pending.code, hash);
+    const unknown = requestBody(newToken(), hash);
+    const consume = async (body: string) => {
+      try {
+        return await handleInvite(incoming(redeem, "POST", undefined, body), storage, { kind: "redeem" }, clock);
+      } catch (error) {
+        if (error instanceof HubError) return error.response();
+        throw error;
+      }
+    };
+    for (let i = 0; i < 21; i++) {
+      const result = await consume(valid);
+      expect(result.status).toBe(202);
+      expect(result.headers.get("Retry-After")).toBe("5");
+    }
+    expect((await consume("{}")).status).toBe(400);
+    expect((await consume(requestBody(pending.code, hexHash(newToken())))).status).toBe(409);
+    expect((await consume(requestBody(revoked.code, hash))).status).toBe(410);
+    for (let i = 0; i < 18; i++) expect((await consume(unknown)).status).toBe(404);
+    const limited = await consume(unknown);
+    expect(limited.status).toBe(429);
+    expect(limited.headers.get("Retry-After")).toBe("60");
+    expect(limited.headers.get("Cache-Control")).toBe("no-store");
+    expect((await limited.text()).trim() === '{"error":"too many failed redeem attempts"}').toBe(true);
+
+    expect((await consume(valid)).status).toBe(202);
+    expect((await handleInvite(incoming(invites + "/" + pending.id + "/approve", "POST", lead), storage,
+      { kind: "approve", id: pending.id }, clock)).status).toBe(200);
+    expect((await consume(valid)).status).toBe(200);
+    expect((await consume(valid)).status).toBe(200);
+    now = start + 59_999;
+    const last = await consume(unknown);
+    expect(last.status).toBe(429);
+    expect(last.headers.get("Retry-After")).toBe("1");
+    now++;
+    expect((await consume(unknown)).status).toBe(404);
+  });
+});
+
 test("backfills enrollment IDs once on existing rows", async () => {
   await runInDurableObject(stub(), (_instance, ctx) => {
     const { sql } = ctx.storage;
     sql.exec("DROP TABLE invites");
     sql.exec("ALTER TABLE members DROP COLUMN enrollment_id");
-    sql.exec("DELETE FROM schema_migrations WHERE version = 2");
+    sql.exec("ALTER TABLE team DROP COLUMN redeem_window_end_ms");
+    sql.exec("ALTER TABLE team DROP COLUMN redeem_failure_count");
+    sql.exec("DELETE FROM schema_migrations WHERE version >= 2");
     sql.exec("INSERT INTO members (member_id, role, token_hash) VALUES ('existing', 'lead', randomblob(32))");
     const storage = new HubStorage(ctx.storage);
-    expect(migrate(storage)).toBe(2);
+    expect(migrate(storage)).toBe(3);
     const value = sql.exec("SELECT enrollment_id FROM members WHERE member_id = 'existing'").one().enrollment_id;
     expect(value).toMatch(/^[0-9a-f]{32}$/);
-    expect(migrate(storage)).toBe(2);
+    expect(migrate(storage)).toBe(3);
     expect(sql.exec("SELECT enrollment_id FROM members WHERE member_id = 'existing'").one().enrollment_id).toBe(value);
   });
 });
