@@ -115,7 +115,8 @@ func TestPortableHooks(t *testing.T) {
 			symlink(t, guardedReferent, filepath.Join(outer, guardedLink))
 			check("guard the destination entry of BSD mv", shell(outer, "mv -h link "+guardedLink), "configures the hooks")
 			check("guard the destination entry of BSD ln", shell(outer, "ln -sfh link "+guardedLink), "configures the hooks")
-			for _, line := range []string{"mv --unknown link alias", "cp -Z regular copy-dest", "touch --unknown regular", "git mv -h link alias"} {
+			const recursiveCopy = "cp -R examples backup"
+			for _, line := range []string{"mv --unknown link alias", "cp -Z regular copy-dest", "touch --unknown regular", "git mv -h link alias", recursiveCopy} {
 				out, errOut, status := c.run(t, user, outer, shell(outer, line), "/bin/sh", "-c", command)
 				if status != 2 || out != "" || !strings.Contains(errOut, "unsupported option") {
 					t.Fatalf("hook for %q returned exit %d, stdout %q and stderr %q, want an option refusal", line, status, out, errOut)
@@ -172,6 +173,8 @@ func TestPortableHooks(t *testing.T) {
 			}
 			c.hook(t, otherUser, clone, cloneCommand, writeCall(agent, clone, "src/a"), "cannot read the project registry")
 			c.hook(t, user, clone, cloneCommand, writeCall(agent, clone, "src/a"), "configure --project-root")
+			c.hook(t, otherUser, clone, cloneCommand, shell(clone, recursiveCopy), "cannot read the project registry")
+			c.hook(t, user, clone, cloneCommand, shell(clone, recursiveCopy), "configure --project-root")
 			cloneHome := filepath.Join(base, "clone-home")
 			c.policy(t, otherUser, clone, cloneHome, 1, []string{"app:clone/**"}, nil)
 			c.cli(t, otherUser, clone, exitOK, "configure", "--project-root", ".", "--home", cloneHome)
@@ -204,6 +207,7 @@ func TestPortableHooks(t *testing.T) {
 				t.Fatal(err)
 			}
 			check("missing selected home", writeCall(agent, inner, "src/a"), "configure --project-root")
+			check("missing shell home takes precedence over option refusal", shell(inner, recursiveCopy), "configure --project-root")
 
 			c.cli(t, user, outer, exitOK, "install", agent, "--project", ".")
 			legacyCommand, _ := installedCommand(t, outer, agent)
