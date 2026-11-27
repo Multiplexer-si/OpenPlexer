@@ -1,10 +1,12 @@
 package hub
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -151,6 +153,68 @@ func TestMemberSyncIgnoresFilesLeftAfterRosterRemoval(t *testing.T) {
 		t.Error("maintenance left an observation file for the removed enrollment")
 	}
 	assertSync(t, syncRow(t, h, lead), s.now().UTC().Format(timestampFmt), "", 1)
+}
+
+func TestMemberSyncRetriesDeletionAfterReadOnlyDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("requires a user without write access to a read-only directory")
+	}
+	s, token, lead, _ := syncStore(t)
+	h := s.Handler()
+	syncPublish(t, s, "shop", 1)
+	wantStatus(t, call(h, http.MethodGet, syncPolicy, token, nil, ""), http.StatusOK)
+	path := onlyObservationPath(t, s)
+	dir := s.observationsDir()
+	t.Cleanup(func() {
+		if err := os.Chmod(dir, 0700); err != nil {
+			t.Error("could not restore observation directory permissions")
+		}
+	})
+	if err := os.Chmod(dir, 0500); err != nil {
+		t.Fatal("could not make the observation directory read-only")
+	}
+	var logs bytes.Buffer
+	previous := log.Writer()
+	log.SetOutput(&logs)
+	t.Cleanup(func() { log.SetOutput(previous) })
+	assertLogged := func() {
+		t.Helper()
+		if !bytes.Contains(logs.Bytes(), []byte("could not delete removed member sync state")) ||
+			bytes.Contains(logs.Bytes(), []byte(token)) || bytes.Contains(logs.Bytes(), []byte(lead)) {
+			t.Error("expected a credential-free observation deletion error in the log")
+		}
+		logs.Reset()
+	}
+
+	wantStatus(t, call(h, http.MethodDelete, membersURL+"/mem-ana", lead, nil, ""), http.StatusOK)
+	assertLogged()
+	if _, err := os.Stat(path); err != nil {
+		t.Fatal("expected the read-only directory to block deletion")
+	}
+	if got := syncPage(t, h, lead, "").Members; len(got) != 1 || got[0].MemberID != "lead" {
+		t.Fatal("removed member remained visible")
+	}
+	wantStatus(t, call(h, http.MethodGet, syncPolicy, token, nil, ""), http.StatusUnauthorized)
+
+	reopened := Open(s.dir)
+	reopened.now = s.now
+	if err := reopened.PruneMemberObservations(); err != nil {
+		t.Fatal(err)
+	}
+	assertLogged()
+	if _, err := reopened.AddMember("mem-ana", Member); err != nil {
+		t.Fatal(err)
+	}
+	assertSync(t, syncRow(t, reopened.Handler(), lead), "", "", 0)
+	if err := os.Chmod(dir, 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := reopened.PruneMemberObservations(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatal("maintenance left the removed member's observation file")
+	}
 }
 
 func TestMemberSyncRecordsSignedPolicyVersion(t *testing.T) {
