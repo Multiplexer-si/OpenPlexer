@@ -60,11 +60,12 @@ func (e Env) query(action policy.Action, path, command string) policy.Query {
 
 // Call is the part of a hook input that every agent sends.
 type Call struct {
-	Event   string
-	Tool    string
-	Cwd     string
-	Session string
-	Input   map[string]json.RawMessage
+	Event       string
+	Tool        string
+	Cwd         string
+	Session     string
+	Input       map[string]json.RawMessage
+	ProjectHome bool
 }
 
 // ParseCall reads the JSON that a coding agent writes to a hook.
@@ -109,6 +110,7 @@ func (c Call) Text(field string) (string, error) {
 
 type Effect struct {
 	Writes   []string
+	Targets  []WriteTarget
 	Commands []string
 }
 
@@ -128,6 +130,9 @@ func FileTool(field string) Translate {
 		if err != nil {
 			return Effect{}, err
 		}
+		if call.ProjectHome {
+			return Effect{Targets: []WriteTarget{{Path: path}}}, nil
+		}
 		return Effect{Writes: []string{path}}, nil
 	}
 }
@@ -137,10 +142,15 @@ func ShellTool(call Call) (Effect, error) {
 	if err != nil {
 		return Effect{}, err
 	}
-	effect := Effect{Writes: WriteTargets(command)}
-	for _, path := range MovedPaths(command) {
-		if !slices.Contains(effect.Writes, path) {
-			effect.Writes = append(effect.Writes, path)
+	var effect Effect
+	if call.ProjectHome {
+		effect.Targets = projectShellTargets(command)
+	} else {
+		effect.Writes = WriteTargets(command)
+		for _, path := range MovedPaths(command) {
+			if !slices.Contains(effect.Writes, path) {
+				effect.Writes = append(effect.Writes, path)
+			}
 		}
 	}
 	if substitution.MatchString(command) {
@@ -248,20 +258,12 @@ type Verdict struct {
 // and a tool that the table does not name, are allowed. Input that is not JSON,
 // and a call to a gated tool that cannot be read, are refused.
 func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
-	call, err := ParseCall(stdin)
+	call, effect, covered, err := readEffect(stdin, tools, false)
 	if err != nil {
 		return Verdict{Refuse, err.Error()}
 	}
-	translate, gated := tools[call.Tool]
-	if call.Event != "PreToolUse" || !gated {
+	if !covered {
 		return Verdict{}
-	}
-	if call.Cwd == "" {
-		return Verdict{Refuse, "the hook input has no cwd, so the paths of the call cannot be placed in the project"}
-	}
-	effect, err := translate(call)
-	if err != nil {
-		return Verdict{Refuse, err.Error()}
 	}
 	var root string
 	var noRoot error
@@ -288,6 +290,23 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 		return Verdict{}
 	}
 	return judge(queries[0], queries[1:]...)
+}
+
+func readEffect(stdin []byte, tools Tools, projectHome bool) (Call, Effect, bool, error) {
+	call, err := ParseCall(stdin)
+	if err != nil {
+		return Call{}, Effect{}, false, err
+	}
+	translate, gated := tools[call.Tool]
+	if call.Event != "PreToolUse" || !gated {
+		return call, Effect{}, false, nil
+	}
+	if call.Cwd == "" {
+		return call, Effect{}, false, errors.New("the hook input has no cwd, so the paths of the call cannot be placed in the project")
+	}
+	call.ProjectHome = projectHome
+	effect, err := translate(call)
+	return call, effect, true, err
 }
 
 // Output is what the adapter makes the hook process do.

@@ -260,10 +260,13 @@ func newFile(h Handler) []byte {
 
 func canonical(command, agent string) bool {
 	segments := Segments(command)
-	if len(segments) != 1 || len(segments[0]) != 4 {
+	if len(segments) != 1 {
 		return false
 	}
 	w := segments[0]
+	if len(w) != 4 && !(len(w) == 5 && w[0] == "openplexer" && w[4] == "--project-home") {
+		return false
+	}
 	return isOpenplexer(w[0]) && w[1] == "hook" && w[2] == agent && w[3] == "pre-tool"
 }
 

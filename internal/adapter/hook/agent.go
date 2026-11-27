@@ -30,6 +30,18 @@ func (a Agent) Handle(stdin []byte, env Env, judge Judge) Output {
 	return Render(Decide(stdin, env, judge, a.Tools))
 }
 
+// HandleProject translates a covered portable call before passing it to check.
+func (a Agent) HandleProject(stdin []byte, check func(Call, Effect) Verdict) Output {
+	call, effect, covered, err := readEffect(stdin, a.Tools, true)
+	if err != nil {
+		return Render(Verdict{Refuse, err.Error()})
+	}
+	if !covered {
+		return Output{}
+	}
+	return Render(check(call, effect))
+}
+
 func (a Agent) Handler(executable string) Handler {
 	return Handler{
 		Agent:     a.Name,
