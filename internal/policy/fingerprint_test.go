@@ -46,3 +46,28 @@ func TestInviteKeySetFingerprint(t *testing.T) {
 		}
 	}
 }
+
+func runFingerprint(t *testing.T, c fixtureCase) {
+	var input struct{ JWKS string }
+	var expected struct{ Fingerprint *string }
+	if err := json.Unmarshal(c.Input, &input); err != nil {
+		t.Fatal(err)
+	}
+	if err := json.Unmarshal(c.Expected, &expected); err != nil {
+		t.Fatal(err)
+	}
+	normalized, got, err := NormalizeKeySet([]byte(input.JWKS))
+	want := expected.Fingerprint
+	switch {
+	case want == nil:
+		if err == nil {
+			t.Fatal("accepted an invalid key set")
+		}
+	case err != nil || got != *want:
+		t.Fatalf("fingerprint %q, want %q (error: %v)", got, *want, err)
+	default:
+		if sum := sha256.Sum256(normalized); hex.EncodeToString(sum[:]) != got {
+			t.Fatal("fingerprint does not match the normalized pins")
+		}
+	}
+}

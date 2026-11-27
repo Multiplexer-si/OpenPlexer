@@ -18,6 +18,7 @@ The field descriptions are in the schemas. This page gives the rules that a sche
 | `v1/examples/` | Valid instances of each schema. The `eval-result` examples are the results of the `eval-query` examples with the same name, evaluated against `examples/bundle/full.json`. |
 | `v1/fixtures/evaluate-*.json` | Evaluation cases, one file per group of rules. |
 | `v1/fixtures/validate-bundle.json`, `v1/fixtures/validate-override.json` | Valid and invalid bundles and overrides. |
+| `v1/fixtures/jwks-fingerprint.json` | Policy key sets and expected invite fingerprints or rejection. |
 | `v1/fixtures/verify-signed-bundle.json` | Signed bundles that verify, and signed bundles that must not. |
 | `v1/fixtures/verify-signed-bundle-key-selection.json` | Signed bundles checked against a key set with several keys, for the rule that chooses the key. |
 

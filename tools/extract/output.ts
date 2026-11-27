@@ -108,6 +108,7 @@ const authoredFiles = new Set([
   "spec/audit/v1/examples/checkpoint-verify-result/valid.json",
   "spec/audit/v1/fixtures/checkpoint.json",
   "spec/room/v1/fixtures/validate-denial-time.json",
+  "spec/policy/v1/fixtures/jwks-fingerprint.json",
 ]);
 
 /** Files under `spec/` that the extractor may generate or remove. */
