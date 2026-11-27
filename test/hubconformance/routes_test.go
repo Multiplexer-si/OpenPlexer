@@ -254,4 +254,5 @@ func TestHub(t *testing.T) {
 	t.Run("concurrency", f.concurrentWrites)
 	t.Run("live-stream", f.liveStream)
 	t.Run("invites", f.invites)
+	t.Run("member-sync", f.memberSync)
 }

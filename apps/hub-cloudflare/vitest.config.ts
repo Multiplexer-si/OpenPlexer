@@ -1,8 +1,9 @@
 import { randomBytes } from "node:crypto";
 import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
+  test: { exclude: [...configDefaults.exclude, "test/**/*.node.unit.test.ts"] },
   plugins: [cloudflareTest({
     wrangler: { configPath: "wrangler.toml" },
     remoteBindings: false,

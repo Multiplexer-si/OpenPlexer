@@ -257,6 +257,7 @@ test("limits failed redeems per team without limiting pending polls or receipts"
 test("backfills enrollment IDs once on existing rows", async () => {
   await runInDurableObject(stub(), (_instance, ctx) => {
     const { sql } = ctx.storage;
+    sql.exec("DROP TABLE member_observations");
     sql.exec("DROP TABLE invites");
     sql.exec("ALTER TABLE members DROP COLUMN enrollment_id");
     sql.exec("ALTER TABLE team DROP COLUMN redeem_window_end_ms");
@@ -264,11 +265,17 @@ test("backfills enrollment IDs once on existing rows", async () => {
     sql.exec("DELETE FROM schema_migrations WHERE version >= 2");
     sql.exec("INSERT INTO members (member_id, role, token_hash) VALUES ('existing', 'lead', randomblob(32))");
     const storage = new HubStorage(ctx.storage);
-    expect(migrate(storage)).toBe(3);
+    expect(migrate(storage)).toBe(4);
     const value = sql.exec("SELECT enrollment_id FROM members WHERE member_id = 'existing'").one().enrollment_id;
     expect(value).toMatch(/^[0-9a-f]{32}$/);
-    expect(migrate(storage)).toBe(3);
+    sql.exec("INSERT INTO projects (project_id, repo) VALUES ('demo', 'team/demo')");
+    sql.exec(`INSERT INTO member_observations (member_id, project_id, policy_fetch_ms, policy_version)
+      VALUES ('existing', 'demo', 1, 1)`);
+    expect(migrate(storage)).toBe(4);
     expect(sql.exec("SELECT enrollment_id FROM members WHERE member_id = 'existing'").one().enrollment_id).toBe(value);
+    expect(sql.exec("SELECT member_id, project_id, policy_version FROM member_observations").toArray()).toEqual([
+      { member_id: "existing", project_id: "demo", policy_version: 1 },
+    ]);
   });
 });
 

@@ -418,12 +418,15 @@ test("checks method before auth and serves implicit HEAD", async () => {
   }
   for (const [path, allow] of [
     [project + "/policy", "PUT"], [admin + "/init", "POST"], [admin + "/projects", "POST"],
-    [admin + "/members", "POST"], [admin + "/members/lee", "DELETE"],
+    [admin + "/members/lee", "DELETE"],
   ]) {
     const method = await call(path);
     expect(method.headers.get("Allow")).toBe(allow);
     await error(method, 405, "method not allowed");
   }
+  const membersMethod = await call(admin + "/members", "PUT");
+  expect(membersMethod.headers.get("Allow")).toBe("GET, HEAD, POST");
+  await error(membersMethod, 405, "method not allowed");
   const head = await call(project, "HEAD");
   expect(head.status).toBe(401);
   expect(head.headers.get("WWW-Authenticate")).toBe("Bearer");

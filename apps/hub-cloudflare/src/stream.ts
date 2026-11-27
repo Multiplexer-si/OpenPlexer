@@ -4,7 +4,9 @@ import type { eventPage } from "./room";
 export const streamHeaders = { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store" };
 export const streamLimits = { pollMs: 1_000, durationMs: 300_000, calls: 400, writeMs: 5_000 };
 
-export type RoomRead = { room: string; hash: ArrayBuffer; after: string | number };
+export type RoomRead = { room: string; hash: ArrayBuffer } & (
+  { after: string; observe: boolean } | { after: number }
+);
 type Page = { ok: true; cursor: number; frames: ReturnType<typeof eventPage> };
 export type RoomPage = Page | { ok: false; status: number; message: string };
 

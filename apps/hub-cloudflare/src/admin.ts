@@ -112,6 +112,7 @@ export async function removeMember(request: Request, storage: HubStorage, id: st
     if (member.role === "lead" && sql.exec("SELECT 1 FROM members WHERE role = 'lead' LIMIT 2").length === 1) {
       throw conflict("cannot remove the last lead");
     }
+    sql.exec("DELETE FROM member_observations WHERE member_id = ?", id);
     sql.exec("DELETE FROM members WHERE member_id = ?", id);
     appendAudit(sql, { action: "member.removed", target: "member:" + id, actor_member_id: actor });
     return {};

@@ -73,28 +73,12 @@ func (s *Store) inviteRoutes(mux *http.ServeMux) {
 	}))
 
 	// Use the same roster mutations for remote administration and local commands.
-	mux.HandleFunc(admin+"members", s.inviteEndpoint(http.MethodPost, true, func(st *state, req request) (int, any, error) {
-		var input struct {
-			ID   string `json:"id"`
-			Role Role   `json:"role"`
-		}
-		if err := decodeInviteBody(req.body, &input); err != nil {
-			return 0, nil, errInvalidMember
-		}
-		token, err := st.addMember(input.ID, input.Role, &req.member, s.now())
-		if err == nil {
-			err = s.save(st)
-		}
-		return http.StatusOK, map[string]string{"token": token}, err
-	}))
+	mux.HandleFunc(admin+"members", s.membersEndpoint())
 	mux.HandleFunc(admin+"members/{member}", s.inviteEndpoint(http.MethodDelete, true, func(st *state, req request) (int, any, error) {
 		if len(req.body) != 0 {
 			return 0, nil, fmt.Errorf("%w: member deletion does not accept a body", errInvalid)
 		}
-		if err := st.removeMember(req.PathValue("member"), &req.member, s.now()); err != nil {
-			return 0, nil, err
-		}
-		return http.StatusOK, struct{}{}, s.save(st)
+		return http.StatusOK, struct{}{}, s.removeMember(st, req.PathValue("member"), &req.member)
 	}))
 }
 

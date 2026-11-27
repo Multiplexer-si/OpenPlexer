@@ -61,6 +61,8 @@ type state struct {
 	Rooms          map[string][]eventRecord `json:"rooms,omitempty"`
 	Claims         map[string]lease         `json:"claims,omitempty"`
 	RedeemFailures *redeemFailureWindow     `json:"redeem_failures,omitempty"`
+
+	PendingObservationDeletes map[string]struct{} `json:"pending_observation_deletes,omitempty"`
 }
 
 // Store is a data directory shared by the server and local admin commands.
@@ -163,8 +165,8 @@ func (st *state) hasTokenHash(hash [sha256.Size]byte) bool {
 }
 
 func (s *Store) RemoveMember(id string) error {
-	return s.update(func(st *state) error {
-		err := st.removeMember(id, nil, s.now())
+	return s.view(func(st *state) error {
+		err := s.removeMember(st, id, nil)
 		if errors.Is(err, errNotFound) {
 			return fmt.Errorf("%w: member %q", err, id)
 		}
@@ -172,7 +174,7 @@ func (s *Store) RemoveMember(id string) error {
 	})
 }
 
-func (st *state) removeMember(id string, actor *string, now time.Time) error {
+func (s *Store) removeMember(st *state, id string, actor *string) error {
 	m, exists := st.Members[id]
 	if !exists {
 		return errNotFound
@@ -189,7 +191,20 @@ func (st *state) removeMember(id string, actor *string, now time.Time) error {
 		}
 	}
 	delete(st.Members, id)
-	return st.appendAudit(audit.Record{Action: "member.removed", Target: "member:" + id, ActorMemberID: actor}, now)
+	if err := st.appendAudit(audit.Record{Action: "member.removed", Target: "member:" + id, ActorMemberID: actor}, s.now()); err != nil {
+		return err
+	}
+	// Commit the cleanup record with the roster so a crash cannot lose it.
+	name := observationFilename(m.EnrollmentID)
+	if st.PendingObservationDeletes == nil {
+		st.PendingObservationDeletes = make(map[string]struct{})
+	}
+	st.PendingObservationDeletes[name] = struct{}{}
+	if err := s.save(st); err != nil {
+		return err
+	}
+	s.deleteRemovedObservations(name)
+	return nil
 }
 
 func (s *Store) AddProject(id, repo string) error {
@@ -277,13 +292,17 @@ func (s *Store) locked(run func() error) error {
 }
 
 func (s *Store) save(st *state) error {
-	file, err := os.CreateTemp(s.dir, ".state-*")
+	return saveJSON(s.dir, s.path(), st)
+}
+
+func saveJSON(dir, path string, data any) error {
+	file, err := os.CreateTemp(dir, ".snapshot-*")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(file.Name())
 	defer file.Close()
-	if err := json.NewEncoder(file).Encode(st); err != nil {
+	if err := json.NewEncoder(file).Encode(data); err != nil {
 		return err
 	}
 	if err := file.Sync(); err != nil {
@@ -292,5 +311,5 @@ func (s *Store) save(st *state) error {
 	if err := file.Close(); err != nil {
 		return err
 	}
-	return os.Rename(file.Name(), s.path())
+	return os.Rename(file.Name(), path)
 }

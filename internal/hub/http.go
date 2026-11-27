@@ -27,13 +27,7 @@ func (s *Store) Handler() http.Handler {
 		}
 		return p, nil
 	}))
-	mux.HandleFunc("GET /api/v1/projects/{project}/policy.bundle", s.endpoint(0, func(st *state, req request) (any, error) {
-		signed, ok := st.Policies[req.project()]
-		if !ok {
-			return nil, errNotFound
-		}
-		return signed, nil
-	}))
+	mux.HandleFunc("GET /api/v1/projects/{project}/policy.bundle", s.policyBundleEndpoint)
 	mux.HandleFunc("PUT /api/v1/projects/{project}/policy", s.endpoint(MaxPolicyBytes, func(st *state, req request) (any, error) {
 		if req.role != Lead {
 			return nil, errForbidden

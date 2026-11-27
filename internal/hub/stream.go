@@ -20,23 +20,28 @@ func (s *Store) streamRoom(w http.ResponseWriter, r *http.Request) {
 		respond(w, nil, err)
 		return
 	}
-	read := func(after int64, page *[]room.Message) error {
+	read := func(after int64, page *[]room.Message, admit bool) error {
 		return s.view(func(st *state) error {
-			if _, _, err := st.authenticate(hash); err != nil {
+			memberID, _, err := st.authenticate(hash)
+			if err != nil {
 				return err
 			}
 			if _, ok := st.Projects[roomID]; !ok {
 				return errNotFound
 			}
 			if page != nil {
-				var err error
 				*page, err = roomPage(st.Rooms[roomID], uint64(after))
-				return err
+				if err != nil {
+					return err
+				}
+			}
+			if admit {
+				return s.observe(st.Members[memberID].EnrollmentID, roomID, nil)
 			}
 			return nil
 		})
 	}
-	if err := read(0, nil); err != nil {
+	if err := read(0, nil, false); err != nil {
 		respond(w, nil, err)
 		return
 	}
@@ -67,6 +72,18 @@ func (s *Store) streamRoom(w http.ResponseWriter, r *http.Request) {
 		defer controller.SetReadDeadline(time.Now())
 	}
 
+	var page []room.Message
+	var initialPage *[]room.Message
+	if download {
+		initialPage = &page
+	}
+	if r.Method != http.MethodHead {
+		if err := read(cursor, initialPage, true); err != nil {
+			respond(w, nil, err)
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", roomStreamType)
 	w.Header().Set("Cache-Control", "no-store")
 	w.Header().Set("X-Accel-Buffering", "no")
@@ -75,7 +92,6 @@ func (s *Store) streamRoom(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	encoder := json.NewEncoder(w)
-	started := false
 	send := func(message *room.Message) error {
 		err := controller.SetWriteDeadline(time.Now().Add(5 * time.Second))
 		if err == nil {
@@ -91,7 +107,6 @@ func (s *Store) streamRoom(w http.ResponseWriter, r *http.Request) {
 		if err != nil && download {
 			panic(http.ErrAbortHandler)
 		}
-		started = true
 		return err
 	}
 	ctx, cancel := context.WithCancel(r.Context())
@@ -107,8 +122,10 @@ func (s *Store) streamRoom(w http.ResponseWriter, r *http.Request) {
 	ticks := time.NewTicker(time.Second)
 	defer ticks.Stop()
 
-	var page []room.Message
-	subscribed, readNow := download, download
+	if download && len(page) == 0 && send(nil) != nil {
+		return
+	}
+	subscribed, readNow := download, download && len(page) > 0
 	replace := func(resume room.Resume) {
 		cursor, page = resume.LastSeq, nil
 		subscribed, readNow = true, true
@@ -134,10 +151,8 @@ func (s *Store) streamRoom(w http.ResponseWriter, r *http.Request) {
 			}
 			cursor, _ = message.Seq()
 		case readNow:
-			if err := read(cursor, &page); err != nil {
-				if download && !started {
-					respond(w, nil, err)
-				} else if errors.Is(err, errUnauthorized) {
+			if err := read(cursor, &page, false); err != nil {
+				if errors.Is(err, errUnauthorized) {
 					message := room.ErrorMessage(room.Sender{ID: "hub", Kind: room.Server}, roomID,
 						s.now().UTC().Format(timestampFmt), room.Error{Code: "unauthorized", Message: "invalid bearer token"})
 					_ = send(&message)

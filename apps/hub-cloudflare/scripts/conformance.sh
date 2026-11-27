@@ -46,7 +46,7 @@ health_status=$(curl -fsS -o "$state/health.json" -w '%{http_code}' --max-time 2
 kill -0 "$wrangler_pid"
 test "$health_status" = 200
 health_body=$(cat "$state/health.json")
-test "$health_body" = '{"ok":true,"schema":3}'
+test "$health_body" = '{"ok":true,"schema":4}'
 foreign_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 -H 'Host: foreign.example' "$origin/healthz")
 test "$foreign_status" = 404
 grep -Fq 'env.BOOTSTRAP_TOKEN' "$state/wrangler.log"
@@ -103,10 +103,12 @@ grep -Fq "$invite_id" "$state/invites.json"
 invite_admin approve --id "$invite_id" > /dev/null
 invite_admin revoke --id "$invite_id" > /dev/null
 
-sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|queued-denial|room-events|claims|concurrency|live-stream|invites)$'
+sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|queued-denial|room-events|claims|concurrency|live-stream|invites|member-sync)$'
 go test -count=1 -v ./test/hubconformance -run "$sections" -args \
   -hub-url "$origin" -wrangler-dev -lead-token-file "$state/lead.token" -member-token-file "$state/member.token" \
   -revoked-token-file "$state/revoked.token"
+
+admin members --project conformance-other | grep -F 'member  role member  policy v2  last check-in'
 
 admin export --out "$state/audit"
 verify() {

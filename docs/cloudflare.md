@@ -88,7 +88,7 @@ Check the deployment.
 curl -fsS "$hub/healthz"
 ```
 
-The health check prints `{"ok":true,"schema":3}` on a fresh deployment. If DNS or TLS is still provisioning, wait for Cloudflare to show the hostname as active and retry the health check.
+The health check prints JSON with `ok` set to `true` and the current version in `schema`. The schema version is 4 at the time of writing. If DNS or TLS is still provisioning, wait for Cloudflare to show the hostname as active and retry the health check.
 
 Store a protected copy of `wrap-key-v1` separately from your audit exports. Wrapping-key rotation is unsupported. Never change or delete `WRAP_KEY_V1` on a live team. The hub would lose the ability to unwrap its signing keys.
 
