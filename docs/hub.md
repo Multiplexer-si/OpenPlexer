@@ -51,14 +51,21 @@ Use HTTPS off loopback. The commands refuse redirects.
 Pass a private regular file with `--token-file` or send the credential on stdin.
 [Deploy the Worker and set its secrets](cloudflare.md).
 
+Set `bootstrap_file` to your saved bootstrap file. The block saves member tokens in a fresh private directory.
+
 ```sh
 hub=https://hub.example.com
+bootstrap_file=/path/to/bootstrap.token
 umask 077
-bin/openplexer-hub init --hub "$hub" --id mem-lee --lead-token-file lee.token < bootstrap.token
-bin/openplexer-hub add-member --hub "$hub" --token-file lee.token --id mem-ana > ana.token
-bin/openplexer-hub add-project --hub "$hub" --token-file lee.token --id prj-shop --repo api
-bin/openplexer-hub publish-policy --hub "$hub" --token-file lee.token --project prj-shop --file bundle.json
-bin/openplexer-hub remove-member --hub "$hub" --token-file lee.token --id mem-ana
+tokens=$(mktemp -d "$HOME/openplexer-team.XXXXXX") &&
+(
+  set -e
+  bin/openplexer-hub init --hub "$hub" --id mem-lee --lead-token-file "$tokens/lee.token" < "$bootstrap_file"
+  bin/openplexer-hub add-member --hub "$hub" --token-file "$tokens/lee.token" --id mem-ana > "$tokens/ana.token"
+  bin/openplexer-hub add-project --hub "$hub" --token-file "$tokens/lee.token" --id prj-shop --repo api
+  bin/openplexer-hub publish-policy --hub "$hub" --token-file "$tokens/lee.token" --project prj-shop --file bundle.json
+  bin/openplexer-hub remove-member --hub "$hub" --token-file "$tokens/lee.token" --id mem-ana
+)
 ```
 
 For `init`, use the bootstrap credential. The command saves the first lead's token in the named private file and sends its SHA-256 hash.
@@ -69,13 +76,13 @@ Use `stage-key` and `activate-key` with a lead token to rotate a Worker signing 
 Set `--purpose` to `policy` or `audit`. Staging prints the pending key ID and publishes the public key in its JWKS.
 
 ```sh
-kid=$(bin/openplexer-hub stage-key --hub "$hub" --token-file lee.token --purpose audit)
+kid=$(bin/openplexer-hub stage-key --hub "$hub" --token-file "$tokens/lee.token" --purpose audit)
 ```
 
 Share the updated JWKS through a trusted channel before you activate the key.
 
 ```sh
-bin/openplexer-hub activate-key --hub "$hub" --token-file lee.token --purpose audit --kid "$kid"
+bin/openplexer-hub activate-key --hub "$hub" --token-file "$tokens/lee.token" --purpose audit --kid "$kid"
 ```
 
 The next audit export uses the new audit key. After policy activation, publish a higher policy version to sign a project's bundle with the new policy key. The JWKS keeps retired public keys.
@@ -138,7 +145,7 @@ Run `bin/openplexer-hub export-audit --data-dir ./hub-data --out ./audit-export`
 To export from a running hub, use a lead token.
 
 ```sh
-bin/openplexer-hub export --hub "$hub" --token-file lee.token --out ./audit-export
+bin/openplexer-hub export --hub "$hub" --token-file "$tokens/lee.token" --out ./audit-export
 ```
 
 `export-audit` also accepts `--hub`. Both forms save `export.json`, `checkpoint.jws`, and `jwks.json` as private files. Both preserve existing files. The command fetches the checkpoint JWKS after downloading the export.

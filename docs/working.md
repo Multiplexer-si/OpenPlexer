@@ -44,10 +44,28 @@ export PATH="$HOME/.local/bin:$PATH"
 
 ## 2. Create a hub, a member, and a policy (window B)
 
-Create the hub's data, one member with the lead role, and one project. The member's bearer token goes in `you.token`. Treat it as a password.
+Create the hub's data, one member with the lead role, and one project. Treat the member's bearer token as a password. The block reserves `you.token` with mode `0600` and stops before `init` if that name is taken.
 
 ```bash
-cd ~/openplexer-test && openplexer-hub init -data-dir hub && openplexer-hub add-member -data-dir hub -id mem-you -role lead > you.token && openplexer-hub add-project -data-dir hub -id prj-demo -repo demo
+(
+  set -e
+  cd "$HOME/openplexer-test"
+  umask 077
+  credentials=$(mktemp -d ./credentials.XXXXXX)
+  trap 'rm -f "$credentials/you.token" && rmdir "$credentials"' EXIT
+  exec 3> "$credentials/you.token"
+  ln "$credentials/you.token" .
+  openplexer-hub init -data-dir hub
+  openplexer-hub add-member -data-dir hub -id mem-you -role lead >&3
+  openplexer-hub add-project -data-dir hub -id prj-demo -repo demo
+)
+```
+
+If `init` fails, fix the error first. Remove `you.token` only if it is the empty placeholder from that run. The command below checks for an empty regular file. Then rerun the setup block.
+
+```bash
+cd "$HOME/openplexer-test" &&
+  [ -f you.token ] && [ ! -L you.token ] && [ ! -s you.token ] && rm you.token
 ```
 
 Write a policy. It gives the role `dev` write access to `src/` in the `demo` repository, and nothing else.
