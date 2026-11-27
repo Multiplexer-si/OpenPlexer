@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -22,7 +23,7 @@ var hookBudget = 4 * time.Second
 var abort = func() { os.Exit(2) }
 
 func (c command) runHook(args []string) int {
-	if len(args) >= 2 && args[1] == hook.PreTool {
+	if len(args) >= 2 && (args[1] == hook.PreTool || args[1] == hook.SessionStart) {
 		agent, ok := adapter.Lookup(args[0])
 		portable := len(args) == 3 && args[2] == "--project-home"
 		if ok && (len(args) == 2 || portable) {
@@ -38,39 +39,61 @@ func (c command) runHook(args []string) int {
 					c.home = filepath.Join(user, ".openplexer")
 				}
 			}
-			return c.hook(agent, portable)
+			return c.hook(agent, args[1], portable)
 		}
 	}
 	fmt.Fprint(c.stderr, usage)
 	return exitUsage
 }
 
-func (c command) hook(agent hook.Agent, portable bool) int {
+func (c command) hook(agent hook.Agent, event string, portable bool) int {
 	watchdog := time.AfterFunc(hookBudget, func() {
 		fmt.Fprintf(c.stderr, "openplexer: the hook did not answer within %s, so it blocks this call\n", hookBudget)
 		abort()
 	})
 	defer watchdog.Stop()
 
+	userHome, _ := os.UserHomeDir()
+	if event == hook.SessionStart {
+		input, err := io.ReadAll(io.LimitReader(c.stdin, 1<<20))
+		if err != nil {
+			return exitOK
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), daemon.RefreshBudget)
+		defer cancel()
+		return c.sessionStart(portable, userHome, input, ctx)
+	}
 	input, err := io.ReadAll(c.stdin)
 	if err != nil {
 		return c.emit(hook.Render(hook.Verdict{Outcome: hook.Refuse, Reason: "cannot read the hook input: " + err.Error()}))
 	}
-	userHome, _ := os.UserHomeDir()
+	decisionCtx, stopDecision := context.WithTimeout(context.Background(), 3*time.Second)
+	defer stopDecision()
+	refreshCtx, stopRefresh := context.WithTimeout(decisionCtx, daemon.RefreshBudget)
+	defer stopRefresh()
 	if portable {
 		return c.emit(agent.HandleProject(input, func(call hook.Call, translate hook.Translate) hook.Verdict {
-			return c.checkProjectCall(agent.Name, userHome, call, translate)
+			return c.checkProjectCall(refreshCtx, decisionCtx, agent.Name, userHome, call, translate)
 		}))
 	}
-	gate, openErr := daemon.Open(c.home, c.now)
-	roleUnknown := openErr != nil || !gate.Status().Enforced()
+	var gate *daemon.Gate
+	var openErr error
 	env := hook.Env{
-		ExecGated: roleUnknown || gate.ExecGated(),
-		Root:      c.projectRoot(agent.Name, userHome),
-		Guards:    c.guards(userHome),
-		Home:      userHome,
+		Root:   c.projectRoot(agent.Name, userHome),
+		Guards: c.guards(userHome),
+		Home:   userHome,
+		Prepare: func() (bool, bool) {
+			gate, openErr = c.openForHook(refreshCtx)
+			if openErr != nil {
+				return true, false
+			}
+			stale := gate.HubStale()
+			return !gate.Status().Enforced() || gate.ExecGated(), stale
+		},
 	}
-	return c.emit(agent.Handle(input, env, c.judge(agent.Name, gate, openErr, hook.Denied)))
+	return c.emit(agent.Handle(input, env, func(first policy.Query, rest ...policy.Query) hook.Verdict {
+		return c.judge(decisionCtx, agent.Name, gate, openErr, hook.Denied)(first, rest...)
+	}))
 }
 
 func (c command) journal() hook.Journal {
@@ -113,12 +136,12 @@ func agentGuards(userHome string) []hook.Guard {
 	return guards
 }
 
-func (c command) judge(agent string, gate *daemon.Gate, openErr error, deny func(policy.Query, policy.Result) hook.Verdict) hook.Judge {
+func (c command) judge(ctx context.Context, agent string, gate *daemon.Gate, openErr error, deny func(policy.Query, policy.Result) hook.Verdict) hook.Judge {
 	return func(first policy.Query, rest ...policy.Query) hook.Verdict {
 		if openErr != nil {
 			return blocked("OpenPlexer cannot read its configuration in %s, so it blocks this call: %v. Run `openplexer policy status` to see the problem.", c.home, openErr)
 		}
-		verdict, err := gate.Decide(agent, first, rest...)
+		verdict, err := gate.DecideContext(ctx, agent, first, rest...)
 		result, decided := verdict.Result()
 		switch {
 		case !decided && verdict.Policy.State == daemon.Absent:
@@ -128,6 +151,9 @@ func (c command) judge(agent string, gate *daemon.Gate, openErr error, deny func
 		case result.Decision == policy.Deny:
 			if err := gate.QueueDenial(verdict, agent); err != nil {
 				fmt.Fprintf(c.stderr, "openplexer: cannot queue Room denial: %v\n", err)
+			}
+			if result.Rule == daemon.StalePolicyReason {
+				return blocked("OpenPlexer: %s (home %q).", result.Rule, c.home)
 			}
 			return deny(verdict.Query, result)
 		case err != nil:

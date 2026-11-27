@@ -103,13 +103,14 @@ func (c command) install(args []string) int {
 	if err != nil {
 		return c.fail(fmt.Errorf("the path of this binary is not known, so the hook cannot name it: %w", err))
 	}
-	handler := agent.Handler(executable)
+	handler, startup := agent.Handler(executable), agent.SessionHandler(executable)
 	var change hook.Change
 	if file.portable {
 		handler.Command += " --project-home"
-		change, err = c.installPortable(root, path, handler)
+		startup.Command += " --project-home"
+		change, err = c.installPortable(root, path, handler, startup)
 	} else {
-		change, err = c.journal().Install(path, handler, root)
+		change, err = c.journal().Install(path, handler, root, startup)
 	}
 	if err != nil {
 		return c.fail(err)
@@ -134,7 +135,7 @@ func (c command) install(args []string) int {
 	return exitOK
 }
 
-func (c command) installPortable(root, path string, handler hook.Handler) (hook.Change, error) {
+func (c command) installPortable(root, path string, handler, startup hook.Handler) (hook.Change, error) {
 	user, err := os.UserHomeDir()
 	if err != nil {
 		return hook.Unchanged, err
@@ -148,7 +149,7 @@ func (c command) installPortable(root, path string, handler hook.Handler) (hook.
 			}
 		}
 		var err error
-		change, err = journal.InstallAndRegister(path, handler, publish)
+		change, err = journal.InstallAndRegister(path, handler, publish, startup)
 		return err
 	})
 	return change, err

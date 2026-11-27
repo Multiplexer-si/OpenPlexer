@@ -21,7 +21,11 @@ type Agent struct {
 	NextStep     string
 }
 
-const PreTool = "pre-tool"
+const (
+	PreTool           = "pre-tool"
+	SessionStart      = "session-start"
+	sessionStartEvent = "SessionStart"
+)
 
 func (a Agent) Matcher() string {
 	return strings.Join(slices.Sorted(maps.Keys(a.Tools)), "|")
@@ -55,6 +59,16 @@ func (a Agent) Handler(executable string) Handler {
 		Command:   shellQuote(executable) + " hook " + a.Name + " " + PreTool,
 		Timeout:   a.Timeout,
 		OnFailure: a.OnFailure,
+	}
+}
+
+func (a Agent) SessionHandler(executable string) Handler {
+	return Handler{
+		Agent:   a.Name,
+		Event:   sessionStartEvent,
+		Matcher: "startup|resume",
+		Command: shellQuote(executable) + " hook " + a.Name + " " + SessionStart,
+		Timeout: a.Timeout,
 	}
 }
 

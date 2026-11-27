@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 // Journal is the directory that holds what install wrote, with one record
@@ -49,10 +50,11 @@ func (a *Level) UnmarshalText(text []byte) error {
 }
 
 type record struct {
-	Agent string `json:"agent"`
-	File  string `json:"file"`
-	Root  string `json:"root,omitempty"`
-	Added Level  `json:"added"`
+	Agent        string `json:"agent"`
+	File         string `json:"file"`
+	Root         string `json:"root,omitempty"`
+	Added        Level  `json:"added"`
+	SessionAdded Level  `json:"session_added,omitempty"`
 }
 
 func (j Journal) recordPath(agent, file string) string {
@@ -83,17 +85,17 @@ func (j Journal) put(r record) error {
 // The record is written before the file, and Uninstall removes it after the
 // file, so a run that is killed leaves a record too many and never a hook
 // without one.
-func (j Journal) Install(path string, h Handler, root string) (Change, error) {
-	return j.install(path, h, root, nil)
+func (j Journal) Install(path string, h Handler, root string, startup ...Handler) (Change, error) {
+	return j.install(path, h, root, nil, startup)
 }
 
 // InstallAndRegister publishes a portable registration after the hook write.
 // If publication fails, it tries to restore the hook file and its install record.
-func (j Journal) InstallAndRegister(path string, h Handler, publish func() error) (Change, error) {
-	return j.install(path, h, "", publish)
+func (j Journal) InstallAndRegister(path string, h Handler, publish func() error, startup ...Handler) (Change, error) {
+	return j.install(path, h, "", publish, startup)
 }
 
-func (j Journal) install(path string, h Handler, root string, publish func() error) (Change, error) {
+func (j Journal) install(path string, h Handler, root string, publish func() error, startup []Handler) (Change, error) {
 	if err := os.MkdirAll(j.Dir, 0o700); err != nil {
 		return Unchanged, fmt.Errorf("%w. The file is unchanged", err)
 	}
@@ -105,14 +107,27 @@ func (j Journal) install(path string, h Handler, root string, publish func() err
 	was, known := j.get(h.Agent, path)
 	recordWritten := false
 	change, err := editFile(path, func(text []byte, exists bool) ([]byte, bool, Change, error) {
-		out, change, added, err := Install(text, exists, h)
-		if err != nil {
-			return nil, false, Unchanged, err
+		out, change := text, Unchanged
+		next := was
+		next.Agent, next.File, next.Root = h.Agent, filepath.Clean(path), root
+		for _, handler := range slices.Concat([]Handler{h}, startup) {
+			edited, editChange, added, err := Install(out, exists, handler)
+			if err != nil {
+				return nil, false, Unchanged, err
+			}
+			out, exists = edited, true
+			if editChange == Added {
+				if handler.Event == sessionStartEvent {
+					next.SessionAdded = added
+				} else {
+					next.Added = added
+				}
+			}
+			if editChange == Added || change == Unchanged {
+				change = editChange
+			}
 		}
-		next := record{Agent: h.Agent, File: filepath.Clean(path), Root: root, Added: was.Added}
-		if change == Added {
-			next.Added = added
-		}
+		var err error
 		if !known || was != next {
 			err = j.put(next)
 			recordWritten = err == nil
@@ -147,17 +162,28 @@ func (j Journal) Uninstall(path, agent string) (Change, error) {
 	case !errors.Is(err, fs.ErrNotExist):
 		return Unchanged, fmt.Errorf("%w. The file is unchanged", err)
 	}
-	was, _ := j.get(agent, path)
+	recordPath := path
+	was, known := j.get(agent, recordPath)
+	if !known {
+		// Portable installs use a canonical checkout root. Uninstall may
+		// receive that root through a symlink.
+		if dir, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
+			candidate := filepath.Join(dir, filepath.Base(path))
+			if saved, ok := j.get(agent, candidate); ok {
+				recordPath, was = candidate, saved
+			}
+		}
+	}
 	change, err := editFile(path, func(text []byte, exists bool) ([]byte, bool, Change, error) {
 		if !exists {
 			return nil, false, Unchanged, nil
 		}
-		return Uninstall(text, agent, was.Added)
+		return uninstall(text, agent, was.Added, was.SessionAdded)
 	}, nil)
 	if err != nil {
 		return Unchanged, fmt.Errorf("%w. The file is unchanged", err)
 	}
-	if err := os.Remove(j.recordPath(agent, path)); err != nil && !errors.Is(err, fs.ErrNotExist) {
+	if err := os.Remove(j.recordPath(agent, recordPath)); err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return change, fmt.Errorf("the hook is out of %s, but its record was not removed: %w", path, err)
 	}
 	return change, nil

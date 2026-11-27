@@ -21,7 +21,7 @@ import (
 
 const usage = `usage:
   openplexer --version
-  openplexer configure [--keys <jwks.json>] [--member <member-id>] [--stale-after-days <days>]
+  openplexer configure [--keys <jwks.json>] [--member <member-id>] [--stale-after-days <days>] [--max-policy-age <duration>]
   openplexer configure --project-root <dir> [--home <dir>]
   openplexer configure --hub <url> --project <id> --member <id> --keys <jwks.json> --token-file <file>
   openplexer daemon [--quiet]
@@ -30,10 +30,11 @@ const usage = `usage:
   openplexer policy sync
   openplexer policy load <signed-bundle.json>
   openplexer policy status
+  openplexer policy check-session
   openplexer policy check [--agent <name>] [--session <id>] [--repo <repo>] <action> <target>
   openplexer install <agent> [--scope user|project] [--project <dir>] [--file <path>] [--portable]
   openplexer uninstall <agent> [--scope user|project] [--project <dir>] [--file <path>]
-  openplexer hook <agent> pre-tool [--project-home]
+  openplexer hook <agent> pre-tool|session-start [--project-home]
 
 An agent is claude-code or codex.
 
@@ -116,6 +117,8 @@ func run(args []string, stdin io.Reader, stdout, stderr io.Writer, now func() ti
 		return c.load("")
 	case len(args) == 2 && args[0] == "policy" && args[1] == "status":
 		return c.status()
+	case len(args) == 2 && args[0] == "policy" && args[1] == "check-session":
+		return c.checkSession()
 	case len(args) >= 2 && args[0] == "policy" && args[1] == "check":
 		return c.check(args[2:])
 	}
@@ -145,16 +148,19 @@ func (c command) configure(args []string) int {
 	projectRoot := flags.String("project-root", "", "")
 	home := flags.String("home", c.home, "")
 	staleAfterDays := flags.Int("stale-after-days", 0, "")
+	maxPolicyAge := flags.String("max-policy-age", "", "")
 	if flags.Parse(args) != nil || flags.NArg() != 0 || flags.NFlag() == 0 {
 		fmt.Fprint(c.stderr, usage)
 		return exitUsage
 	}
-	var configuring, registering bool
+	var configuring, registering, settingAge bool
 	flags.Visit(func(f *flag.Flag) {
 		switch f.Name {
 		case "project-root":
 			registering = true
 		case "home":
+		case "max-policy-age":
+			settingAge, configuring = true, true
 		default:
 			configuring = true
 		}
@@ -168,6 +174,13 @@ func (c command) configure(args []string) int {
 		return c.fail(err)
 	}
 	change := daemon.Settings{MemberID: *member, StaleAfterDays: *staleAfterDays, HubURL: *hub, ProjectID: *project}
+	if settingAge {
+		age, err := time.ParseDuration(*maxPolicyAge)
+		if err != nil || age < time.Minute || age > time.Hour || age%time.Second != 0 {
+			return c.fail(errors.New("maximum policy age must be between 1 minute and 1 hour in whole seconds"))
+		}
+		change.MaxPolicyAgeSeconds = int(age / time.Second)
+	}
 	if *tokenFile != "" {
 		token, err := os.ReadFile(*tokenFile)
 		if err != nil {
@@ -225,6 +238,13 @@ func (c command) status() int {
 	c.report(status)
 	activity, _ := daemon.ReadDaemonActivity(c.home)
 	c.reportDaemonHeartbeat(activity)
+	if status.MaxPolicyAge != 0 && activity.HeartbeatAt.IsZero() {
+		fmt.Fprintln(c.stdout, "daemon heartbeat: unavailable")
+	}
+	return policyStatusExit(status)
+}
+
+func policyStatusExit(status daemon.Status) int {
 	switch status.State {
 	case daemon.Verified:
 		return exitOK
@@ -237,6 +257,13 @@ func (c command) status() int {
 func (c command) report(status daemon.Status) {
 	fmt.Fprintf(c.stdout, "policy: %s\n", status.State)
 	fmt.Fprintf(c.stdout, "detail: %s\n", status.Detail)
+	if status.MaxPolicyAge != 0 {
+		confirmed := "never"
+		if !status.HubConfirmedAt.IsZero() {
+			confirmed = status.HubConfirmedAt.UTC().Format(time.RFC3339Nano)
+		}
+		fmt.Fprintf(c.stdout, "hub confirmed at: %s\nmaximum policy age: %s\n", confirmed, status.MaxPolicyAge)
+	}
 	switch {
 	case status.Member == "":
 		fmt.Fprintln(c.stdout, "member: not configured")
@@ -287,7 +314,7 @@ func (c command) check(args []string) int {
 		fmt.Fprintf(c.stdout, "no policy: %s\n", verdict.Policy.Detail)
 		return exitUnenforced
 	}
-	if verdict.Policy.State == daemon.Stale {
+	if verdict.Policy.State == daemon.Stale && verdict.Policy.MaxPolicyAge == 0 {
 		fmt.Fprintf(c.stderr, "openplexer: the policy is stale: %s\n", verdict.Policy.Detail)
 	}
 	fmt.Fprintf(c.stdout, "%s: %s\n", result.Decision, result.Rule)

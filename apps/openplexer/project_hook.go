@@ -1,11 +1,11 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 
 	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
-	"github.com/multiplexer-si/openplexer/internal/daemon"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 	"github.com/multiplexer-si/openplexer/internal/projects"
 )
@@ -16,9 +16,10 @@ type projectQueries struct {
 	home     string
 	writes   []policy.Query
 	commands []policy.Query
+	shell    bool
 }
 
-func (c command) checkProjectCall(agent, userHome string, call hook.Call, translate hook.Translate) hook.Verdict {
+func (c command) checkProjectCall(refreshCtx, decisionCtx context.Context, agent, userHome string, call hook.Call, translate hook.Translate) hook.Verdict {
 	registry, err := projects.Read(userHome)
 	if err != nil {
 		return projectBlock(fmt.Errorf("cannot read the project registry: %w", err))
@@ -102,24 +103,30 @@ func (c command) checkProjectCall(agent, userHome string, call hook.Call, transl
 		}
 		group.writes = append(group.writes, policy.Query{Action: policy.Write, Path: filepath.ToSlash(rel), AgentSessionID: session})
 	}
-	if len(effect.Commands) > 0 {
+	if call.Tool == "Bash" {
 		group, err := groupFor(shellProject)
 		if err != nil {
 			return projectBlock(err)
 		}
+		group.shell = true
 		for _, name := range effect.Commands {
 			group.commands = append(group.commands, policy.Query{Action: policy.Exec, Command: name, AgentSessionID: session})
 		}
 	}
 	for _, group := range groups {
 		c.home = group.home
-		gate, err := daemon.Open(group.home, c.now)
+		gate, err := c.openForHook(refreshCtx)
 		queries := group.writes
-		if err != nil || !gate.Status().Enforced() || gate.ExecGated() {
+		stale := err == nil && gate.HubStale()
+		if err != nil || stale || !gate.Status().Enforced() || gate.ExecGated() {
 			queries = append(queries, group.commands...)
 		}
+		if len(queries) == 0 && group.shell && (err != nil || stale) {
+			command, _ := call.Text("command")
+			queries = append(queries, policy.Query{Action: policy.Exec, Command: command, AgentSessionID: session})
+		}
 		if len(queries) > 0 {
-			if verdict := c.judge(agent, gate, err, projectDenied)(queries[0], queries[1:]...); verdict.Outcome != hook.Allow {
+			if verdict := c.judge(decisionCtx, agent, gate, err, projectDenied)(queries[0], queries[1:]...); verdict.Outcome != hook.Allow {
 				return verdict
 			}
 		}

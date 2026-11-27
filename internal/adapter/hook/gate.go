@@ -37,6 +37,9 @@ type Env struct {
 	// command is then also judged as `exec`. Otherwise the commands of the
 	// member are not limited, and the command is judged by its write targets.
 	ExecGated bool
+	// Prepare opens the policy after guards pass and before shell queries use
+	// the policy's exec grants. Stale hub policies also gate a matched shell.
+	Prepare func() (execGated, hubStale bool)
 }
 
 // ExecGated reports whether the role of member in bundle lists commands.
@@ -281,7 +284,20 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	if v, guarded := env.guard(root, targets); guarded {
 		return v
 	}
+	var stale bool
+	if env.Prepare != nil && (call.Tool == "Bash" || slices.ContainsFunc(targets, func(t target) bool { return t.judged })) {
+		env.ExecGated, stale = env.Prepare()
+		env.ExecGated = env.ExecGated || stale
+		if stale && call.Tool == "Bash" && len(effect.Commands) == 0 {
+			command, _ := call.Text("command")
+			effect.Commands = []string{command}
+		}
+	}
 	if noRoot != nil {
+		if stale && call.Tool == "Bash" {
+			queries := env.queries(call, nil, effect)
+			return judge(queries[0], queries[1:]...)
+		}
 		if len(effect.Writes) > 0 || env.ExecGated && len(effect.Commands) > 0 {
 			return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked this call because it cannot place the paths of the call in a project: %v.", noRoot)}
 		}
