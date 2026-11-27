@@ -179,22 +179,37 @@ func (p Project) CheckHome() error {
 // Register atomically adds a claim, or keeps the same existing claim. The
 // caller can validate the contents of the canonical home before publication.
 func Register(userHome, root, home string, validate func(string) error) error {
-	return register(userHome, root, home, validate, nil)
+	return register(userHome, root, home, false, func(home string, publish func() error) error {
+		if validate != nil {
+			if err := validate(home); err != nil {
+				return err
+			}
+		}
+		return publish()
+	})
 }
 
 // RegisterAfter prepares a claim under the registry lock. Install calls publish
 // after writing the hook file and restores the hook if publication fails.
 func RegisterAfter(userHome, root, home string, install func(publish func() error) error) error {
-	return register(userHome, root, home, nil, install)
+	return register(userHome, root, home, false, func(_ string, publish func() error) error {
+		return install(publish)
+	})
 }
 
-func register(userHome, root, home string, validate func(string) error, install func(publish func() error) error) error {
+// RegisterConfigured prepares a claim before changing the selected home's settings.
+// Configure calls publish after saving the settings and restores them if publication fails.
+func RegisterConfigured(userHome, root, home string, configure func(home string, publish func() error) error) error {
+	return register(userHome, root, home, true, configure)
+}
+
+func register(userHome, root, home string, createHome bool, apply func(home string, publish func() error) error) error {
 	canonicalRoot, rootInfo, err := Directory(root)
 	if err != nil {
 		return fmt.Errorf("cannot register the checkout: %w", err)
 	}
 	canonicalHome, homeInfo, err := Directory(home)
-	if err != nil {
+	if err != nil && !(createHome && errors.Is(err, fs.ErrNotExist)) {
 		return fmt.Errorf("cannot register the OpenPlexer home: %w", err)
 	}
 	dir, err := registryDir(userHome)
@@ -247,13 +262,17 @@ func register(userHome, root, home string, validate func(string) error, install 
 		}
 		claimed = true
 		_, registeredHome, err := Directory(c.Home)
-		if err != nil || !os.SameFile(homeInfo, registeredHome) {
+		if err != nil || homeInfo == nil || !os.SameFile(homeInfo, registeredHome) {
 			return fmt.Errorf("checkout %s is already registered with another home", canonicalRoot)
 		}
 	}
-	if validate != nil {
-		if err := validate(canonicalHome); err != nil {
+	if homeInfo == nil {
+		if err := os.MkdirAll(home, 0o700); err != nil {
 			return err
+		}
+		canonicalHome, homeInfo, err = Directory(home)
+		if err != nil {
+			return fmt.Errorf("cannot register the OpenPlexer home: %w", err)
 		}
 	}
 	var temp string
@@ -265,28 +284,28 @@ func register(userHome, root, home string, validate func(string) error, install 
 		}
 		defer os.Remove(temp)
 	}
-	publish := func() error {
-		if install != nil {
-			current, err := os.Lstat(r.Path)
-			if r.info == nil && !errors.Is(err, fs.ErrNotExist) ||
-				r.info != nil && (err != nil || !os.SameFile(r.info, current)) {
-				return errors.New("the project registry changed while installing the hook")
-			}
-		}
-		if claimed {
-			return nil
+	check := func() error {
+		current, err := os.Lstat(r.Path)
+		if r.info == nil && !errors.Is(err, fs.ErrNotExist) ||
+			r.info != nil && (err != nil || !os.SameFile(r.info, current)) {
+			return errors.New("the project registry changed while registering the checkout")
 		}
 		if !sameDirectory(root, rootInfo) || !sameDirectory(canonicalRoot, rootInfo) ||
 			!sameDirectory(home, homeInfo) || !sameDirectory(canonicalHome, homeInfo) ||
 			!sameDirectory(dir, info) {
 			return errors.New("a directory changed while registering the checkout")
 		}
+		return nil
+	}
+	if err := check(); err != nil {
+		return err
+	}
+	return apply(canonicalHome, func() error {
+		if err := check(); err != nil || claimed {
+			return err
+		}
 		return os.Rename(temp, r.Path)
-	}
-	if install != nil {
-		return install(publish)
-	}
-	return publish()
+	})
 }
 
 func prepareRegistry(dir string, homes map[string]string) (string, error) {

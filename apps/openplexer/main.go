@@ -146,13 +146,17 @@ func (c command) configure(args []string) int {
 		fmt.Fprint(c.stderr, usage)
 		return exitUsage
 	}
-	configuring := false
+	var configuring, registering bool
 	flags.Visit(func(f *flag.Flag) {
-		if f.Name != "project-root" && f.Name != "home" {
+		switch f.Name {
+		case "project-root":
+			registering = true
+		case "home":
+		default:
 			configuring = true
 		}
 	})
-	if !configuring && *projectRoot == "" {
+	if !configuring && !registering {
 		fmt.Fprint(c.stderr, usage)
 		return exitUsage
 	}
@@ -177,15 +181,13 @@ func (c command) configure(args []string) int {
 			return c.fail(err)
 		}
 	}
-	if configuring {
-		if err := daemon.Configure(c.home, change); err != nil {
-			return c.fail(err)
-		}
+	if registering {
+		err = c.configureProject(*projectRoot, change, configuring)
+	} else {
+		err = daemon.Configure(c.home, change)
 	}
-	if *projectRoot != "" {
-		if err := c.registerProject(*projectRoot, daemon.ValidateConfiguredHome); err != nil {
-			return c.fail(err)
-		}
+	if err != nil {
+		return c.fail(err)
 	}
 	return exitOK
 }

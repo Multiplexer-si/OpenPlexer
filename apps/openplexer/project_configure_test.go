@@ -13,6 +13,7 @@ func TestConfigureRegistrationFailurePreservesHomeAndRegistry(t *testing.T) {
 	for _, tc := range []struct {
 		name, reason string
 	}{
+		{"empty checkout", "cannot register the checkout"},
 		{"missing checkout", "cannot register the checkout"},
 		{"conflicting claim", "already registered with another home"},
 		{"malformed registry", "must be a JSON object"},
@@ -31,6 +32,8 @@ func TestConfigureRegistrationFailurePreservesHomeAndRegistry(t *testing.T) {
 			registry := filepath.Join(user, ".openplexer", "projects.json")
 			args := []string{"configure", "--member", "mem-ana"}
 			switch tc.name {
+			case "empty checkout":
+				root = ""
 			case "missing checkout":
 				root = filepath.Join(root, "missing")
 			case "conflicting claim":

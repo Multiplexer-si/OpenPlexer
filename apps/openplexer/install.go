@@ -179,11 +179,3 @@ func (c command) uninstall(args []string) int {
 	}
 	return exitOK
 }
-
-func (c command) registerProject(root string, validate func(string) error) error {
-	user, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	return projects.Register(user, root, c.home, validate)
-}
