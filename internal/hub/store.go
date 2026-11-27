@@ -277,13 +277,17 @@ func (s *Store) locked(run func() error) error {
 }
 
 func (s *Store) save(st *state) error {
-	file, err := os.CreateTemp(s.dir, ".state-*")
+	return saveJSON(s.dir, s.path(), st)
+}
+
+func saveJSON(dir, path string, data any) error {
+	file, err := os.CreateTemp(dir, ".snapshot-*")
 	if err != nil {
 		return err
 	}
 	defer os.Remove(file.Name())
 	defer file.Close()
-	if err := json.NewEncoder(file).Encode(st); err != nil {
+	if err := json.NewEncoder(file).Encode(data); err != nil {
 		return err
 	}
 	if err := file.Sync(); err != nil {
@@ -292,5 +296,5 @@ func (s *Store) save(st *state) error {
 	if err := file.Close(); err != nil {
 		return err
 	}
-	return os.Rename(file.Name(), s.path())
+	return os.Rename(file.Name(), path)
 }
