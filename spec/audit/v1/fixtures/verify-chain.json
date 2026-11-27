@@ -128,6 +128,68 @@
     },
     {
       "expected": {
+        "entries": 1,
+        "ok": true
+      },
+      "input": {
+        "records": [
+          {
+            "action": "event.policy-denied",
+            "actor_member_id": "mem-ana",
+            "agent_session_id": "mem-ana/session",
+            "created_at": "2026-01-15T12:00:00.000Z",
+            "flagged": false,
+            "hash": "34e6e91d4a54950a939662347e8192886fa1491e6598126ec61b1602d1418cf0",
+            "id": "1",
+            "meta": {
+              "decided_at": "2026-01-15T11:00:00.000Z",
+              "event_id": "evt-0010",
+              "room_id": "prj-shop",
+              "seq": 10
+            },
+            "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "reason": null,
+            "target": "event:evt-0010",
+            "workspace_id": "wsp-shop"
+          }
+        ]
+      },
+      "name": "a queued Room denial keeps both times",
+      "why": "An optional decision time in metadata uses the same hash rule as other metadata."
+    },
+    {
+      "expected": {
+        "broken_at": "1",
+        "ok": false
+      },
+      "input": {
+        "records": [
+          {
+            "action": "event.policy-denied",
+            "actor_member_id": "mem-ana",
+            "agent_session_id": "mem-ana/session",
+            "created_at": "2026-01-15T12:00:00.000Z",
+            "flagged": false,
+            "hash": "34e6e91d4a54950a939662347e8192886fa1491e6598126ec61b1602d1418cf0",
+            "id": "1",
+            "meta": {
+              "decided_at": "2026-01-15T11:00:00.001Z",
+              "event_id": "evt-0010",
+              "room_id": "prj-shop",
+              "seq": 10
+            },
+            "prev_hash": "0000000000000000000000000000000000000000000000000000000000000000",
+            "reason": null,
+            "target": "event:evt-0010",
+            "workspace_id": "wsp-shop"
+          }
+        ]
+      },
+      "name": "an edited decision time breaks the chain",
+      "why": "The hash covers the decision time in metadata."
+    },
+    {
+      "expected": {
         "entries": 0,
         "ok": true
       },

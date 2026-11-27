@@ -1,6 +1,6 @@
 import type { Json } from "../output.ts";
 import { REFERENCE_COMMIT } from "../reference.ts";
-import { assertPortablePatterns, schemaId } from "../schemas.ts";
+import { assertPortablePatterns, ROOM_TIMESTAMP_PATTERN, schemaId } from "../schemas.ts";
 
 export interface Case {
   /** Unique in the file. A harness reports a failure by this name. */
@@ -79,6 +79,12 @@ const OPERATIONS: Record<string, Operation> = {
     input: {},
     expected: strict({ valid: { type: "boolean" } }),
     informational: strict({ reason: { type: "string" } }),
+  },
+  "validate-denial-time": {
+    contract: ["room"],
+    description: "Validate input.post as a Room denial received at input.at.",
+    input: strict({ post: { type: "object" }, at: { type: "string", pattern: ROOM_TIMESTAMP_PATTERN } }),
+    expected: strict({ valid: { type: "boolean" } }),
   },
   "patterns-overlap": {
     contract: ["room"],
@@ -240,7 +246,7 @@ export function fixtureFileSchema(): Json {
     allOf: [
       ...Object.entries(OPERATIONS).map(([name, op]) => rule(name, op)),
       {
-        if: { properties: { operation: { const: "verify-checkpoints" } } },
+        if: { properties: { operation: { enum: ["verify-checkpoints", "validate-denial-time"] } } },
         then: { properties: { reference: false } },
         else: { required: ["reference"] },
       },

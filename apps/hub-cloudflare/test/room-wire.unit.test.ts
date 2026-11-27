@@ -1,8 +1,9 @@
 import { describe, expect, test } from "vitest";
 import envelopes from "../../../spec/room/v1/fixtures/validate-envelope.json?raw";
 import events from "../../../spec/room/v1/fixtures/validate-room-event.json?raw";
+import denialTimes from "../../../spec/room/v1/fixtures/validate-denial-time.json?raw";
 import type { JsonValue } from "../src/canonical";
-import { decodeRoomJSON, encodeRoomJSON, parseEventPost, validateEnvelope, validateEvent } from "../src/room-wire";
+import { decodeRoomJSON, denialDecidedAt, encodeRoomJSON, parseEventPost, validateEnvelope, validateEvent } from "../src/room-wire";
 
 type Case = { name: string; input: JsonValue; expected: { valid: boolean } };
 
@@ -21,6 +22,15 @@ for (const [name, source, validate] of [
     });
   });
 }
+
+describe("validate-denial-time", () => {
+  const fixtures: { cases: (Omit<Case, "input"> & { input: { at: string; post: JsonValue } })[] } = JSON.parse(denialTimes);
+  test.each(fixtures.cases)("$name", ({ input, expected }) => {
+    const check = () => denialDecidedAt(parseEventPost(utf8.encode(JSON.stringify(input.post))), Date.parse(input.at));
+    if (expected.valid) expect(check).not.toThrow();
+    else expect(check).toThrow(SyntaxError);
+  });
+});
 
 test("accepts exact Room fields and the last repeated member, and preserves extension numbers", () => {
   const body = '"body":{"summary":"working","extension":{"n":9007199254740993,"overflow":1e400,"s":"\\ud800123"}}';

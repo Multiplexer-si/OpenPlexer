@@ -250,6 +250,7 @@ func TestHub(t *testing.T) {
 	t.Run("room-events", f.roomEvents)
 	t.Run("claims", f.claims)
 	t.Run("audit-export", f.auditExport)
+	t.Run("queued-denial", f.queuedDenial)
 	t.Run("concurrency", f.concurrentWrites)
 	t.Run("live-stream", f.liveStream)
 }

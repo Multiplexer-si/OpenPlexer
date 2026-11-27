@@ -150,6 +150,12 @@ These parts may change: the storage of the log, the routes that serve it, and an
 
 `meta` accepts any fields, and all of them are hashed. A record and an export entry accept unknown fields, and an unknown field is not hashed.
 
+### Room denials
+
+The hub writes an `event.policy-denied` record that links to the Room event through `meta.room_id`, `meta.seq`, and `meta.event_id`. The hub supplies `created_at` from its receipt clock, using the Room event's `at`. When the authenticated member supplies `body.decided_at`, the hub copies the member's claimed decision time to `meta.decided_at` as sent. Older hooks can omit it. [Room denial time](../room/README.md#denial-time).
+
+The v1 hash covers both times. A trusted checkpoint proves those recorded values match the hub's signed history through its count. Establishing when the denial happened or whether either clock was accurate requires independent evidence. The `verify-chain` fixture covers a queued denial and an edit to its decision time.
+
 ## Generated and authored parts
 
 The reference is at commit `7d80045a`.

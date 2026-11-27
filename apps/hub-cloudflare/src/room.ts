@@ -2,7 +2,7 @@ import { validID } from "./admin";
 import type { JsonObject } from "./canonical";
 import { bearer, cappedBody, forbidden, invalid, jsonText } from "./http";
 import { readProject } from "./publication";
-import { encodeRoomJSON, parseEventPost, validateEnvelope } from "./room-wire";
+import { denialDecidedAt, encodeRoomJSON, parseEventPost, validateEnvelope } from "./room-wire";
 import type { Agent } from "./room-wire";
 import { appendAudit, authenticate } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
@@ -26,8 +26,12 @@ export function memberAgent(agent: Agent, member: string): Agent {
 }
 
 export function parseRoomRequest<T>(parse: (body: Uint8Array) => T, body: Uint8Array): T {
+  return readRoomInput(() => parse(body));
+}
+
+function readRoomInput<T>(read: () => T): T {
   try {
-    return parse(body);
+    return read();
   } catch (error) {
     if (error instanceof SyntaxError) throw invalid(error.message);
     throw error;
@@ -102,12 +106,15 @@ export function postEvent(request: Request, storage: HubStorage, room: string): 
       if (previous) return jsonText(storedEnvelope(previous) + "\n");
     }
     delete post.body.flagged;
-    const at = new Date().toISOString();
+    const now = Date.now();
+    const at = new Date(now).toISOString();
+    const decidedAt = readRoomInput(() => denialDecidedAt(post, now));
     const { event, envelope } = appendEvent(sql, { room, member, agent, type: post.type, body: post.body, at, key });
     if (event.type === "policy.denied") {
       appendAudit(sql, {
         action: "event.policy-denied", target: "event:" + event.id, actor_member_id: member,
-        agent_session_id: agent.id, meta: { room_id: room, seq: event.seq, event_id: event.id },
+        agent_session_id: agent.id,
+        meta: { room_id: room, seq: event.seq, event_id: event.id, ...(decidedAt !== undefined && { decided_at: decidedAt }) },
       }, at);
     }
     return jsonText(envelope + "\n");

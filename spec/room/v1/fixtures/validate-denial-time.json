@@ -1,0 +1,260 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "a denial with no decision time is valid",
+      "why": "An older hook can omit the field."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": "2026-01-15T12:00:00.000Z",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "a decision at receipt is valid",
+      "why": "A denial can arrive in the same millisecond."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": "2026-01-15T11:00:00.000Z",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "an hour-old decision is valid",
+      "why": "A queued denial has no age limit."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": "yesterday",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "a malformed decision time is invalid",
+      "why": "The field needs a UTC timestamp with milliseconds."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": "2026-02-29T12:00:00.000Z",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "an impossible calendar date is invalid",
+      "why": "February 29 must fall in a leap year."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": "2016-12-31T23:59:60.000Z",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "a leap second is invalid",
+      "why": "Seconds must be between 00 and 59."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": null,
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "a null decision time is invalid",
+      "why": "A present value must be a timestamp string."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": "2026-01-15T12:00:00.000+00:00",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "an offset spelling is invalid",
+      "why": "The field uses the hub's UTC spelling with Z."
+    },
+    {
+      "expected": {
+        "valid": true
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": "2026-01-15T12:00:30.000Z",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "a clock thirty seconds ahead is valid",
+      "why": "The skew limit includes its upper bound."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": "2026-01-15T12:00:30.001Z",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "a clock past the skew limit is invalid",
+      "why": "One millisecond beyond the skew limit rejects the post."
+    },
+    {
+      "expected": {
+        "valid": false
+      },
+      "input": {
+        "at": "2026-01-15T12:00:00.000Z",
+        "post": {
+          "agent": {
+            "id": "session",
+            "vendor": "codex"
+          },
+          "body": {
+            "action": "write",
+            "decided_at": "2026-01-16T12:00:00.000Z",
+            "path": "src/billing/invoice.ts",
+            "rule": "denied by policy"
+          },
+          "type": "policy.denied"
+        }
+      },
+      "name": "a far-future decision is invalid",
+      "why": "The hub rejects a decision a day ahead of receipt."
+    }
+  ],
+  "contract": "room",
+  "description": "Room denial posts checked against the hub receipt time.",
+  "operation": "validate-denial-time",
+  "version": 1
+}

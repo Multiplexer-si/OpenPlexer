@@ -427,6 +427,54 @@ test("posts, retries, and replays exact payloads with server-owned fields", asyn
   expect(elsewhere).toMatchObject({ seq: 1, room: "other" });
 });
 
+test("replays a denial stored before decision times were validated", async () => {
+  const { member } = await setup();
+  const key = "legacy-denial";
+  const original = eventReply(await check(await call(events, "POST", member, denial, key)));
+  const body = { ...object(original.payload.body), decided_at: "2026-01-15T11:00:00Z" };
+  const legacy = { ...original, payload: { ...original.payload, body } };
+  await runInDurableObject(stub(), (_hub, ctx) => {
+    ctx.storage.sql.exec("UPDATE room_events SET event_json = ? WHERE event_id = ?",
+      JSON.stringify(legacy.payload), legacy.event_id);
+  });
+
+  await check(await call(events, "POST", member, JSON.stringify({ type: "policy.denied", agent, body })), 400);
+  const later = eventReply(await check(await call(events, "POST", member, status)));
+  expect(later.seq).toBe(2);
+  expect(await check(await call(events, "GET", member))).toEqual([legacy, later]);
+  expect(await check(await call(events, "POST", member, denial, key))).toEqual(legacy);
+});
+
+test("keeps a queued denial's decision time in replay, the stream, and the audit export", async () => {
+  const { lead, member } = await setup();
+  const now = Date.now();
+  const decidedAt = new Date(now - 60 * 60_000).toISOString();
+  const post = (time: string) => JSON.stringify({
+    type: "policy.denied", agent, at: "spoofed",
+    body: { action: "write", path: "src/main.go", rule: "locked", decided_at: time },
+  });
+  await reject(await call(events, "POST", member, post("yesterday"), "queued"), 400,
+    "invalid input: body.decided_at must be a UTC timestamp with milliseconds");
+  await reject(await call(events, "POST", member, post(new Date(now + 24 * 60 * 60_000).toISOString()), "queued"), 400,
+    "invalid input: body.decided_at must be no more than 30 seconds after at");
+
+  const event = eventReply(await check(await call(events, "POST", member, post(decidedAt), "queued")));
+  expect(event).toMatchObject({ seq: 1, payload: { at: event.ts, body: { decided_at: decidedAt } } });
+  expect(Date.parse(event.ts)).toBeGreaterThanOrEqual(now);
+  expect(await check(await call(events, "GET", member))).toEqual([event]);
+  const stream = await openStream(member);
+  try {
+    expect(JSON.parse(text(await stream.next()))).toEqual(event);
+  } finally {
+    await stream.cancel();
+  }
+  const { entries } = object(await check(await call("/api/v1/audit/export", "GET", lead)));
+  expect(array(entries).map(object).filter((entry) => entry.action === "event.policy-denied")).toMatchObject([{
+    target: "event:" + event.event_id, created_at: event.ts,
+    meta: { room_id: "demo", seq: 1, event_id: event.event_id, decided_at: decidedAt },
+  }]);
+});
+
 test("allocates concurrent sequences and audits each denial once", async () => {
   const { lead, member } = await setup();
   const publication = call("/api/v1/projects/demo/policy", "PUT", lead, JSON.stringify({

@@ -17,6 +17,7 @@ The field descriptions are in the schemas. This page gives the rules that a sche
 | `v1/examples/room-event/` | One valid event for each event type, and one event from a sub-agent. |
 | `v1/examples/envelope/` | An envelope that carries an event, and an envelope about the connection. |
 | `v1/fixtures/validate-room-event.json` | Valid and invalid events: at least one of each for every event type. |
+| `v1/fixtures/validate-denial-time.json` | Denial posts with and without a decision time, bad timestamps, and the clock skew limit. |
 | `v1/examples/resume/`, `v1/examples/error/` | Valid payloads of the two messages. |
 | `v1/fixtures/validate-envelope.json` | Valid and invalid envelopes. |
 | `v1/fixtures/validate-resume.json`, `v1/fixtures/validate-error.json` | Valid and invalid payloads of the two messages. |
@@ -52,6 +53,16 @@ Every body also accepts `thread_id` and `reply_to`.
 An event with any other `type` is invalid, whatever its body.
 
 `text` and `addressed_to` of a `question`, and `text` of an `answer`, need one character that is not [white space](../README.md#white-space).
+
+### Denial time
+
+A hook puts the member's claimed decision time in `body.decided_at` when it queues a `policy.denied` event. Older hooks can omit it. The field uses the same UTC format with milliseconds as the hub writes in `at`, for example `2026-01-15T11:00:00.000Z`. The date must exist in the Gregorian calendar. Seconds range from `00` to `59`, so leap seconds are invalid. The JSON Schema pattern checks the spelling. Hubs also check the calendar values.
+
+For a new event, the hub rejects a decision time more than 30 seconds after its receipt time, measured to the millisecond. This allows a small lead on the hook clock and limits how far ahead a client can date a denial. The hub accepts older decisions of any age so an outbox can drain after a long outage. It stores and sends the timestamp exactly as posted.
+
+The hub sets `at` at receipt. Claim expiry still uses `at` under rule E2, and the envelope uses it for `ts`. Room order follows `seq`. Readers preserve a stored `decided_at` that fails the new format as a legacy extension. They use `at` when `decided_at` is absent or invalid. The audit record keeps both times when the member supplies a decision time. [Audit contract](../audit/README.md#room-denials).
+
+The reference at `7d80045a` has no decision time for Room denials. Its Room schema keeps unknown body fields, so it accepts `decided_at` as an extension. Its separate check verdict also uses the name `decided_at`.
 
 ## The envelope
 
@@ -224,6 +235,7 @@ The reference is at commit `7d80045a`.
 | Part | Source |
 |---|---|
 | The base object of an event and each body under `$defs` | Generated from the schemas in `packages/protocol/src/events.ts`. |
+| The `decided_at` field of `policy.denied` and `validate-denial-time` | Authored for OpenPlexer. |
 | The list of event types in `room-event` | Authored. It is the subset of the reference list that is in scope. |
 | The `allOf` in `room-event` that ties `body` to `type` | Authored. The reference does the same check in code, with one lookup by `type`. |
 | The `pattern` on `text` and `addressed_to` of `question`, and on `text` of `answer` | Authored. The reference trims these fields before it checks their length, which a JSON Schema cannot do. The pattern requires one character that is not [white space](../README.md#white-space). The extractor fails if the class in the pattern differs from the white space of the JavaScript runtime. |
@@ -233,7 +245,7 @@ The reference is at commit `7d80045a`.
 | The `if` and `then` in `envelope` that tie `payload` to the `type` `event` | Authored. The reference does the same check in `packages/protocol/src/ws-messages.ts`, in the schema that its hub and its daemon parse every message with. |
 | Every `description` | Authored. |
 | The overlap rules on this page | Authored from `apps/hub/src/claims/overlap.ts`. |
-| Every expected value in the fixtures | Computed by the schemas, by the `patternsOverlap` and `pathSetsOverlap` functions, by the `Subscription` class of the hub for `deliver`, and by the `OfflineCache` class of the daemon for `active-claims`. The reference does not compute the values of `error-close-codes`: its socket server needs a database, so the extractor reads them from the calls in the source of the server. In `validate-envelope`, the verdict of a message with the `type` `event` comes from the message schema in `ws-messages.ts`, and the verdict of every other message comes from the envelope schema in `envelope.ts`. |
+| Expected values in the reference fixtures | Computed by the schemas, by the `patternsOverlap` and `pathSetsOverlap` functions, by the `Subscription` class of the hub for `deliver`, and by the `OfflineCache` class of the daemon for `active-claims`. The reference does not compute the values of `error-close-codes`: its socket server needs a database, so the extractor reads them from the calls in the source of the server. In `validate-envelope`, the verdict of a message with the `type` `event` comes from the message schema in `ws-messages.ts`, and the verdict of every other message comes from the envelope schema in `envelope.ts`. |
 
 ## Intentional differences from the reference
 

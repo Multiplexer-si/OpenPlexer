@@ -80,6 +80,9 @@ var operations = map[string]func(t *testing.T, file fixtureFile) func(t *testing
 	"close-code":        func(*testing.T, fixtureFile) func(*testing.T, fixtureCase) { return runCloseCode },
 	"deliver":           func(*testing.T, fixtureFile) func(*testing.T, fixtureCase) { return runDeliver },
 	"active-claims":     func(*testing.T, fixtureFile) func(*testing.T, fixtureCase) { return runActiveClaims },
+	"validate-denial-time": func(*testing.T, fixtureFile) func(*testing.T, fixtureCase) {
+		return runValidateDenialTime
+	},
 }
 
 func TestFixtures(t *testing.T) {
@@ -129,6 +132,27 @@ func runValidate(t *testing.T, validate func([]byte) error, c fixtureCase) {
 				t.Errorf("the issue at %q has no reason", issue.Path)
 			}
 		}
+	}
+}
+
+func runValidateDenialTime(t *testing.T, c fixtureCase) {
+	var input struct {
+		At   string          `json:"at"`
+		Post json.RawMessage `json:"post"`
+	}
+	var expected struct{ Valid bool }
+	decodeStrict(t, c.Input, &input)
+	decodeStrict(t, c.Expected, &expected)
+	received, err := time.Parse(TimestampLayout, input.At)
+	if err != nil {
+		t.Fatal(err)
+	}
+	post, err := ParseEventPost(input.Post)
+	if err == nil {
+		_, err = post.DenialDecidedAt(received)
+	}
+	if valid := err == nil; valid != expected.Valid {
+		t.Fatalf("valid = %v, want %v (%v)", valid, expected.Valid, err)
 	}
 }
 

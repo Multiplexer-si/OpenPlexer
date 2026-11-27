@@ -99,7 +99,7 @@ export function remove(root: string, path: string): void {
   rmSync(join(root, path));
 }
 
-const checkpointFiles = new Set([
+const authoredFiles = new Set([
   "spec/audit/v1/checkpoint-payload.schema.json",
   "spec/audit/v1/checkpoint-protected-header.schema.json",
   "spec/audit/v1/checkpoint-verify-result.schema.json",
@@ -107,6 +107,7 @@ const checkpointFiles = new Set([
   "spec/audit/v1/examples/checkpoint-protected-header/header.json",
   "spec/audit/v1/examples/checkpoint-verify-result/valid.json",
   "spec/audit/v1/fixtures/checkpoint.json",
+  "spec/room/v1/fixtures/validate-denial-time.json",
 ]);
 
 /** Files under `spec/` that the extractor may generate or remove. */
@@ -114,6 +115,6 @@ export function ownedFiles(root: string): string[] {
   return (readdirSync(join(root, "spec"), { recursive: true, withFileTypes: true }) as import("node:fs").Dirent[])
     .filter((entry) => entry.isFile() && entry.name !== "README.md")
     .map((entry) => join(entry.parentPath, entry.name).slice(root.length + 1).replaceAll("\\", "/"))
-    .filter((path) => !checkpointFiles.has(path))
+    .filter((path) => !authoredFiles.has(path))
     .sort();
 }

@@ -50,7 +50,10 @@ func (g *Gate) QueueDenial(v Verdict, agent string) error {
 	}
 	text, err := json.Marshal(map[string]any{
 		"type": "policy.denied", "agent": map[string]string{"id": *q.AgentSessionID, "vendor": agent},
-		"body": map[string]string{"action": string(q.Action), "path": q.Path, "rule": "denied by policy"},
+		"body": map[string]string{
+			"action": string(q.Action), "path": q.Path, "rule": "denied by policy",
+			"decided_at": v.decidedAt.UTC().Format(room.TimestampLayout),
+		},
 	})
 	if err != nil {
 		return err

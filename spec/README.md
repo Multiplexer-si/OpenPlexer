@@ -118,7 +118,7 @@ A fixture file is a JSON document that lists cases for one operation of one cont
 | `version` | The version of the contract. |
 | `operation` | What an implementation does with each case. The table below lists the operations. |
 | `description` | What the file covers. |
-| `reference` | The commit of the reference and the source files that the cases exercise. OpenPlexer checkpoint fixtures omit this field. |
+| `reference` | The commit of the reference and the source files that the cases exercise. The checkpoint and denial time fixtures omit this field. |
 | `schema` | For `validate` only: the `$id` of the schema under test. |
 | `shared` | Input that every case of the file shares. |
 | `cases` | The cases. |
@@ -140,6 +140,7 @@ To run a case, do the operation on `shared` and `input`, and compare the whole r
 | `evaluate` | policy | `bundle` | An evaluation query | `decision`, and `area` if an area decided. Or `throws`, see below |
 | `verify-signed-bundle` | policy | `jwks` | `signature`, a compact JWS | `ok`, and `bundle` if `ok` is true |
 | `validate` | policy, room | None | Any JSON value | `valid` |
+| `validate-denial-time` | room | None | A denial `post` and its hub receipt time `at` | `valid` |
 | `patterns-overlap` | room | None | Two patterns, `a` and `b` | `overlap`, or `throws` |
 | `path-sets-overlap` | room | None | Two lists of patterns, `a` and `b` | `overlap`, or `throws` |
 | `deliver` | room | None | `since`, and `steps`: stored events that the hub replays, new events, and the end of the replay | `sent`, the `seq` of each event that the hub sends, and `last_seq` |
@@ -157,7 +158,7 @@ For `validate`, validate `input` against the schema that `schema` names, and com
 
 For `evaluate`, an `expected` of `{"throws": true}` means that the reference throws an error and returns no result. The contract does not define a result for such a case, but an implementation must fail closed on it. So a runner in any language passes the case if the implementation returns `deny` with no `area`, or if it fails with an error and returns no result. The runner fails the case if the implementation returns `allow`, or a result with an `area`. `informational.error` holds the message of the reference. The [second open question of the policy contract](policy/README.md#open-questions) lists the inputs, and the fixture `evaluate-class-syntax` holds the cases.
 
-The fixture-file schema refers to the contract schemas. A fixture file that validates against it has a valid `shared` and `expected` in every case. The `validate` and `verify-checkpoints` operations allow inputs that are invalid on purpose.
+The fixture-file schema refers to the contract schemas. A fixture file that validates against it has a valid `shared` and `expected` in every case. The `validate`, `validate-denial-time`, and `verify-checkpoints` operations allow inputs that are invalid on purpose.
 
 For `patterns-overlap` and `path-sets-overlap`, an `expected` of `{"throws": true}` means that the reference throws an error and returns no result. An implementation must fail closed on such a case: a runner passes the case only if the implementation reports an overlap. `informational.error` holds the message of the reference. The [seventh open question of the room contract](room/README.md#open-questions) lists the inputs.
 
@@ -207,7 +208,7 @@ The existing TypeScript implementation is the reference. The extractor writes th
 - A generated schema is the output of the JSON Schema export of Zod, the validation library that the reference uses. The descriptions in it are authored. The extractor writes `[0-9]` where Zod writes `\d` in a pattern, and `0-9` where Zod writes `\d` inside a class, to keep the pattern inside [the portable subset](#patterns).
 - An authored schema covers a shape that the reference defines only as a TypeScript type or in code. Each contract README lists the authored parts.
 - An example is authored. The extractor fails if the reference rejects one.
-- A fixture input is authored. Every expected value is computed by the reference code.
+- A fixture input is authored. The reference code computes expected values for fixtures based on the reference. The checkpoint and denial time fixtures cover OpenPlexer rules.
 
 [Regenerate the contracts and fixtures](../CONTRIBUTING.md#regenerate-the-contracts-and-fixtures) gives the commands.
 

@@ -233,8 +233,9 @@ type Verdict struct {
 	// denied, or the first query of the call.
 	Query policy.Query
 
-	result  policy.Result
-	decided bool
+	result    policy.Result
+	decided   bool
+	decidedAt time.Time
 }
 
 // Result returns the decision of the policy. It reports false when no
@@ -261,6 +262,7 @@ func (g *Gate) Decide(agent string, first policy.Query, rest ...policy.Query) (V
 	if g.status.Enforced() {
 		verdict.decided = true
 		verdict.Query, verdict.result = g.evaluate(queries)
+		verdict.decidedAt = g.now()
 	}
 	unlock, err := lockHome(g.home)
 	if err != nil {

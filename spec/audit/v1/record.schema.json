@@ -22,7 +22,7 @@
       ]
     },
     "created_at": {
-      "description": "The time of the record, in UTC with milliseconds, such as `2026-01-15T12:00:00.000Z`. Hashed as this exact string.",
+      "description": "The time the hub records the action, in UTC with milliseconds, such as `2026-01-15T12:00:00.000Z`. Hashed as this exact string.",
       "type": "string"
     },
     "flagged": {
@@ -39,7 +39,7 @@
     },
     "meta": {
       "additionalProperties": {},
-      "description": "More data about the action. Hashed.",
+      "description": "More data about the action. Hashed. A Room denial can include decided_at, the member's claimed decision time.",
       "propertyNames": {
         "type": "string"
       },

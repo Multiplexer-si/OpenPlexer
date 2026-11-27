@@ -1,5 +1,10 @@
 package room
 
+import (
+	"errors"
+	"time"
+)
+
 // EventPost holds the client-supplied fields of an event. The hub assigns
 // the agent for a human post and supplies the event metadata.
 type EventPost struct {
@@ -17,9 +22,31 @@ func ParseEventPost(text []byte) (EventPost, error) {
 				post.Agent = &agent
 			}
 			post.Body = r.eventBody(o, post.Type)
+			if post.Type == "policy.denied" {
+				if value, present := post.Body["decided_at"]; present && canonicalTimestamp(value) == "" {
+					r.fail("body.decided_at", "must be a UTC timestamp with milliseconds")
+				}
+			}
 		}
 		return post
 	})
+}
+
+// DenialDecidedAt checks the optional decision time of a parsed post against
+// the receipt time the hub will write to at.
+func (p EventPost) DenialDecidedAt(receivedAt time.Time) (string, error) {
+	decidedAt, _ := p.Body["decided_at"].(string)
+	if p.Type != "policy.denied" || decidedAt == "" {
+		return "", nil
+	}
+	decision, err := time.Parse(TimestampLayout, decidedAt)
+	if err != nil {
+		return "", err
+	}
+	if decision.UnixMilli()-receivedAt.UnixMilli() > (30 * time.Second).Milliseconds() {
+		return "", errors.New("body.decided_at must be no more than 30 seconds after at")
+	}
+	return decidedAt, nil
 }
 
 // ClaimPost holds the client's claim fields. The hub assigns a TTL when
