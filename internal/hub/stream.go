@@ -36,7 +36,7 @@ func (s *Store) streamRoom(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if admit {
-				return s.observe(memberID, roomID, nil)
+				return s.observe(st.Members[memberID].EnrollmentID, roomID, nil)
 			}
 			return nil
 		})

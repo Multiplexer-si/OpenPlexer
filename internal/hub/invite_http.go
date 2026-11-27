@@ -78,10 +78,7 @@ func (s *Store) inviteRoutes(mux *http.ServeMux) {
 		if len(req.body) != 0 {
 			return 0, nil, fmt.Errorf("%w: member deletion does not accept a body", errInvalid)
 		}
-		if err := st.removeMember(req.PathValue("member"), &req.member, s.now()); err != nil {
-			return 0, nil, err
-		}
-		return http.StatusOK, struct{}{}, s.save(st)
+		return http.StatusOK, struct{}{}, s.removeMember(st, req.PathValue("member"), &req.member)
 	}))
 }
 

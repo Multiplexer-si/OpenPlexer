@@ -44,9 +44,12 @@ func (s *Store) observationsDir() string { return filepath.Join(s.dir, "member-s
 
 var observationFileEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
 
-func (s *Store) observationsPath(memberID string) string {
-	// Member IDs are case-sensitive, including on case-insensitive volumes.
-	return filepath.Join(s.observationsDir(), observationFileEncoding.EncodeToString([]byte(memberID))+".json")
+func observationFilename(enrollmentID string) string {
+	return "enrollment-" + observationFileEncoding.EncodeToString([]byte(enrollmentID)) + ".json"
+}
+
+func (s *Store) observationsPath(enrollmentID string) string {
+	return filepath.Join(s.observationsDir(), observationFilename(enrollmentID))
 }
 
 func readObservations(path string) (memberObservations, error) {
@@ -75,9 +78,9 @@ func removeObservations(path string) error {
 }
 
 // observe runs under the store lock, after the caller authenticates the active credential.
-func (s *Store) observe(memberID, projectID string, version *int64) error {
+func (s *Store) observe(enrollmentID, projectID string, version *int64) error {
 	dir := s.observationsDir()
-	path := s.observationsPath(memberID)
+	path := s.observationsPath(enrollmentID)
 	all, err := readObservations(path)
 	if err != nil {
 		return err
@@ -100,9 +103,9 @@ func (s *Store) observationCutoff() string {
 	return s.now().UTC().Add(-observationRetention).Format(timestampFmt)
 }
 
-// PruneMemberObservations removes expired values and abandoned temporary files.
+// PruneMemberObservations removes expired values and files without an active enrollment.
 func (s *Store) PruneMemberObservations() error {
-	return s.locked(func() error {
+	return s.view(func(st *state) error {
 		dir := s.observationsDir()
 		files, err := os.ReadDir(dir)
 		if errors.Is(err, os.ErrNotExist) {
@@ -111,17 +114,21 @@ func (s *Store) PruneMemberObservations() error {
 		if err != nil {
 			return err
 		}
+		active := make(map[string]struct{}, len(st.Members))
+		for _, member := range st.Members {
+			active[observationFilename(member.EnrollmentID)] = struct{}{}
+		}
 		cutoff := s.observationCutoff()
 		for _, file := range files {
 			name := file.Name()
+			if !file.Type().IsRegular() || !strings.HasSuffix(name, ".json") && !strings.HasPrefix(name, ".snapshot-") {
+				continue
+			}
 			path := filepath.Join(dir, name)
-			if strings.HasPrefix(name, ".snapshot-") && file.Type().IsRegular() {
+			if _, ok := active[name]; !ok {
 				if err := removeObservations(path); err != nil {
 					return err
 				}
-				continue
-			}
-			if !file.Type().IsRegular() || !strings.HasSuffix(name, ".json") {
 				continue
 			}
 			all, err := readObservations(path)
@@ -262,7 +269,8 @@ func (s *Store) membersPage(st *state, q membersQuery) (MembersPage, error) {
 
 	page := MembersPage{Members: make([]MemberSync, 0, q.limit)}
 	for _, id := range ids {
-		all, err := readObservations(s.observationsPath(id))
+		member := st.Members[id]
+		all, err := readObservations(s.observationsPath(member.EnrollmentID))
 		if err != nil {
 			return MembersPage{}, err
 		}
@@ -291,7 +299,7 @@ func (s *Store) membersPage(st *state, q membersQuery) (MembersPage, error) {
 				page.NextCursor = &next
 				return page, nil
 			}
-			row := MemberSync{MemberID: id, HubRole: st.Members[id].Role, observation: all[project].retained(cutoff)}
+			row := MemberSync{MemberID: id, HubRole: member.Role, observation: all[project].retained(cutoff)}
 			if project != "" {
 				row.ProjectID = &project
 			}

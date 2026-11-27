@@ -183,7 +183,7 @@ func (s *Store) policyBundleEndpoint(w http.ResponseWriter, r *http.Request) {
 			return nil, errNotFound
 		}
 		if req.Method == http.MethodGet {
-			if err := s.observe(req.member, req.project(), &signed.Version); err != nil {
+			if err := s.observe(st.Members[req.member].EnrollmentID, req.project(), &signed.Version); err != nil {
 				return nil, err
 			}
 		}

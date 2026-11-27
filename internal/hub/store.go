@@ -163,19 +163,16 @@ func (st *state) hasTokenHash(hash [sha256.Size]byte) bool {
 }
 
 func (s *Store) RemoveMember(id string) error {
-	return s.update(func(st *state) error {
-		err := st.removeMember(id, nil, s.now())
+	return s.view(func(st *state) error {
+		err := s.removeMember(st, id, nil)
 		if errors.Is(err, errNotFound) {
 			return fmt.Errorf("%w: member %q", err, id)
 		}
-		if err != nil {
-			return err
-		}
-		return removeObservations(s.observationsPath(id))
+		return err
 	})
 }
 
-func (st *state) removeMember(id string, actor *string, now time.Time) error {
+func (s *Store) removeMember(st *state, id string, actor *string) error {
 	m, exists := st.Members[id]
 	if !exists {
 		return errNotFound
@@ -192,7 +189,15 @@ func (st *state) removeMember(id string, actor *string, now time.Time) error {
 		}
 	}
 	delete(st.Members, id)
-	return st.appendAudit(audit.Record{Action: "member.removed", Target: "member:" + id, ActorMemberID: actor}, now)
+	if err := st.appendAudit(audit.Record{Action: "member.removed", Target: "member:" + id, ActorMemberID: actor}, s.now()); err != nil {
+		return err
+	}
+	if err := s.save(st); err != nil {
+		return err
+	}
+	// Maintenance removes any file left after the roster commit.
+	_ = removeObservations(s.observationsPath(m.EnrollmentID))
+	return nil
 }
 
 func (s *Store) AddProject(id, repo string) error {

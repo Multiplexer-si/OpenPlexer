@@ -3,11 +3,13 @@ package hub
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"os"
+	"path/filepath"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -81,6 +83,76 @@ func assertSync(t *testing.T, row MemberSync, policyAt, roomAt string, version i
 	}
 }
 
+func onlyObservationPath(t *testing.T, s *Store) string {
+	t.Helper()
+	files, err := os.ReadDir(s.observationsDir())
+	if err != nil || len(files) != 1 {
+		t.Fatal("expected one observation file")
+	}
+	return filepath.Join(s.observationsDir(), files[0].Name())
+}
+
+func TestMemberSyncKeepsObservationsWhenRosterSaveFails(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("requires a user without write access to a read-only directory")
+	}
+	s, token, lead, _ := syncStore(t)
+	h := s.Handler()
+	syncPublish(t, s, "shop", 1)
+	wantStatus(t, call(h, http.MethodGet, syncPolicy, token, nil, ""), http.StatusOK)
+	fetchAt := s.now().UTC().Format(timestampFmt)
+
+	t.Cleanup(func() {
+		if err := os.Chmod(s.dir, 0700); err != nil {
+			t.Error("could not restore snapshot directory permissions")
+		}
+	})
+	if err := os.Chmod(s.dir, 0500); err != nil {
+		t.Fatal("could not make the snapshot directory read-only")
+	}
+	if err := s.RemoveMember("mem-ana"); !errors.Is(err, os.ErrPermission) {
+		t.Fatal("expected the roster save to fail")
+	}
+	assertSync(t, syncRow(t, h, lead), fetchAt, "", 1)
+	wantStatus(t, call(h, http.MethodHead, syncPolicy, token, nil, ""), http.StatusOK)
+}
+
+func TestMemberSyncIgnoresFilesLeftAfterRosterRemoval(t *testing.T) {
+	s, token, lead, _ := syncStore(t)
+	h := s.Handler()
+	syncPublish(t, s, "shop", 1)
+	wantStatus(t, call(h, http.MethodGet, syncPolicy, token, nil, ""), http.StatusOK)
+	path := onlyObservationPath(t, s)
+	saved, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantStatus(t, call(h, http.MethodDelete, membersURL+"/mem-ana", lead, nil, ""), http.StatusOK)
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("remote removal left an observation file")
+	}
+	// Restore the file a crash after the roster commit could leave behind.
+	if err := os.WriteFile(path, saved, 0600); err != nil {
+		t.Fatal(err)
+	}
+	if got := syncPage(t, h, lead, "").Members; len(got) != 1 || got[0].MemberID != "lead" {
+		t.Fatal("removed member remained visible")
+	}
+	replacement, err := s.AddMember("mem-ana", Member)
+	if err != nil {
+		t.Fatal(err)
+	}
+	assertSync(t, syncRow(t, h, lead), "", "", 0)
+	wantStatus(t, call(h, http.MethodGet, syncPolicy, replacement, nil, ""), http.StatusOK)
+	if err := s.PruneMemberObservations(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Error("maintenance left an observation file for the removed enrollment")
+	}
+	assertSync(t, syncRow(t, h, lead), s.now().UTC().Format(timestampFmt), "", 1)
+}
+
 func TestMemberSyncFetchExpiryAndRevocation(t *testing.T) {
 	s, token, lead, clock := syncStore(t)
 	h := s.Handler()
@@ -97,6 +169,7 @@ func TestMemberSyncFetchExpiryAndRevocation(t *testing.T) {
 	}
 	wantStatus(t, call(h, http.MethodGet, syncPolicy, token, nil, ""), http.StatusOK)
 	fetchAt := now()
+	path := onlyObservationPath(t, s)
 	assertSync(t, syncRow(t, h, lead), fetchAt, "", 1)
 	after, err := os.ReadFile(s.path())
 	if err != nil || string(after) != string(before) {
@@ -150,14 +223,14 @@ func TestMemberSyncFetchExpiryAndRevocation(t *testing.T) {
 	if err := s.PruneMemberObservations(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(s.observationsPath("mem-ana")); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("maintenance left an empty member file")
 	}
 	wantStatus(t, call(h, http.MethodGet, syncPolicy, token, nil, ""), http.StatusOK)
 	if err := Open(s.dir).RemoveMember("mem-ana"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := os.Stat(s.observationsPath("mem-ana")); !os.IsNotExist(err) {
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatal("member removal retained observations")
 	}
 	if got := syncPage(t, h, lead, "").Members; len(got) != 1 || got[0].MemberID != "lead" || got[0].ProjectID != nil {
