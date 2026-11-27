@@ -212,6 +212,21 @@ func register(userHome, root, home string, createHome bool, apply func(home stri
 	if err != nil && !(createHome && errors.Is(err, fs.ErrNotExist)) {
 		return fmt.Errorf("cannot register the OpenPlexer home: %w", err)
 	}
+	if homeInfo == nil {
+		canonicalHome, err = plannedPath(home)
+		if err != nil {
+			return err
+		}
+	}
+	return withRegistryLock(userHome, func(dir string, info fs.FileInfo, r Registry) error {
+		if err := checkJoinReservations(dir, canonicalRoot, rootInfo, canonicalHome, false); err != nil {
+			return err
+		}
+		return registerLocked(dir, info, r, root, canonicalRoot, rootInfo, home, canonicalHome, homeInfo, apply)
+	})
+}
+
+func withRegistryLock(userHome string, apply func(string, fs.FileInfo, Registry) error) error {
 	dir, err := registryDir(userHome)
 	if err != nil {
 		return err
@@ -245,6 +260,12 @@ func register(userHome, root, home string, createHome bool, apply func(home stri
 	if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
+	return apply(dir, info, r)
+}
+
+func registerLocked(dir string, info fs.FileInfo, r Registry, root, canonicalRoot string, rootInfo fs.FileInfo,
+	home, canonicalHome string, homeInfo fs.FileInfo, apply func(home string, publish func() error) error) error {
+	var err error
 	homes := make(map[string]string, len(r.claims)+1)
 	for _, c := range r.claims {
 		if _, found := homes[c.Root]; found {
