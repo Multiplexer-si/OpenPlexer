@@ -107,7 +107,11 @@ test("applying the same migration twice preserves the schema and rows", async ()
     storage.transaction((tx) => {
       tx.exec("INSERT INTO team (singleton, workspace_id, policy_kid, audit_kid) VALUES (1, 'workspace', 'policy', 'audit')");
     });
-    const schema = () => sql.exec("SELECT name, sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name").toArray();
+    const schema = () => sql.exec(`
+      SELECT name, sql FROM sqlite_schema
+      WHERE sql IS NOT NULL AND name NOT GLOB '_cf_*' AND name NOT GLOB 'sqlite_*'
+      ORDER BY name
+    `).toArray();
     const before = schema();
     expect(before.map((entry) => entry.name)).toEqual([
       "audit_records", "claims", "claims_expiry", "claims_room", "invites", "invites_live_member",
