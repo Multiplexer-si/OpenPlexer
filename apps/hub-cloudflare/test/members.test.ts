@@ -128,6 +128,8 @@ test("records the selected policy and initial Room page under the roster transac
       await assertMember({ last_policy_fetch_at: first, policy_version: 1 });
       clock.mockReturnValue(start + 1_000);
       await publish(2);
+      // Skew the stored display version without changing the signed payload.
+      ctx.storage.sql.exec("UPDATE policies SET version = 9 WHERE project_id = 'shop'");
       const before = auditSeq();
 
       const head = await send(policy + ".bundle", "HEAD", member);

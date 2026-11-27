@@ -28,7 +28,7 @@ function setup(): TransactionSQL {
   };
 }
 
-test("records the signed payload version when the stored display version differs", async () => {
+test("reports the signed payload version when the stored display version differs", async () => {
   const sql = setup();
   const { privateKey } = await generateSigningKey();
   const payload = '{"areas":[],"members":{},"project_id":"shop","repos":["api"],"roles":{},"version":1}';
@@ -37,14 +37,19 @@ test("records the signed payload version when the stored display version differs
   sql.exec(`INSERT INTO policies (project_id, version, bundle_json, kid, jws_header, jws_signature)
     VALUES ('shop', 9, ?, 'policy', ?, ?)`, payload, header, signed);
 
+  const page = () => membersPage(sql, parseMembersQuery("project_id=shop"), Date.now());
+  const head = readPolicy(sql, "shop");
+  expect(head.headers.get("OpenPlexer-Policy-Version")).toBe("1");
+  expect(page().members[0].policy_version).toBeNull();
+
   const response = readPolicy(sql, "shop", "ana");
   expect(response.status).toBe(200);
+  expect(response.headers.get("OpenPlexer-Policy-Version")).toBe("1");
   const served = parseJSON(await response.text());
   if (!isJsonObject(served)) throw new Error("invalid signed policy response");
   expect(served.version).toBe(9);
   expect(served.signature === signature).toBe(true);
-  const page = membersPage(sql, parseMembersQuery("project_id=shop"), Date.now());
-  expect(page.members[0].policy_version).toBe(1);
+  expect(page().members[0].policy_version).toBe(1);
 });
 
 test("retains and prunes the two observations independently at 30 days", () => {

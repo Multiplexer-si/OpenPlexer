@@ -2,9 +2,12 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -27,6 +30,10 @@ func TestMembersCommandLocalAndRemote(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	currentMember, err := s.AddMember("mem-bob", hub.Member)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if err := s.AddProject("shop", "api"); err != nil {
 		t.Fatal(err)
 	}
@@ -37,16 +44,22 @@ func TestMembersCommandLocalAndRemote(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	publish(1)
 	h := s.Handler()
-	request := httptest.NewRequest(http.MethodGet, "/api/v1/projects/shop/policy.bundle", nil)
-	request.Header.Set("Authorization", "Bearer "+member)
-	res := httptest.NewRecorder()
-	h.ServeHTTP(res, request)
-	if res.Code != http.StatusOK {
-		t.Fatalf("policy fetch returned %d", res.Code)
+	fetch := func(credential string) {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodGet, "/api/v1/projects/shop/policy.bundle", nil)
+		request.Header.Set("Authorization", "Bearer "+credential)
+		res := httptest.NewRecorder()
+		h.ServeHTTP(res, request)
+		if res.Code != http.StatusOK {
+			t.Fatalf("policy fetch returned %d", res.Code)
+		}
 	}
+	publish(1)
+	fetch(member)
 	publish(2)
+	fetch(currentMember)
+	setMismatchedPolicyDisplay(t, dir)
 
 	for _, tc := range []struct {
 		name string
@@ -61,15 +74,45 @@ func TestMembersCommandLocalAndRemote(t *testing.T) {
 			args := append([]string{"members", "--project", "shop"}, tc.args...)
 			code := runWithInput(args, strings.NewReader(lead), &out, &stderr, tc.rt)
 			want := "mem-ana  role member  policy v1 (current v2)  last check-in just now\n" +
+				"mem-bob  role member  policy v2  last check-in just now\n" +
 				"mem-lee  role lead  no recent observation\n"
 			if code != 0 || out.String() != want || stderr.Len() != 0 {
-				t.Fatalf("members returned %d or unexpected output", code)
+				t.Fatalf("members must compare observations to signed version 2, exit %d", code)
 			}
 		})
 	}
 	page, err := s.ListMembers("shop", "")
-	if err != nil || len(page.Members) != 2 || page.Members[1].LastPolicyFetchAt != nil {
+	if err != nil || len(page.Members) != 3 || page.Members[2].LastPolicyFetchAt != nil {
 		t.Fatal("listing members changed the lead's observation")
+	}
+}
+
+func setMismatchedPolicyDisplay(t *testing.T, dir string) {
+	t.Helper()
+	path := filepath.Join(dir, "state.json")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var snapshot map[string]json.RawMessage
+	var policies map[string]hub.SignedBundle
+	if json.Unmarshal(data, &snapshot) != nil || json.Unmarshal(snapshot["policies"], &policies) != nil {
+		t.Fatal("invalid policy snapshot")
+	}
+	current := policies["shop"]
+	current.Version = 9
+	current.Bundle = json.RawMessage(`{"version":9}`)
+	policies["shop"] = current
+	snapshot["policies"], err = json.Marshal(policies)
+	if err != nil {
+		t.Fatal("could not encode policy data")
+	}
+	data, err = json.Marshal(snapshot)
+	if err != nil {
+		t.Fatal("could not encode snapshot")
+	}
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
 	}
 }
 
