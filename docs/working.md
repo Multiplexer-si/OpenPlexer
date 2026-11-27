@@ -1,6 +1,6 @@
 # Try OpenPlexer end to end
 
-This walkthrough runs every part of OpenPlexer on one machine in about 15 minutes. You run a hub, connect as a developer, have the gate allow one write and block another, send a Room message, and verify the audit log. Every step shows the output to expect.
+This walkthrough runs every part of OpenPlexer on one machine in about 15 minutes. You run a hub, connect as a developer, have the gate allow one write and block another, watch the Room, and verify the audit log. Every step shows the output to expect.
 
 Everything goes in `~/openplexer-test`. The hook is installed only in a throwaway project there, so your own `~/.claude` settings do not change. Delete the folder when you are done.
 
@@ -12,12 +12,13 @@ You need:
 - The three binaries on your `PATH`. Follow [Install OpenPlexer](install.md), or see the shortcut in step 1.
 - Claude Code, only for step 5. Step 5 uses a little of the Claude account you are signed in with.
 
-Use two terminal windows. Run each command in the window that the step names.
+Use three terminal windows. Run each command in the window that the step names.
 
 | Window | Runs |
 |---|---|
 | A | The hub. It stays running. |
 | B | Everything else. |
+| C | The daemon, which prints the Room. It stays running. |
 
 Port 8787 must be free. If another hub is already running on it, stop that hub first, or use another port in every command.
 
@@ -159,19 +160,15 @@ cd ~/openplexer-test/demo && printf '{"session_id":"s1","hook_event_name":"PreTo
 
 The hook prints a JSON answer with `"permissionDecision":"deny"`. For `src/app.ts` it prints nothing, which allows the write.
 
-## 6. Run the daemon as a login service (window B)
+## 6. Watch the Room (window C)
 
-Start the service from your login session. It syncs policy, sends queued Room posts, and restarts if it stops.
+The daemon connects to the hub and prints each Room message as one line of JSON.
 
 ```bash
-export OPENPLEXER_HOME="$HOME/openplexer-test/agent-home"
-openplexer service install
-openplexer service status
+export OPENPLEXER_HOME="$HOME/openplexer-test/agent-home" && openplexer daemon
 ```
 
-Status shows the service state and the local policy state. A running service can still have stale policy if it cannot reach the hub. If a foreground daemon is already running for this home, stop it before you install the service.
-
-The service sends the queued `README.md` denial from step 5. Queue a status message for the Room.
+Leave it running. It prints the `README.md` denial from step 5, because the gate reports each denial to the Room. Then post a status message from window B.
 
 ```bash
 openplexer room post <<'JSON'
@@ -179,9 +176,7 @@ openplexer room post <<'JSON'
 JSON
 ```
 
-The service logs operational errors. On macOS, status prints the paths to `logs/daemon.stdout.log` and `logs/daemon.stderr.log` in the OpenPlexer home. To rotate them, run `openplexer service uninstall`, rename the files, and run `openplexer service install`. The service opens new logs when it starts.
-
-On Linux, status prints the `journalctl --user -u` command for the service. The journal handles rotation.
+Window C prints a line that contains `"summary":"Hello from my agent"`.
 
 In this release, people and tools read the Room. The agents themselves do not receive Room messages.
 
@@ -215,7 +210,7 @@ record 3 (position 3): rule A3: expected hash ca32..., found "7cac...". Check th
 
 ## Clean up
 
-In window B, run `openplexer service uninstall` for the test home. Stop the hub in window A with Ctrl+C. Then delete the test folder and the binaries.
+Stop windows A and C with Ctrl+C. Then delete the test folder and the binaries.
 
 ```bash
 rm -rf ~/openplexer-test ~/.local/bin/openplexer ~/.local/bin/openplexer-hub ~/.local/bin/openplexer-verify
@@ -231,7 +226,7 @@ For step 4, use the HTTPS origin, your member token, and the operator's trusted 
 
 Use the same policy checks, Claude Code prompts, and Room post from steps 4 to 6. Skip the hook install in step 5 if you already installed it through the Cloudflare guide. In every terminal, use the home for the member running that command. Use the Codex hook and trust steps from the Cloudflare guide to test the second agent.
 
-For step 7, export over HTTPS with a lead token. Then use the same verifier and edit a copy of the export to see the A3 tamper check. Uninstall the service for each test home and delete the disposable Worker when you finish. [Export and verify the audit log](cloudflare.md#7-export-and-verify-the-audit-log) · [Delete a test deployment](cloudflare.md#delete-a-test-deployment)
+For step 7, export over HTTPS with a lead token. Then use the same verifier and edit a copy of the export to see the A3 tamper check. Stop both daemons and delete the disposable Worker when you finish. [Export and verify the audit log](cloudflare.md#7-export-and-verify-the-audit-log) · [Delete a test deployment](cloudflare.md#delete-a-test-deployment)
 
 ## Next steps
 
