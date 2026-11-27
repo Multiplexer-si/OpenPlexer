@@ -368,7 +368,9 @@ func (j JoinLock) Publish(p PendingJoin, rename bool, afterRename func() error) 
 	})
 }
 
-func (j JoinLock) Release(p PendingJoin) error {
+// Release removes the reservation and stage. A matching renamed home still
+// needs its reservation if the registry does not yet point to it.
+func (j JoinLock) Release(p PendingJoin, matchesRenamed func() (bool, error)) error {
 	return withRegistryLock(j.User, func(_ string, _ fs.FileInfo, r Registry) error {
 		home, err := plannedPath(p.Home)
 		if err != nil || home != p.Home || !sameDirectory(j.Root, j.rootInfo) {
@@ -377,7 +379,13 @@ func (j JoinLock) Release(p PendingJoin) error {
 		if _, err := os.Lstat(p.Home); err == nil {
 			claim, err := r.Lookup(j.Root)
 			if err != nil || claim.Root != j.Root || claim.Home != p.Home {
-				return errors.New("the home is in place; resume openplexer join to finish registration")
+				matches, err := matchesRenamed()
+				if err != nil {
+					return err
+				}
+				if matches {
+					return errors.New("the home is in place; resume openplexer join to finish registration")
+				}
 			}
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			return err

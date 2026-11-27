@@ -51,6 +51,8 @@ type identity struct {
 
 const identityFile = "enrollment.json"
 
+var errNoIdentity = errors.New("the home already exists without a join identity")
+
 // Join enrolls a checkout or resumes its saved enrollment. Optional installs
 // run in the CLI after the home and registry are available.
 func Join(ctx context.Context, req Request) (Result, error) {
@@ -159,7 +161,7 @@ func joinLocked(ctx context.Context, j projects.JoinLock, home string, p *projec
 					return Result{}, err
 				}
 			}
-			if err := j.Release(*p); err != nil {
+			if err := releasePending(j, *p); err != nil {
 				return Result{}, err
 			}
 		}
@@ -186,7 +188,7 @@ func joinLocked(ctx context.Context, j projects.JoinLock, home string, p *projec
 	receipt, pendingID, err := link.redeem(ctx, tokenHash)
 	if err != nil {
 		if err == redeemStatus(http.StatusGone) {
-			err = errors.Join(err, j.Release(*p))
+			err = errors.Join(err, releasePending(j, *p))
 		}
 		return Result{}, err
 	}
@@ -239,7 +241,7 @@ func joinLocked(ctx context.Context, j projects.JoinLock, home string, p *projec
 	if err := checkpoint("registered"); err != nil {
 		return Result{}, err
 	}
-	return result, j.Release(*p)
+	return result, releasePending(j, *p)
 }
 
 func readIdentity(home string) (*identity, error) {
@@ -249,6 +251,9 @@ func readIdentity(home string) (*identity, error) {
 		return nil, err
 	}
 	data, err := projects.ReadJoinFile(filepath.Join(home, identityFile))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, errNoIdentity
+	}
 	if err != nil {
 		return nil, errors.New("the home already exists without a readable join identity")
 	}
@@ -287,6 +292,24 @@ func syncEnrollment(ctx context.Context, path string, id identity, fingerprint s
 	return Result{Root: id.Root, Home: id.Home, Status: status, Receipt: id.Receipt, Grants: grants, Temporary: temporary}, nil
 }
 
+func releasePending(j projects.JoinLock, p projects.PendingJoin) error {
+	return j.Release(p, func() (bool, error) {
+		saved, err := readIdentity(p.Home)
+		if errors.Is(err, errNoIdentity) {
+			return false, nil
+		}
+		if err != nil || saved == nil {
+			return false, err
+		}
+		var claim pending
+		if jsonv2.Unmarshal(p.Data, &claim, jsonv2.RejectUnknownMembers(true)) != nil || !validCode(claim.Bearer) {
+			return false, errors.New("cannot check the pending identity for the existing home")
+		}
+		return saved.Root == p.Root && saved.Home == p.Home && saved.Origin == claim.Origin &&
+			saved.CodeHash == claim.CodeHash && saved.TokenHash == digest(claim.Bearer), nil
+	})
+}
+
 // Discard releases private pending state. It never contacts the hub.
 func Discard(user, root, explicitHome string) (bool, error) {
 	var discarded bool
@@ -296,7 +319,7 @@ func Discard(user, root, explicitHome string) (bool, error) {
 			return err
 		}
 		return j.WithHome(home, func() error {
-			if err := j.Release(*p); err != nil {
+			if err := releasePending(j, *p); err != nil {
 				return err
 			}
 			discarded = true

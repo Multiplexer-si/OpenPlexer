@@ -465,3 +465,36 @@ func TestJoinResumesAfterPolicyUnavailable(t *testing.T) {
 		t.Fatalf("join did not recover its receipt and sync (%v)", err)
 	}
 }
+
+func TestJoinDiscardPreservesAnUnrelatedHome(t *testing.T) {
+	f := newJoinFixture(t)
+	f.invite("new-member", false)
+	f.req.Home = filepath.Join(f.req.UserHome, "selected")
+	interrupted := errors.New("test interruption")
+	if _, err := f.join(func(step string) error {
+		if step == "configured" {
+			return interrupted
+		}
+		return nil
+	}); !errors.Is(err, interrupted) {
+		t.Fatal("join did not stop before publication")
+	}
+	if err := os.Mkdir(f.req.Home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	foreign := filepath.Join(f.req.Home, "keep")
+	if err := os.WriteFile(foreign, []byte("unrelated home"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	removed, err := Discard(f.req.UserHome, f.req.Root, "")
+	if err != nil || !removed {
+		t.Fatalf("an unrelated home prevented discard: %v", err)
+	}
+	if data, err := os.ReadFile(foreign); err != nil || string(data) != "unrelated home" {
+		t.Fatal("discard changed the unrelated home")
+	}
+	stages, err := filepath.Glob(filepath.Join(f.req.UserHome, ".openplexer-join-*"))
+	if err != nil || len(stages) != 0 {
+		t.Fatal("discard left private staging data")
+	}
+}
