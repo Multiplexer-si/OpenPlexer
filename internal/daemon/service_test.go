@@ -362,6 +362,111 @@ func (run serviceRunnerFunc) run(ctx context.Context, name string, args ...strin
 	return run(ctx, name, args...)
 }
 
+func TestServiceWaitsForDaemonAfterManagerReportsPID(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	home := t.TempDir()
+	serviceTestHome(t, home)
+	streaming := make(chan struct{})
+	useHubTransport(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+		if strings.HasSuffix(r.URL.Path, "/stream") {
+			close(streaming)
+			<-r.Context().Done()
+			return nil, r.Context().Err()
+		}
+		return &http.Response{StatusCode: 404, Body: http.NoBody}, nil
+	}))
+	daemonCtx, cancel := context.WithCancel(t.Context())
+	done := make(chan error, 1)
+	var launched bool
+	defer func() {
+		cancel()
+		if launched {
+			if err := <-done; err != nil {
+				t.Error(err)
+			}
+		}
+	}()
+	var started bool
+	var polls int
+	runner := serviceRunnerFunc(func(ctx context.Context, _ string, args ...string) ([]byte, error) {
+		if args[1] == "enable" {
+			started = true
+			return nil, nil
+		}
+		if !started {
+			return []byte("LoadState=not-found\n"), nil
+		}
+		polls++
+		if polls == 2 {
+			if _, err := os.Stat(filepath.Join(home, "room.lock")); !errors.Is(err, os.ErrNotExist) {
+				t.Fatalf("installer touched the Room lock before the daemon started: %v", err)
+			}
+			launched = true
+			go func() { done <- Run(daemonCtx, home, time.Now, nil, func(error) {}) }()
+			select {
+			case <-streaming:
+			case err := <-done:
+				launched = false
+				t.Fatalf("daemon exited during startup: %v", err)
+			case <-ctx.Done():
+				t.Fatal("daemon did not finish starting")
+			}
+		}
+		return fmt.Appendf(nil, "LoadState=loaded\nActiveState=active\nMainPID=%d\n", os.Getpid()), nil
+	})
+	s, err := newService(home, "linux", runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Install("/opt/openplexer"); err != nil {
+		t.Fatal(err)
+	}
+	if polls < 2 {
+		t.Fatal("install returned before the daemon started")
+	}
+}
+
+func TestServiceReinstallChecksRunningJobOwnsRoom(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	for _, platform := range []string{"darwin", "linux"} {
+		t.Run(platform, func(t *testing.T) {
+			home := t.TempDir()
+			serviceTestHome(t, home)
+			const binary = "/opt/openplexer"
+			var checks int
+			runner := serviceRunnerFunc(func(_ context.Context, _ string, args ...string) ([]byte, error) {
+				if args[0] == "enable" {
+					return nil, nil
+				}
+				checks++
+				if checks == 2 {
+					holdServiceTestRoom(t, home, 43)
+				}
+				if platform == "darwin" {
+					return []byte("state = running\npid = 42\n"), nil
+				}
+				return []byte("LoadState=loaded\nActiveState=active\nMainPID=42\nUnitFileState=enabled\n"), nil
+			})
+			s, err := newService(home, platform, runner)
+			if err != nil {
+				t.Fatal(err)
+			}
+			definition, err := s.definition(binary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := writeFile(filepath.Dir(s.path), filepath.Base(s.path), definition); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Install(binary); err == nil || !strings.Contains(err.Error(), "stop the foreground openplexer daemon") {
+				t.Fatalf("reinstall did not report the foreground daemon: %v", err)
+			}
+		})
+	}
+}
+
 func TestServiceForegroundWinsDuringStart(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", "")
