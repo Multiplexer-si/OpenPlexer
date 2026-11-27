@@ -51,7 +51,8 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	if err != nil {
 		return err
 	}
-	if _, err := cfg.client(); err != nil {
+	client, err := cfg.client()
+	if err != nil {
 		return err
 	}
 	file, err := lockRoom(home)
@@ -60,11 +61,6 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	}
 	defer file.Close()
 	started := time.Now().UTC()
-	activity := DaemonActivity{PID: os.Getpid(), StartedAt: started, HeartbeatAt: started}
-	if err := writeJSON(home, daemonPIDFile, activity); err != nil {
-		return fmt.Errorf("publish daemon activity: %w", err)
-	}
-	defer os.Remove(filepath.Join(home, daemonPIDFile))
 
 	var cursor roomCursor
 	found, err := readJSON(home, roomCursorFile, map[string]any{"last_seq": &cursor.LastSeq})
@@ -74,6 +70,14 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	if found && (cursor.LastSeq <= 0 || cursor.LastSeq > 1<<53-1) {
 		return errors.New("invalid stored Room cursor")
 	}
+	receiver := room.NewReceiver()
+	receiver.Restore(cfg.ProjectID, cursor.LastSeq)
+	activity := DaemonActivity{PID: os.Getpid(), StartedAt: started, HeartbeatAt: time.Now().UTC()}
+	if err := writeJSON(home, daemonPIDFile, activity); err != nil {
+		return fmt.Errorf("publish daemon activity: %w", err)
+	}
+	defer os.Remove(filepath.Join(home, daemonPIDFile))
+
 	ctx, cancel := context.WithCancel(ctx)
 	var workers sync.WaitGroup
 	workers.Go(func() { pollHub(ctx, home, now, report) })
@@ -83,18 +87,8 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 		workers.Wait()
 	}()
 
-	receiver := room.NewReceiver()
-	receiver.Restore(cfg.ProjectID, cursor.LastSeq)
 	for ctx.Err() == nil {
-		cfg, err = readConfig(home)
-		if err != nil {
-			return err
-		}
-		client, err := cfg.client()
-		if err != nil {
-			return err
-		}
-		err = client.followRoom(ctx, now, receiver, func(step room.Step, seq int64) error {
+		err := client.followRoom(ctx, now, receiver, func(step room.Step, seq int64) error {
 			if delivered, ok := step.(room.Deliver); ok {
 				if err := receive(delivered.Event); err != nil {
 					return err
@@ -112,12 +106,22 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 		if err != io.EOF {
 			report(fmt.Errorf("Room stream: %w", err))
 		}
-		if errors.Is(err, errRoomBehind) {
-			continue
+		if !errors.Is(err, errRoomBehind) {
+			select {
+			case <-time.After(time.Second):
+			case <-ctx.Done():
+			}
 		}
-		select {
-		case <-time.After(time.Second):
-		case <-ctx.Done():
+		if ctx.Err() != nil {
+			break
+		}
+		cfg, err := readConfig(home)
+		if err != nil {
+			return err
+		}
+		client, err = cfg.client()
+		if err != nil {
+			return err
 		}
 	}
 	return nil

@@ -188,7 +188,7 @@ func (s *Service) waitForStart(requestedAt time.Time, existingPID int) error {
 	defer cancel()
 	poll := time.NewTicker(50 * time.Millisecond)
 	defer poll.Stop()
-	failure := "the managed daemon did not acquire the Room lock"
+	failure := "the managed daemon did not finish startup"
 	for ctx.Err() == nil {
 		status, err := s.managerStatus(ctx)
 		if ctx.Err() != nil {
