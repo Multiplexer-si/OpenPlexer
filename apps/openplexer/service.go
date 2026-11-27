@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/daemon"
 	"github.com/multiplexer-si/openplexer/internal/projects"
@@ -61,6 +62,7 @@ func (c command) serviceStatus(s *daemon.Service) int {
 	if status.PID > 0 {
 		fmt.Fprintf(c.stdout, "pid: %d\n", status.PID)
 	}
+	c.reportDaemonHeartbeat(status.Activity)
 	if status.Failure != "" {
 		fmt.Fprintf(c.stdout, "manager: %s\n", status.Failure)
 	}
@@ -75,4 +77,10 @@ func (c command) serviceStatus(s *daemon.Service) int {
 		return exitFailure
 	}
 	return exitOK
+}
+
+func (c command) reportDaemonHeartbeat(activity daemon.DaemonActivity) {
+	if !activity.HeartbeatAt.IsZero() {
+		fmt.Fprintf(c.stdout, "daemon heartbeat: %s\n", activity.HeartbeatAt.Format(time.RFC3339Nano))
+	}
 }

@@ -9,8 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
-	"strconv"
-	"syscall"
 	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/projects"
@@ -30,6 +28,7 @@ type Service struct {
 type ServiceStatus struct {
 	State, Failure  string
 	PID             int
+	Activity        DaemonActivity
 	loaded, enabled bool
 }
 
@@ -135,24 +134,20 @@ func (s *Service) Install(binary string) error {
 	if err != nil {
 		return err
 	}
-	if current.PID == 0 {
-		room, err := lockRoom(s.Home)
-		switch {
-		case err == nil:
-			room.Close()
-		case !errors.Is(err, syscall.EWOULDBLOCK):
-			return err
-		default:
-			if current.loaded {
-				// The manager may have started its daemon since the first status check.
-				current, err = s.managerStatus(ctx)
-				if err != nil {
-					return err
-				}
+	activity, err := ReadDaemonActivity(s.Home)
+	if err != nil {
+		return err
+	}
+	if activity.PID != current.PID && activity.running() {
+		if current.loaded {
+			// The manager may have started its daemon since the first status check.
+			current, err = s.managerStatus(ctx)
+			if err != nil {
+				return err
 			}
-			if current.PID == 0 {
-				return errors.New("stop the foreground openplexer daemon before installing the service for this home")
-			}
+		}
+		if activity.PID != current.PID {
+			return errors.New("stop the foreground openplexer daemon before installing the service for this home")
 		}
 	}
 	if s.platform == "darwin" {
@@ -175,14 +170,10 @@ func (s *Service) Install(binary string) error {
 			return err
 		}
 	}
-	if s.platform == "linux" && current.State == "running" && current.enabled {
-		return nil
-	}
-	if err := s.start(current); err != nil {
-		return s.startError(err)
-	}
-	if current.State == "running" {
-		return nil
+	if s.platform != "linux" || current.State != "running" || !current.enabled {
+		if err := s.start(current); err != nil {
+			return s.startError(err)
+		}
 	}
 	return s.waitForStart()
 }
@@ -205,11 +196,11 @@ func (s *Service) waitForStart() error {
 			failure = status.Failure
 		}
 		if status.State == "running" {
-			ready, err := s.roomLockHeldBy(status.PID)
+			activity, err := ReadDaemonActivity(s.Home)
 			if err != nil {
 				return s.startError(err)
 			}
-			if ready {
+			if activity.PID == status.PID {
 				return nil
 			}
 		}
@@ -219,22 +210,6 @@ func (s *Service) waitForStart() error {
 		}
 	}
 	return s.startError(errors.New(failure))
-}
-
-func (s *Service) roomLockHeldBy(pid int) (bool, error) {
-	room, err := lockRoom(s.Home)
-	if err == nil {
-		room.Close()
-		return false, nil
-	}
-	if !errors.Is(err, syscall.EWOULDBLOCK) {
-		return false, err
-	}
-	owner, err := os.ReadFile(filepath.Join(s.Home, roomPIDFile))
-	if errors.Is(err, os.ErrNotExist) {
-		return false, nil
-	}
-	return string(owner) == strconv.Itoa(pid), err
 }
 
 func (s *Service) startError(err error) error {
@@ -273,6 +248,12 @@ func (s *Service) Uninstall() error {
 // Status reports the service independently of the home policy's freshness.
 func (s *Service) Status() (ServiceStatus, error) {
 	status, err := s.managerStatus(context.Background())
+	if err == nil && status.State == "running" {
+		activity, _ := ReadDaemonActivity(s.Home)
+		if activity.PID == status.PID {
+			status.Activity = activity
+		}
+	}
 	if err != nil || status.loaded {
 		return status, err
 	}

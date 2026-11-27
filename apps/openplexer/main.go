@@ -223,6 +223,8 @@ func (c command) status() int {
 	}
 	status := gate.Status()
 	c.report(status)
+	activity, _ := daemon.ReadDaemonActivity(c.home)
+	c.reportDaemonHeartbeat(activity)
 	switch status.State {
 	case daemon.Verified:
 		return exitOK

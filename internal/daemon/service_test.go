@@ -9,7 +9,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"syscall"
 	"testing"
@@ -70,7 +69,8 @@ func holdServiceTestRoom(t *testing.T, home string, pid int) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { file.Close() })
-	if err := writeFile(home, roomPIDFile, strconv.AppendInt(nil, int64(pid), 10)); err != nil {
+	started := time.Now().UTC()
+	if err := writeJSON(home, daemonPIDFile, DaemonActivity{PID: pid, StartedAt: started, HeartbeatAt: started}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -215,7 +215,7 @@ WantedBy=default.target
 			runner.calls = append(runner.calls, install...)
 			runner.calls = append(runner.calls, running, running, running)
 			runner.calls = append(runner.calls, again...)
-			runner.calls = append(runner.calls, running)
+			runner.calls = append(runner.calls, running, running)
 			runner.calls = append(runner.calls, uninstall...)
 			runner.calls = append(runner.calls, missing, missing)
 			runner.onSuccess = func(args []string) {
@@ -424,6 +424,23 @@ func TestServiceWaitsForDaemonAfterManagerReportsPID(t *testing.T) {
 	}
 	if polls < 2 {
 		t.Fatal("install returned before the daemon started")
+	}
+	path := filepath.Join(home, daemonPIDFile)
+	info, err := os.Stat(path)
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Fatalf("expected an owner-only daemon record: %v", err)
+	}
+	activity, err := ReadDaemonActivity(home)
+	if err != nil || activity.PID != os.Getpid() || activity.StartedAt.IsZero() || activity.HeartbeatAt.IsZero() {
+		t.Fatalf("daemon did not publish its activity: %+v, %v", activity, err)
+	}
+	cancel()
+	launched = false
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("clean daemon exit left its record: %v", err)
 	}
 }
 

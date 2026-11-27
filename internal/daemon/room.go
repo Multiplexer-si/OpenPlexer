@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/room"
@@ -18,7 +19,6 @@ import (
 
 const (
 	roomCursorFile = "room-cursor.json"
-	roomPIDFile    = "room.pid"
 	roomStreamType = "application/x-ndjson"
 )
 
@@ -59,6 +59,13 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 		return err
 	}
 	defer file.Close()
+	started := time.Now().UTC()
+	activity := DaemonActivity{PID: os.Getpid(), StartedAt: started, HeartbeatAt: started}
+	if err := writeJSON(home, daemonPIDFile, activity); err != nil {
+		return fmt.Errorf("publish daemon activity: %w", err)
+	}
+	defer os.Remove(filepath.Join(home, daemonPIDFile))
+
 	var cursor roomCursor
 	found, err := readJSON(home, roomCursorFile, map[string]any{"last_seq": &cursor.LastSeq})
 	if err != nil {
@@ -67,20 +74,13 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	if found && (cursor.LastSeq <= 0 || cursor.LastSeq > 1<<53-1) {
 		return errors.New("invalid stored Room cursor")
 	}
-	if err := writeFile(home, roomPIDFile, strconv.AppendInt(nil, int64(os.Getpid()), 10)); err != nil {
-		return fmt.Errorf("publish the Room lock owner: %w", err)
-	}
-	defer os.Remove(filepath.Join(home, roomPIDFile))
-
 	ctx, cancel := context.WithCancel(ctx)
-	policyDone := make(chan struct{})
-	go func() {
-		defer close(policyDone)
-		pollHub(ctx, home, now, report)
-	}()
+	var workers sync.WaitGroup
+	workers.Go(func() { pollHub(ctx, home, now, report) })
+	workers.Go(func() { activity.heartbeat(ctx, home, report) })
 	defer func() {
 		cancel()
-		<-policyDone
+		workers.Wait()
 	}()
 
 	receiver := room.NewReceiver()
