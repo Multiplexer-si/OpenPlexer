@@ -95,7 +95,7 @@ Leave it running. The hub listens only on this machine.
 
 ## 4. Connect as a developer (window B)
 
-`OPENPLEXER_HOME` keeps the test configuration out of your real home folder. Set it in every window that runs `openplexer`.
+`OPENPLEXER_HOME` keeps the test configuration out of your real home folder. Set it while you configure and load the test policy.
 
 ```bash
 export OPENPLEXER_HOME="$HOME/openplexer-test/agent-home"
@@ -133,16 +133,16 @@ The answer comes from the signed policy on your machine. The gate does not ask t
 
 ## 5. Let Claude Code use the gate (window B)
 
-Create the throwaway project and install the hook in it. `--project .` writes only `demo/.claude/settings.json`.
+Create the throwaway project and install the portable hook. The installer writes `demo/.claude/settings.json` and registers the checkout in `~/.openplexer/projects.json`.
 
 ```bash
-mkdir -p ~/openplexer-test/demo && cd ~/openplexer-test/demo && git init -q && openplexer install claude-code --project .
+mkdir -p ~/openplexer-test/demo && cd ~/openplexer-test/demo && git init -q && openplexer install claude-code --project . --portable
 ```
 
-Start Claude Code from the same window, so that it sees `OPENPLEXER_HOME`.
+Start Claude Code with `openplexer` on its `PATH`. The hook uses the registry to find the policy for the checkout.
 
 ```bash
-claude
+env -u OPENPLEXER_HOME claude
 ```
 
 Accept the workspace trust dialog. Claude Code runs a project's hooks only after you trust the project. Type `/hooks` to see the OpenPlexer entry. Then ask Claude for two things:
@@ -155,7 +155,7 @@ Exit Claude Code when you are done.
 You can also run the hook without Claude Code. This sends it the same request that Claude Code sends for a write to `README.md`.
 
 ```bash
-cd ~/openplexer-test/demo && printf '{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/README.md","content":"x"}}' "$PWD" "$PWD" | openplexer hook claude-code pre-tool
+cd ~/openplexer-test/demo && printf '{"session_id":"s1","hook_event_name":"PreToolUse","tool_name":"Write","cwd":"%s","tool_input":{"file_path":"%s/README.md","content":"x"}}' "$PWD" "$PWD" | env -u OPENPLEXER_HOME openplexer hook claude-code pre-tool --project-home
 ```
 
 The hook prints a JSON answer with `"permissionDecision":"deny"`. For `src/app.ts` it prints nothing, which allows the write.
@@ -216,7 +216,7 @@ Stop windows A and C with Ctrl+C. Then delete the test folder and the binaries.
 rm -rf ~/openplexer-test ~/.local/bin/openplexer ~/.local/bin/openplexer-hub ~/.local/bin/openplexer-verify
 ```
 
-The hook lived only in `~/openplexer-test/demo`, so nothing else needs to be removed.
+Remove the demo checkout's entry from `~/.openplexer/projects.json` if you used the portable hook.
 
 ## Try the same walkthrough on Cloudflare
 
