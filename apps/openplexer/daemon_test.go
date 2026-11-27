@@ -9,6 +9,14 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/room"
 )
 
+func TestDaemonQuietFlag(t *testing.T) {
+	c := newCLI(t)
+	if out := c.must(exitFailure, "daemon", "--quiet"); !strings.Contains(out, "configure a hub first") {
+		t.Fatal("quiet mode did not report the startup error")
+	}
+	c.must(exitUsage, "daemon", "--quiet", "extra")
+}
+
 func TestQueuedDenialNotice(t *testing.T) {
 	const at = "2026-01-15T12:00:00.000Z"
 	for _, tc := range []struct {

@@ -15,12 +15,24 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/room"
 )
 
-func (c command) daemon() int {
+func (c command) daemon(args []string) int {
+	flags := c.flags("daemon")
+	quiet := flags.Bool("quiet", false, "")
+	if err := flags.Parse(args); err != nil {
+		return exitUsage
+	}
+	if flags.NArg() != 0 {
+		flags.Usage()
+		return exitUsage
+	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
 	encoder := json.NewEncoder(c.stdout)
 	var log sync.Mutex
 	err := daemon.Run(ctx, c.home, c.now, func(event room.Event) error {
+		if *quiet {
+			return nil
+		}
 		if err := encoder.Encode(event); err != nil {
 			return err
 		}
