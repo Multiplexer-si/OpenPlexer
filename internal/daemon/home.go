@@ -124,6 +124,26 @@ func readKeys(home string) (*policy.KeySet, error) {
 	return &keys, nil
 }
 
+// ValidateConfiguredHome checks the settings of an existing local or hub home.
+// A home can be registered before its first policy load.
+func ValidateConfiguredHome(home string) error {
+	if _, err := readConfig(home); err != nil {
+		return err
+	}
+	keys, err := readKeys(home)
+	if err != nil {
+		return err
+	}
+	if keys != nil {
+		return nil
+	}
+	if _, err := os.Stat(filepath.Join(home, configFile)); errors.Is(err, fs.ErrNotExist) {
+		return errors.New("the OpenPlexer home has no configuration. Run `openplexer configure` with a key set or member first")
+	} else {
+		return err
+	}
+}
+
 func readStoredPolicy(home string) (*storedPolicy, error) {
 	var stored storedPolicy
 	found, err := readJSON(home, policyFile, map[string]any{

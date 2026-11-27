@@ -10,18 +10,33 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/adapter"
 	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
 	"github.com/multiplexer-si/openplexer/internal/daemon"
+	"github.com/multiplexer-si/openplexer/internal/projects"
 )
 
-func (c command) hookFile(name string, args []string) (agent hook.Agent, path, root string, ok bool) {
+type hookFile struct {
+	agent    hook.Agent
+	path     string
+	root     string
+	home     string
+	portable bool
+}
+
+func (c command) hookFile(name string, args []string) (hookFile, bool) {
 	flags := c.flags(name)
 	scope := flags.String("scope", "", "")
 	project := flags.String("project", "", "")
 	file := flags.String("file", "", "")
-	if len(args) == 0 || flags.Parse(args[1:]) != nil || flags.NArg() != 0 {
-		return hook.Agent{}, "", "", false
+	home := flags.String("home", c.home, "")
+	var portable bool
+	if name == "install" {
+		flags.BoolVar(&portable, "portable", false, "")
 	}
-	if agent, ok = adapter.Lookup(args[0]); !ok {
-		return hook.Agent{}, "", "", false
+	if len(args) == 0 || flags.Parse(args[1:]) != nil || flags.NArg() != 0 {
+		return hookFile{}, false
+	}
+	agent, ok := adapter.Lookup(args[0])
+	if !ok {
+		return hookFile{}, false
 	}
 	if *scope == "" {
 		*scope = "user"
@@ -29,8 +44,11 @@ func (c command) hookFile(name string, args []string) (agent hook.Agent, path, r
 			*scope = "project"
 		}
 	}
+	var path, root string
 	var err error
 	switch {
+	case portable && (*scope != "project" || *file != ""):
+		err = errors.New("--portable requires a project hook file")
 	case *file != "" && *project == "":
 		path, err = filepath.Abs(*file)
 	case *file != "":
@@ -43,7 +61,16 @@ func (c command) hookFile(name string, args []string) (agent hook.Agent, path, r
 			err = errors.New("the home directory is not known, so the user hook file is not known")
 		}
 	case *scope == "project":
-		if root, err = filepath.Abs(*project); err == nil {
+		if portable {
+			dir := *project
+			if dir == "" {
+				dir = "."
+			}
+			root, _, err = projects.Directory(dir)
+		} else {
+			root, err = filepath.Abs(*project)
+		}
+		if err == nil {
 			path = agent.ProjectFile(root)
 		}
 	default:
@@ -51,25 +78,42 @@ func (c command) hookFile(name string, args []string) (agent hook.Agent, path, r
 	}
 	if err != nil {
 		fmt.Fprintf(c.stderr, "openplexer: %v\n", err)
-		return hook.Agent{}, "", "", false
+		return hookFile{}, false
 	}
-	return agent, path, root, true
+	return hookFile{agent, path, root, *home, portable}, true
 }
 
 var executablePath = os.Executable
 
 func (c command) install(args []string) int {
-	agent, path, root, ok := c.hookFile("install", args)
+	file, ok := c.hookFile("install", args)
 	if !ok {
 		fmt.Fprint(c.stderr, usage)
 		return exitUsage
 	}
-	executable, err := executablePath()
+	var err error
+	if c.home, err = projects.ResolveHome(file.home); err != nil {
+		return c.fail(err)
+	}
+	agent, path, root := file.agent, file.path, file.root
+	executable := "openplexer"
+	if file.portable {
+		if err := c.registerProject(root, nil); err != nil {
+			return c.fail(err)
+		}
+	} else {
+		executable, err = executablePath()
+	}
 	if err != nil {
 		return c.fail(fmt.Errorf("the path of this binary is not known, so the hook cannot name it: %w", err))
 	}
 	handler := agent.Handler(executable)
-	change, err := c.journal().Install(path, handler, root)
+	recordedRoot := root
+	if file.portable {
+		handler.Command += " --project-home"
+		recordedRoot = ""
+	}
+	change, err := c.journal().Install(path, handler, recordedRoot)
 	if err != nil {
 		return c.fail(err)
 	}
@@ -81,7 +125,9 @@ func (c command) install(args []string) int {
 	default:
 		fmt.Fprintf(c.stdout, "the OpenPlexer hook of %s is already in %s, so nothing changed\n", agent.Name, path)
 	}
-	if root != "" {
+	if file.portable {
+		fmt.Fprintf(c.stdout, "registered %s in the project registry\n", root)
+	} else if root != "" {
 		fmt.Fprintf(c.stdout, "recorded %s as the project root, so a repository inside it does not move the root\n", root)
 	}
 	fmt.Fprintln(c.stdout, agent.NextStep)
@@ -92,11 +138,16 @@ func (c command) install(args []string) int {
 }
 
 func (c command) uninstall(args []string) int {
-	agent, path, _, ok := c.hookFile("uninstall", args)
+	file, ok := c.hookFile("uninstall", args)
 	if !ok {
 		fmt.Fprint(c.stderr, usage)
 		return exitUsage
 	}
+	var err error
+	if c.home, err = projects.ResolveHome(file.home); err != nil {
+		return c.fail(err)
+	}
+	agent, path := file.agent, file.path
 	change, err := c.journal().Uninstall(path, agent.Name)
 	if err != nil {
 		return c.fail(err)
@@ -110,4 +161,12 @@ func (c command) uninstall(args []string) int {
 		fmt.Fprintf(c.stdout, "removed the OpenPlexer hook of %s from %s\n", agent.Name, path)
 	}
 	return exitOK
+}
+
+func (c command) registerProject(root string, validate func(string) error) error {
+	user, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	return projects.Register(user, root, c.home, validate)
 }
