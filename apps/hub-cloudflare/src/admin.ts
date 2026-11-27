@@ -4,7 +4,7 @@ import type { JsonObject } from "./canonical";
 import type { Env } from "./index";
 import { bearer, cappedBody, conflict, invalid, notFound, tokenHash, unauthorized } from "./http";
 import type { SigningPurpose } from "./jws";
-import { activeSigningKey, activeTeam, appendAudit, authenticate, insertSigningKey, newSigningKey, newToken, team, wrappingKey } from "./state";
+import { activeSigningKey, activeTeam, appendAudit, authenticate, insertMember, insertSigningKey, memberReserved, newSigningKey, newToken, team, wrappingKey } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
 
 const adminLimit = 64 << 10;
@@ -21,7 +21,7 @@ function validRepo(repo: unknown): repo is string {
     && !/[\p{White_Space}\p{Cc}]/u.test(repo);
 }
 
-function adminJSON(body: Uint8Array, duplicates?: WeakSet<JsonObject>) {
+export function adminJSON(body: Uint8Array, duplicates?: WeakSet<JsonObject>) {
   try {
     const value = parseJSON(body, { loneSurrogates: "reject", duplicates });
     if (isJsonObject(value) && (!duplicates || !hasDuplicateMembers(value, duplicates))) return value;
@@ -29,6 +29,17 @@ function adminJSON(body: Uint8Array, duplicates?: WeakSet<JsonObject>) {
     // Use the same error for malformed JSON and non-object bodies.
   }
   throw invalid("body must be a JSON object");
+}
+
+export function strictAdminJSON(body: Uint8Array, allowed: string[], detail: string) {
+  let value: JsonObject;
+  try {
+    value = adminJSON(body, new WeakSet());
+  } catch {
+    throw invalid(detail);
+  }
+  if (Object.keys(value).some((key) => !allowed.includes(key) || value[key] === null)) throw invalid(detail);
+  return value;
 }
 
 function alreadyInitialized(sql: TransactionSQL, memberID: string, hash: ArrayBuffer): boolean {
@@ -67,7 +78,7 @@ export async function initialize(request: Request, storage: HubStorage, env: Pic
     insertSigningKey(sql, audit, "active");
     sql.exec("INSERT INTO team (singleton, workspace_id, policy_kid, audit_kid) VALUES (1, ?, ?, ?)",
       crypto.randomUUID(), policy.kid, audit.kid);
-    sql.exec("INSERT INTO members (member_id, role, token_hash) VALUES (?, 'lead', ?)", id, hash);
+    insertMember(sql, id, "lead", hash);
     appendAudit(sql, { action: "member.added", target: "member:" + id, actor_member_id: null, meta: { role: "lead" } });
     return {};
   });
@@ -78,22 +89,24 @@ export async function addMember(request: Request, storage: HubStorage) {
   const body = await cappedBody(request, adminLimit);
   return storage.transaction((sql) => {
     const actor = authenticate(sql, hash, true);
-    const { id, role } = adminJSON(body);
+    const { id, role } = strictAdminJSON(body, ["id", "role"], memberInput);
     if (!validID(id) || (role !== "lead" && role !== "member")) throw invalid(memberInput);
-    if (sql.exec("SELECT 1 FROM members WHERE member_id = ?", id).length) {
+    if (sql.exec("SELECT 1 FROM members WHERE member_id = ?", id).length || memberReserved(sql, id, Date.now())) {
       throw conflict("member " + JSON.stringify(id));
     }
     const token = newToken();
-    sql.exec("INSERT INTO members (member_id, role, token_hash) VALUES (?, ?, ?)", id, role, tokenHash(token));
+    insertMember(sql, id, role, tokenHash(token));
     appendAudit(sql, { action: "member.added", target: "member:" + id, actor_member_id: actor, meta: { role } });
     return { token };
   });
 }
 
-export function removeMember(request: Request, storage: HubStorage, id: string) {
+export async function removeMember(request: Request, storage: HubStorage, id: string) {
   const hash = bearer(request);
+  const body = await cappedBody(request, adminLimit);
   return storage.transaction((sql) => {
     const actor = authenticate(sql, hash, true);
+    if (body.length) throw invalid("member deletion does not accept a body");
     const [member] = sql.exec<{ role: string }>("SELECT role FROM members WHERE member_id = ?", id);
     if (!member) throw notFound();
     if (member.role === "lead" && sql.exec("SELECT 1 FROM members WHERE role = 'lead' LIMIT 2").length === 1) {

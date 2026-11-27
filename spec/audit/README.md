@@ -18,7 +18,13 @@ The field descriptions are in the schemas. This page gives the rules that a sche
 | `v1/examples/export/` | The export of those three records. |
 | `v1/examples/verify-result/` | The result for those three records, and the result after a change to the second record. |
 | `v1/fixtures/verify-chain.json` | One valid chain of six records, an empty chain, and thirteen altered copies of the valid chain, each with its verification result. |
-| `v1/fixtures/checkpoint.json` | Valid and invalid JSON exports and checkpoints. Each failure names the rule it breaks. |
+| `v1/fixtures/checkpoint.json` | Valid and invalid JSON exports and checkpoints. Includes a sealed chain for an approved enrollment and a separate revoked invite. Each failure names the rule it breaks. |
+
+## Invite records
+
+The hub seals `invite.created`, `invite.requested`, `invite.approved`, `invite.redeemed`, and `invite.revoked` once per transition. The target is `invite:<id>`. The metadata gives `project_id`, `member_id`, and `hub_role`.
+
+Admin actions name the lead, or use a null actor for local data-folder commands. Request and redeem actions name the bound member ID. That ID identifies the claim. A redemption also seals `member.added` with a null actor and `role` and `invite_id` in metadata. Expiry adds no record. Keep the invite code, link, bearer, and their hashes out of every record.
 
 ## The hash of a record
 

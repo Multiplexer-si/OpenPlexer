@@ -28,7 +28,7 @@ test("serves uncached health with the initialized schema version", async () => {
   const response = await request("/healthz");
   expect(response.status).toBe(200);
   expect(response.headers.get("Cache-Control")).toBe("no-store");
-  expect(await response.json()).toEqual({ ok: true, schema: 1 });
+  expect(await response.json()).toEqual({ ok: true, schema: 3 });
 });
 
 test("returns uncached JSON for unknown paths", async () => {
@@ -108,13 +108,16 @@ test("applying the same migration twice preserves the schema and rows", async ()
     const schema = () => sql.exec("SELECT name, sql FROM sqlite_schema WHERE sql IS NOT NULL ORDER BY name").toArray();
     const before = schema();
     expect(before.map((entry) => entry.name)).toEqual([
-      "audit_records", "claims", "claims_expiry", "claims_room", "members", "policies", "projects",
+      "audit_records", "claims", "claims_expiry", "claims_room", "invites", "invites_live_member",
+      "invites_retention", "members", "policies", "projects",
       "projects_repo", "room_events", "room_events_idempotency", "schema_migrations", "signing_keys", "team",
     ]);
-    expect(migrate(storage)).toBe(1);
-    expect(migrate(storage)).toBe(1);
+    expect(migrate(storage)).toBe(3);
+    expect(migrate(storage)).toBe(3);
     expect(schema()).toEqual(before);
-    expect(sql.exec("SELECT version FROM schema_migrations").toArray()).toEqual([{ version: 1 }]);
+    expect(sql.exec("SELECT version FROM schema_migrations ORDER BY version").toArray()).toEqual([
+      { version: 1 }, { version: 2 }, { version: 3 },
+    ]);
     expect(sql.exec("SELECT workspace_id, audit_seq, audit_tip FROM team").one()).toEqual({
       workspace_id: "workspace",
       audit_seq: 0,
@@ -130,10 +133,12 @@ test("an existing object can apply a later numbered migration", async () => {
     storage.transaction((tx) => {
       tx.exec("INSERT INTO projects (project_id, repo) VALUES ('demo', 'team/demo')");
     });
-    const migrations = [...schemaMigrations, { version: 2, sql: "ALTER TABLE projects ADD COLUMN label TEXT" }];
-    expect(migrate(storage, migrations)).toBe(2);
-    expect(migrate(storage, migrations)).toBe(2);
-    expect(sql.exec("SELECT version FROM schema_migrations ORDER BY version").toArray()).toEqual([{ version: 1 }, { version: 2 }]);
+    const migrations = [...schemaMigrations, { version: 4, sql: "ALTER TABLE projects ADD COLUMN label TEXT" }];
+    expect(migrate(storage, migrations)).toBe(4);
+    expect(migrate(storage, migrations)).toBe(4);
+    expect(sql.exec("SELECT version FROM schema_migrations ORDER BY version").toArray()).toEqual([
+      { version: 1 }, { version: 2 }, { version: 3 }, { version: 4 },
+    ]);
     expect(sql.exec("SELECT project_id, room_seq, label FROM projects").one()).toEqual({
       project_id: "demo",
       room_seq: 0,

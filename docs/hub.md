@@ -88,9 +88,22 @@ bin/openplexer-hub activate-key --hub "$hub" --token-file "$tokens/lee.token" --
 
 The next audit export uses the new audit key. After policy activation, publish a higher policy version to sign a project's bundle with the new policy key. The JWKS keeps retired public keys.
 
+## Invite a member
+
+Use the same invite commands with either hub. For a local invite, give the public hub origin.
+
+```sh
+bin/openplexer-hub invite create --data-dir ./hub-data --origin https://hub.example.com --project prj-shop --member mem-ana
+bin/openplexer-hub invite list --hub "$hub" --token-file "$tokens/lee.token"
+```
+
+For remote creation, replace `--data-dir` and `--origin` with `--hub` and a lead credential. Creation prints one join link on standard output. Send it over a private channel. Use `--role lead` for team-wide admin access or `--expires-in 24h` to change the 48-hour default.
+
+With `--require-approval`, confirm the public invite ID with the recipient before running `invite approve --id <id>`. Run `invite revoke --id <id>` to cancel an outstanding invite. Use `invite list --after <id> --limit <n>` to page. Publish the member's policy grants after redemption. [Invite and approval rules](onboarding-design.md#1-invite-contract-92)
+
 ## HTTP API
 
-Use `Authorization: Bearer <token>` on every request except the two public key endpoints. Successful requests return `200`. Use JSON for request and response bodies on routes outside the Room streams.
+Use `Authorization: Bearer <token>` on every request except the two public key endpoints and invite redemption. Successful requests return `200` unless the route specifies another status. Use JSON for request and response bodies on routes outside the Room streams.
 
 | Method and path | Result |
 |---|---|
@@ -107,6 +120,21 @@ Use `Authorization: Bearer <token>` on every request except the two public key e
 | `POST /api/v1/rooms/{room}/claims` | Create a claim and return `granted`, `conflicts`, and the claim's `event` envelope. |
 | `POST /api/v1/rooms/{room}/claims/{claim}/renew` | Recompute a claim's expiry and return the updated lease. |
 | `POST /api/v1/rooms/{room}/claims/{claim}/release` | End a claim, append a release event, and return the released lease. |
+| `POST /api/v1/admin/members` | Add a roster member from `{id, role}` and return `{token}`. Requires a lead token. |
+| `DELETE /api/v1/admin/members/{member}` | Remove a roster member. Requires a lead token and an empty body. |
+| `POST /api/v1/admin/invites` | Create an invite. Returns `201` with the public invite and its one-use code. |
+| `GET /api/v1/admin/invites` | List up to 100 invites by ID. Accepts `after` and `limit`. Also accepts `HEAD`. |
+| `POST /api/v1/admin/invites/{id}/approve` | Approve a bound request. Returns the public invite. |
+| `DELETE /api/v1/admin/invites/{id}` | Revoke an outstanding invite. Returns the public invite. |
+| `POST /api/v1/invites/redeem` | Send `code` and `token_hash`. Returns the receipt or `202` with the public invite ID and `Retry-After: 5`. |
+
+All invite admin routes require a lead token. Invite bodies have a 64 KiB limit. Redeem returns `404` for an unknown code and `410` for a known expired or revoked invite. A competing claim or a spent code returns `409`. The same claimant can recover its receipt for 24 hours while the original roster entry is active. [Invite request and response fields](onboarding-design.md#1-invite-contract-92)
+
+To redeem an invite, generate 32 random bytes on the laptop and encode them as unpadded base64url. The bearer has 43 characters from `A-Z`, `a-z`, `0-9`, `-`, and `_`. Send the SHA-256 digest of those 43 characters as 64 lowercase hex characters in `token_hash`.
+
+Each team can receive 20 redeem failures in a 60-second window that starts with the first failure. The limit counts `404`, `409`, and `410` outcomes. Further failures return `429` with `Retry-After` set to the remaining seconds, rounded up. Valid claims, approval polls, and receipt retries still work during that window.
+
+Roster requests have a 64 KiB body limit. Roster addition rejects duplicate and unknown JSON fields with `400`. Deletion returns `400` for a nonempty body within the limit and `413` for a larger body.
 
 Give members a trusted copy of the policy JWKS through an authenticated channel. See the [agent setup](local-policy.md#connect-to-a-team-hub). The agent verifies the JWS against the configured pin and the hub's advertised JWKS. The unsigned display fields are for presentation. The docs on [policy verification](../spec/policy/README.md#the-signed-bundle) give the verification steps.
 
@@ -139,7 +167,7 @@ Upgrade each hub to a version that serves the GET stream before upgrading its da
 
 ## Export the audit log
 
-The hub writes one chain for the team. It writes each audit record in the same state update as its action. The log covers `member.added`, `member.removed`, `project.added`, `policy.updated`, and `event.policy-denied`. A denial record links to its Room event and includes the member's claimed decision time in `meta.decided_at` when available.
+The hub writes one chain for the team. It writes each audit record in the same state update as its action. The log covers `member.added`, `member.removed`, `project.added`, `policy.updated`, and `event.policy-denied`. The log also covers invite creation, requests, approval, redemption, and revocation. A denial record links to its Room event and includes the member's claimed decision time in `meta.decided_at` when available.
 
 Run `bin/openplexer-hub export-audit --data-dir ./hub-data --out ./audit-export` to write the JSON export, signed checkpoint, and checkpoint JWKS. The command works with the server stopped. The HTTP export requires the `lead` role, which is the single-team hub's admin role. An ordinary member receives `403`. [Export and verify an audit log](audit.md).
 

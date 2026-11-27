@@ -60,6 +60,16 @@ export function appendAudit(sql: TransactionSQL, action: Pick<UnsealedRecord, "a
   sql.exec("UPDATE team SET audit_seq = ?, audit_tip = ? WHERE singleton = 1", seq, record.hash);
 }
 
+export function insertMember(sql: TransactionSQL, id: string, role: Role, hash: ArrayBuffer): string {
+  const enrollment = crypto.randomUUID();
+  sql.exec("INSERT INTO members (member_id, role, token_hash, enrollment_id) VALUES (?, ?, ?, ?)", id, role, hash, enrollment);
+  return enrollment;
+}
+
+export function memberReserved(sql: TransactionSQL, id: string, now: number): boolean {
+  return sql.exec("SELECT 1 FROM invites WHERE member_id = ? AND ended_at_ms IS NULL AND expires_at_ms > ?", id, now).length > 0;
+}
+
 export function newToken(): string {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 }

@@ -2,6 +2,7 @@ import { DurableObject } from "cloudflare:workers";
 import { activateKey, addMember, addProject, initialize, removeMember, stageKey } from "./admin";
 import { handleClaim } from "./claims";
 import { exportAudit } from "./export";
+import { handleInvite } from "./invites";
 import { bearer, HubError, invalid, json, notFound, unauthorized } from "./http";
 import { publishPolicy, readPolicy, readProject } from "./publication";
 import { eventPage, postEvent, replayCursor, replayEvents } from "./room";
@@ -163,7 +164,17 @@ export class TeamHub extends DurableObject<Env> {
         }
       }
     }
+    if (collection === "admin" && target === "invites") {
+      if (suffix === undefined) return handleInvite(request, this.storage, { kind: "collection" });
+      if (suffix && extra.length === 0) return handleInvite(request, this.storage, { kind: "revoke", id: suffix });
+      if (suffix && extra.length === 1 && extra[0] === "approve") {
+        return handleInvite(request, this.storage, { kind: "approve", id: suffix });
+      }
+    }
     if (extra.length > 0) throw notFound();
+    if (collection === "invites" && target === "redeem" && suffix === undefined) {
+      return handleInvite(request, this.storage, { kind: "redeem" });
+    }
     if (collection === "projects" && target && target !== "/") {
       if (suffix === "policy") {
         allow(method, ["PUT"]);
@@ -194,7 +205,7 @@ export class TeamHub extends DurableObject<Env> {
       }
       if (target === "members" && suffix && suffix !== "/") {
         allow(method, ["DELETE"]);
-        return json(removeMember(request, this.storage, suffix));
+        return json(await removeMember(request, this.storage, suffix));
       }
     }
     if (collection === "audit" && target === "export" && suffix === undefined) {

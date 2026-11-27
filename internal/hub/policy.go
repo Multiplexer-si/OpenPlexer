@@ -128,6 +128,15 @@ func keyID(key *ecdsa.PublicKey) string {
 	return base64URL(digest[:])
 }
 
+// PolicyKeys returns the same public key set that the HTTP endpoint advertises.
+func (s *Store) PolicyKeys() (keys map[string]any, err error) {
+	err = s.view(func(st *state) error {
+		keys, err = publicKeys(st)
+		return err
+	})
+	return
+}
+
 func publicKeys(st *state) (map[string]any, error) {
 	key, err := signingKey(st)
 	if err != nil {

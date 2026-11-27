@@ -13,6 +13,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -216,7 +217,7 @@ func generate() []byte {
 	nestedDuplicate.Input["jwks_json"] = `{"keys":` + keysJSON + `,"metadata":[{"a":1,"\u0061":2}]}`
 	caseSensitiveJWKS := vector("JWKS members that differ in case", "The unrecognized uppercase KEYS member is distinct from keys.", []any{}, []string{zeroToken}, success(0, 0))
 	caseSensitiveJWKS.Input["jwks_json"] = `{"keys":` + keysJSON + `,"KEYS":[]}`
-	cases = append(cases, duplicateJWKS, nestedDuplicate, caseSensitiveJWKS)
+	cases = append(cases, duplicateJWKS, nestedDuplicate, caseSensitiveJWKS, inviteEnrollment(newKey))
 
 	data := map[string]any{
 		"contract": "audit", "version": 1, "operation": "verify-checkpoints",
@@ -225,6 +226,34 @@ func generate() []byte {
 		"cases":       cases,
 	}
 	return append(must(json.MarshalIndent(data, "", "  ")), '\n')
+}
+
+func inviteEnrollment(key testKey) fixtureCase {
+	const accepted, cancelled = "11111111111111111111111111111111", "22222222222222222222222222222222"
+	lead, recruit := "mem-lee", "mem-ana"
+	claim := map[string]any{"project_id": "prj-checkpoint-test", "member_id": recruit, "hub_role": "member"}
+	declined := map[string]any{"project_id": "prj-checkpoint-test", "member_id": "mem-bo", "hub_role": "lead"}
+	records := []audit.Record{
+		{Action: "invite.created", Target: "invite:" + accepted, ActorMemberID: &lead, Meta: claim},
+		{Action: "invite.requested", Target: "invite:" + accepted, ActorMemberID: &recruit, Meta: claim},
+		{Action: "invite.approved", Target: "invite:" + accepted, ActorMemberID: &lead, Meta: claim},
+		{Action: "invite.redeemed", Target: "invite:" + accepted, ActorMemberID: &recruit, Meta: claim},
+		{Action: "member.added", Target: "member:" + recruit, Meta: map[string]any{"invite_id": accepted, "role": "member"}},
+		{Action: "invite.created", Target: "invite:" + cancelled, Meta: declined},
+		{Action: "invite.revoked", Target: "invite:" + cancelled, Meta: declined},
+	}
+	entries := make([]any, 0, len(records))
+	previous := audit.GenesisHash
+	for i, record := range records {
+		record.ID, record.WorkspaceID, record.CreatedAt = strconv.Itoa(i+1), workspace, issuedAt
+		sealed := must(audit.Seal(record, previous))
+		entries = append(entries, entry{sealed, audit.ActionResult(record.Action)})
+		previous = sealed.Hash
+	}
+	slices.Reverse(entries)
+	token := key.sign(checkpointType, key.kid, payload{1, workspace, len(entries), previous, issuedAt})
+	return vector("invite enrollment and revocation", "The signed tip covers each invite transition and the member added on redemption.",
+		entries, []string{token}, success(len(entries), len(entries)))
 }
 
 func must[T any](value T, err error) T {
