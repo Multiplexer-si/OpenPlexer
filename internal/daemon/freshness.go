@@ -40,11 +40,15 @@ func (g *Gate) HubStale() bool {
 	return g.status.hubStaleAt(g.now())
 }
 
-// RefreshIfStale reopens the policy under the automatic refresh lock and
-// after any attempt. A failed request leaves the stale gate available to deny
-// and audit. The caller supplies a deadline shared across its homes.
-func (g *Gate) RefreshIfStale(ctx context.Context) error {
-	if !g.HubStale() {
+// HubNeedsRefresh reports whether a connected home has stale or rejected policy.
+func (s Status) HubNeedsRefresh() bool {
+	return s.MaxPolicyAge != 0 && (s.State == Rejected || s.State == Stale)
+}
+
+// RefreshForHook reopens the policy under the automatic refresh lock and
+// after any attempt. The caller supplies a deadline shared across its homes.
+func (g *Gate) RefreshForHook(ctx context.Context) error {
+	if !g.Status().HubNeedsRefresh() {
 		return nil
 	}
 	unlock, err := lockHomeFile(ctx, g.home, automaticLockFile)
@@ -52,7 +56,7 @@ func (g *Gate) RefreshIfStale(ctx context.Context) error {
 		return g.reopen()
 	}
 	defer unlock()
-	if err := g.reopen(); err != nil || !g.HubStale() {
+	if err := g.reopen(); err != nil || !g.Status().HubNeedsRefresh() {
 		return err
 	}
 	var failedAt time.Time
@@ -65,7 +69,7 @@ func (g *Gate) RefreshIfStale(ctx context.Context) error {
 	if err := g.reopen(); err != nil {
 		return err
 	}
-	if syncErr != nil && g.HubStale() {
+	if syncErr != nil && g.Status().HubNeedsRefresh() {
 		_ = writeJSON(g.home, automaticFailFile, map[string]time.Time{"failed_at": g.now().UTC()})
 	}
 	return nil

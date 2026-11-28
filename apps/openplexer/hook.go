@@ -87,8 +87,8 @@ func (c command) hook(agent hook.Agent, event string, portable bool) int {
 			if openErr != nil {
 				return true, false
 			}
-			stale := gate.HubStale()
-			return !gate.Status().Enforced() || gate.ExecGated(), stale
+			status := gate.Status()
+			return !status.Enforced() || gate.ExecGated(), status.HubNeedsRefresh()
 		},
 	}
 	return c.emit(agent.Handle(input, env, func(first policy.Query, rest ...policy.Query) hook.Verdict {
@@ -146,6 +146,8 @@ func (c command) judge(ctx context.Context, agent string, gate *daemon.Gate, ope
 		switch {
 		case !decided && verdict.Policy.State == daemon.Absent:
 			return blocked("OpenPlexer has no policy loaded, so it blocks this call. Load a signed policy with `openplexer policy load <file>`, or remove the hook with `openplexer uninstall %s`.", agent)
+		case !decided && verdict.Policy.MaxPolicyAge != 0:
+			return blocked("OpenPlexer cannot verify its policy, so it blocks this call: %s. Run `openplexer policy sync` for home %q.", verdict.Policy.Detail, c.home)
 		case !decided:
 			return blocked("OpenPlexer cannot verify its policy, so it blocks this call: %s. Run `openplexer policy status`, then load a policy that verifies.", verdict.Policy.Detail)
 		case result.Decision == policy.Deny:

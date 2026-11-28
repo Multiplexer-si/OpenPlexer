@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
+	"github.com/multiplexer-si/openplexer/internal/daemon"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 	"github.com/multiplexer-si/openplexer/internal/projects"
 )
@@ -117,11 +118,14 @@ func (c command) checkProjectCall(refreshCtx, decisionCtx context.Context, agent
 		c.home = group.home
 		gate, err := c.openForHook(refreshCtx)
 		queries := group.writes
-		stale := err == nil && gate.HubStale()
-		if err != nil || stale || !gate.Status().Enforced() || gate.ExecGated() {
+		status := daemon.Status{}
+		if err == nil {
+			status = gate.Status()
+		}
+		if err != nil || !status.Enforced() || gate.ExecGated() {
 			queries = append(queries, group.commands...)
 		}
-		if len(queries) == 0 && group.shell && (err != nil || stale) {
+		if len(queries) == 0 && group.shell && (err != nil || status.HubNeedsRefresh()) {
 			command, _ := call.Text("command")
 			queries = append(queries, policy.Query{Action: policy.Exec, Command: command, AgentSessionID: session})
 		}

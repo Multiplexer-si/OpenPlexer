@@ -38,8 +38,8 @@ type Env struct {
 	// member are not limited, and the command is judged by its write targets.
 	ExecGated bool
 	// Prepare opens the policy after guards pass and before shell queries use
-	// the policy's exec grants. Stale hub policies also gate a matched shell.
-	Prepare func() (execGated, hubStale bool)
+	// the policy's exec grants. Stale or rejected hub policy gates a matched shell.
+	Prepare func() (execGated, hubNeedsRefresh bool)
 }
 
 // ExecGated reports whether the role of member in bundle lists commands.
@@ -284,17 +284,17 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	if v, guarded := env.guard(root, targets); guarded {
 		return v
 	}
-	var stale bool
+	var needsRefresh bool
 	if env.Prepare != nil && (call.Tool == "Bash" || slices.ContainsFunc(targets, func(t target) bool { return t.judged })) {
-		env.ExecGated, stale = env.Prepare()
-		env.ExecGated = env.ExecGated || stale
-		if stale && call.Tool == "Bash" && len(effect.Commands) == 0 {
+		env.ExecGated, needsRefresh = env.Prepare()
+		env.ExecGated = env.ExecGated || needsRefresh
+		if needsRefresh && call.Tool == "Bash" && len(effect.Commands) == 0 {
 			command, _ := call.Text("command")
 			effect.Commands = []string{command}
 		}
 	}
 	if noRoot != nil {
-		if stale && call.Tool == "Bash" {
+		if needsRefresh && call.Tool == "Bash" {
 			queries := env.queries(call, nil, effect)
 			return judge(queries[0], queries[1:]...)
 		}

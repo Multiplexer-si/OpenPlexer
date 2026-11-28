@@ -185,6 +185,65 @@ func ageWrite(project string) string {
 	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":%q,"session_id":"s1","tool_input":{"file_path":"src/app.ts"}}`, project)
 }
 
+func TestRejectedHubHookRefreshesAndDenies(t *testing.T) {
+	for _, binding := range []string{"project", "pin"} {
+		for _, portable := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/portable=%t", binding, portable), func(t *testing.T) {
+				c := newCLI(t)
+				c.bin = ""
+				t.Setenv("HOME", t.TempDir())
+				home, project := os.Getenv("OPENPLEXER_HOME"), ageProject(t)
+				fixture := newAgeHub(t, home, "https://age.invalid")
+				fixture.publish(1, true)
+				fetches := 0
+				testAgeTransport(t, func(r *http.Request) (*http.Response, error) {
+					if strings.HasSuffix(r.URL.Path, "policy.bundle") {
+						fetches++
+					}
+					return ageResponse(fixture.store.Handler(), r)
+				})
+				args := []string{"hook", "claude-code", "pre-tool"}
+				if portable {
+					c.must(exitOK, "configure", "--project-root", project)
+					args = append(args, "--project-home")
+				}
+				c.must(exitOK, "policy", "sync")
+				shell := fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":%q,"tool_input":{"command":"tee"}}`, project)
+				c.stdin = shell
+				if out := c.must(exitOK, args...); out != "" {
+					t.Fatalf("fresh shell got %q, want allow", out)
+				}
+
+				if binding == "project" {
+					// Configure deliberately refuses to switch projects in an existing hub home.
+					path := filepath.Join(home, "config.json")
+					var config map[string]json.RawMessage
+					readJSON(t, path, &config)
+					config["project_id"] = json.RawMessage(`"prj-other"`)
+					data, err := json.Marshal(config)
+					if err != nil {
+						t.Fatal("could not encode the test config")
+					}
+					if err := os.WriteFile(path, data, 0o600); err != nil {
+						t.Fatal(err)
+					}
+				} else {
+					pin, _ := signedPolicy(t, testBundle)
+					c.must(exitOK, "configure", "--keys", pin)
+				}
+				c.must(exitUnenforced, "policy", "status")
+				for _, input := range []string{shell, ageWrite(project)} {
+					c.stdin = input
+					out := c.must(exitOK, args...)
+					if !strings.Contains(out, `"permissionDecision":"deny"`) || !strings.Contains(out, "cannot verify its policy") || fetches != 2 {
+						t.Errorf("rejected cache got %q after %d bundle fetches, want denial and one refresh", out, fetches)
+					}
+				}
+			})
+		}
+	}
+}
+
 func TestStaleHookRefreshOrDeny(t *testing.T) {
 	for _, reachable := range []bool{true, false} {
 		t.Run(fmt.Sprint(reachable), func(t *testing.T) {
