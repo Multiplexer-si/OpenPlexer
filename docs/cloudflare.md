@@ -298,12 +298,18 @@ Developers can run `openplexer policy sync` and `openplexer policy status` to ch
      -H 'Content-Type: application/json' --data '{"wrap_key_id":"v2"}' "$wrap_url"
    ```
 
-3. Check that the status lists only `v2` before deleting `WRAP_KEY_V1`. Keep any older wrapping secret needed to restore a protected backup.
+3. Check that the status request returns HTTP 200 and lists only `v2` before deleting `WRAP_KEY_V1`. Keep any older wrapping secret needed to restore a protected backup.
 
    ```sh
-   curl --proto '=https' -fsS -H "@$wrap_headers" "$wrap_url" |
-     jq -e '.wrap_key_ids == ["v2"]' &&
-   npx wrangler secret delete WRAP_KEY_V1
+   (
+     wrap_status=$(mktemp "$credentials/wrap.status.XXXXXX") || exit
+     trap 'rm -f "$wrap_status"' EXIT
+     wrap_http=$(curl --proto '=https' -fsS -H "@$wrap_headers" \
+       -o "$wrap_status" -w '%{http_code}' "$wrap_url") &&
+     [ "$wrap_http" = 200 ] &&
+     jq -es 'length == 1 and .[0].wrap_key_ids == ["v2"]' "$wrap_status" > /dev/null &&
+     npx wrangler secret delete WRAP_KEY_V1
+   )
    ```
 
 4. Publish a higher policy version and export a fresh checkpoint. Verify the policy with `openplexer policy sync` and the checkpoint with `openplexer-verify`, using the existing pins. Delete `WRAP_ROTATION_TOKEN` with `npx wrangler secret delete WRAP_ROTATION_TOKEN`. Remove the temporary header and operator token files. For later rotations, use the next unused version and keep each loaded version's secret value fixed.
