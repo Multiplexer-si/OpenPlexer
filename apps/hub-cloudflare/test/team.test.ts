@@ -6,6 +6,7 @@ import { verifyChain, verifyCheckpoint } from "../src/audit";
 import { hasDuplicateMembers, isJsonObject, parseJSON } from "../src/canonical";
 import type { JsonObject } from "../src/canonical";
 import { tokenHash } from "../src/http";
+import { fetchHub } from "../src/index";
 import { verifyPolicyBundle } from "../src/policy";
 import { appendAudit, newSigningKey, newToken, wrappingKey } from "../src/state";
 import { HubStorage } from "../src/storage";
@@ -32,7 +33,7 @@ function incoming(path: string, method = "GET", token?: string, body?: string | 
 }
 
 function call(...args: Parameters<typeof incoming>) {
-  return exports.default.fetch(incoming(...args));
+  return fetchHub(incoming(...args), env);
 }
 
 async function check(response: Response, status: number, body?: unknown) {

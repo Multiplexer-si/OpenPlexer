@@ -1,7 +1,7 @@
 import { evictDurableObject, listDurableObjectIds, reset, runInDurableObject } from "cloudflare:test";
 import { env, exports } from "cloudflare:workers";
 import { beforeEach, expect, test, vi } from "vitest";
-import worker, { type Env as HubEnv } from "../src/index";
+import worker, { fetchHub, type Env as HubEnv } from "../src/index";
 import { HubStorage, migrate, schemaMigrations } from "../src/storage";
 import type { TransactionSQL } from "../src/storage";
 
@@ -22,19 +22,19 @@ function teamId(): DurableObjectId {
   return env.TEAM_HUB.idFromName(`team:${env.TEAM_ID}`);
 }
 
-function request(path: string, init?: RequestInit): Promise<Response> {
-  return exports.default.fetch(new Request(`https://${env.HUB_HOSTNAME}${path}`, init));
+function request(path: string): Request {
+  return new Request(`https://${env.HUB_HOSTNAME}${path}`);
 }
 
 test("serves uncached health with the initialized schema version", async () => {
-  const response = await request("/healthz");
+  const response = await exports.default.fetch(request("/healthz"));
   expect(response.status).toBe(200);
   expect(response.headers.get("Cache-Control")).toBe("no-store");
   expect(await response.json()).toEqual({ ok: true, schema: currentSchema });
 });
 
 test("returns uncached JSON for unknown paths", async () => {
-  const response = await request("/api/v1/unknown");
+  const response = await fetchHub(request("/api/v1/unknown"), env);
   expect(response.status).toBe(404);
   expect(response.headers.get("Cache-Control")).toBe("no-store");
   expect(await response.json()).toEqual({ error: "not found" });
