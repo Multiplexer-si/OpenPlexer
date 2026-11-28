@@ -475,6 +475,138 @@ func TestServiceReinstallRejectsForegroundWithReusedPID(t *testing.T) {
 	}
 }
 
+func TestServiceReinstallRefreshesLegacyDefinitionAfterManagedRestart(t *testing.T) {
+	for _, platform := range []string{"darwin", "linux"} {
+		t.Run(platform, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("XDG_CONFIG_HOME", "")
+			t.Setenv(serviceEnv, "")
+			home := t.TempDir()
+			serviceTestHome(t, home)
+			runner := &fakeServiceRunner{t: t}
+			s, err := newService(home, platform, runner)
+			if err != nil {
+				t.Fatal(err)
+			}
+			const binary = "/opt/openplexer"
+			definition, err := s.definition(binary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var marker string
+			var running serviceCall
+			var stop, start, unchanged []serviceCall
+			pid := os.Getpid()
+			if platform == "darwin" {
+				marker = "    <key>OPENPLEXER_SERVICE</key>\n    <string>1</string>\n"
+				target := s.domain + "/" + s.Name
+				running = serviceCall{[]string{"launchctl", "print", target}, fmt.Sprintf("%s = {\nstate = running\npid = %d\n}\n", target, pid), nil}
+				stop = []serviceCall{
+					{args: []string{"launchctl", "disable", target}},
+					{args: []string{"launchctl", "bootout", target}},
+				}
+				unchanged = []serviceCall{{args: []string{"launchctl", "enable", target}}}
+				start = []serviceCall{unchanged[0], {args: []string{"launchctl", "bootstrap", s.domain, s.path}}}
+			} else {
+				marker = "Environment=OPENPLEXER_SERVICE=1\n"
+				running = serviceCall{missingUnit(s.Name).args, fmt.Sprintf("LoadState=loaded\nActiveState=active\nMainPID=%d\nUnitFileState=enabled\n", pid), nil}
+				stop = []serviceCall{
+					{args: []string{"systemctl", "--user", "stop", s.Name}},
+					{args: []string{"systemctl", "--user", "disable", s.Name}},
+				}
+				start = []serviceCall{{args: []string{"systemctl", "--user", "enable", "--now", s.path}}}
+			}
+			legacy := strings.Replace(string(definition), marker, "", 1)
+			if legacy == string(definition) {
+				t.Fatal("could not recreate the unmarked definition")
+			}
+			if err := writeFile(filepath.Dir(s.path), filepath.Base(s.path), []byte(legacy)); err != nil {
+				t.Fatal(err)
+			}
+
+			streaming := make(chan struct{}, 1)
+			useHubTransport(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if strings.HasSuffix(r.URL.Path, "/stream") {
+					streaming <- struct{}{}
+					<-r.Context().Done()
+					return nil, r.Context().Err()
+				}
+				return &http.Response{StatusCode: 404, Body: http.NoBody}, nil
+			}))
+			stopDaemon := func() {}
+			t.Cleanup(func() { stopDaemon() })
+			launch := func(wantMode string) {
+				t.Helper()
+				if strings.Contains(string(readFile(t, s.path)), marker) {
+					t.Setenv(serviceEnv, "1")
+				}
+				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				done := make(chan error, 1)
+				go func() { done <- Run(ctx, home, time.Now, nil, func(error) {}) }()
+				stopDaemon = func() {
+					cancel()
+					if err := <-done; err != nil {
+						t.Error(err)
+					}
+					stopDaemon = func() {}
+				}
+				select {
+				case <-streaming:
+				case <-ctx.Done():
+					t.Fatal("daemon did not reach its Room stream")
+				}
+				activity, err := ReadDaemonActivity(home)
+				if err != nil || activity.Mode != wantMode {
+					t.Fatalf("daemon activity mode = %q, want %q: %v", activity.Mode, wantMode, err)
+				}
+			}
+			// The manager restarted the upgraded binary using the old definition.
+			launch(daemonForeground)
+			runner.calls = append([]serviceCall{running}, stop...)
+			runner.calls = append(runner.calls, start...)
+			runner.calls = append(runner.calls, running, running)
+			runner.calls = append(runner.calls, unchanged...)
+			runner.calls = append(runner.calls, running)
+			stopCommand := stop[0].args
+			if platform == "darwin" {
+				stopCommand = stop[1].args
+			}
+			startCommand := start[len(start)-1].args
+			runner.onSuccess = func(args []string) {
+				if slices.Equal(args, stopCommand) {
+					stopDaemon()
+				}
+				if slices.Equal(args, startCommand) {
+					launch(daemonManaged)
+				}
+			}
+			if err := s.Install(binary); err != nil {
+				t.Fatalf("reinstall after the manager restarted the upgraded daemon: %v", err)
+			}
+			if string(readFile(t, s.path)) != string(definition) {
+				t.Fatal("reinstall did not refresh the service definition")
+			}
+			before, err := os.Stat(s.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Install(binary); err != nil {
+				t.Fatalf("reinstall after refreshing the definition: %v", err)
+			}
+			after, err := os.Stat(s.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !os.SameFile(before, after) || !before.ModTime().Equal(after.ModTime()) {
+				t.Fatal("second reinstall rewrote the marked definition")
+			}
+			if len(runner.calls) != 0 {
+				t.Fatal("manager calls were skipped")
+			}
+		})
+	}
+}
+
 func TestServiceWaitsForDaemonAfterManagerReportsPID(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", "")

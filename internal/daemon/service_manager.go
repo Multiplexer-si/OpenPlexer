@@ -13,7 +13,11 @@ import (
 	"unicode/utf8"
 )
 
-const serviceEnv = "OPENPLEXER_SERVICE"
+const (
+	serviceEnv           = "OPENPLEXER_SERVICE"
+	systemdServiceMarker = "Environment=" + serviceEnv + "=1"
+	launchdServiceMarker = "    <key>" + serviceEnv + "</key>\n    <string>1</string>"
+)
 
 type serviceRunner interface {
 	run(context.Context, string, ...string) ([]byte, error)
@@ -45,7 +49,7 @@ Description=OpenPlexer daemon
 Type=exec
 ExecStart=%s daemon --quiet
 Environment=%s
-Environment=%s=1
+%s
 Restart=always
 RestartSec=5s
 StandardOutput=journal
@@ -53,7 +57,7 @@ StandardError=journal
 
 [Install]
 WantedBy=default.target
-`, systemdQuote(":"+binary), systemdQuote("OPENPLEXER_HOME="+s.Home), serviceEnv), nil
+`, systemdQuote(":"+binary), systemdQuote("OPENPLEXER_HOME="+s.Home), systemdServiceMarker), nil
 	}
 
 	paths := []string{binary, s.Home, s.stdout, s.stderr}
@@ -85,8 +89,7 @@ WantedBy=default.target
   <dict>
     <key>OPENPLEXER_HOME</key>
     <string>%s</string>
-    <key>%s</key>
-    <string>1</string>
+%s
   </dict>
   <key>RunAtLoad</key>
   <true/>
@@ -100,7 +103,14 @@ WantedBy=default.target
   <string>%s</string>
 </dict>
 </plist>
-`, s.Name, paths[0], paths[1], serviceEnv, paths[2], paths[3]), nil
+`, s.Name, paths[0], paths[1], launchdServiceMarker, paths[2], paths[3]), nil
+}
+
+func (s *Service) definitionMarker() string {
+	if s.platform == "linux" {
+		return systemdServiceMarker
+	}
+	return launchdServiceMarker
 }
 
 func systemdQuote(word string) string {

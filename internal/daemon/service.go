@@ -135,9 +135,18 @@ func (s *Service) Install(binary string) error {
 	if err != nil {
 		return err
 	}
+	installed, err := os.ReadFile(s.path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	const foreground = "stop the foreground openplexer daemon before installing the service for this home"
 	if activity.Mode == daemonForeground {
-		return errors.New(foreground)
+		// A manager can restart the upgraded binary from the old definition.
+		// The status query is scoped to this home's service name.
+		unmarked := len(installed) > 0 && !bytes.Contains(installed, []byte("\n"+s.definitionMarker()+"\n"))
+		if !unmarked || current.State != "running" || current.PID != activity.PID {
+			return errors.New(foreground)
+		}
 	}
 	// Older daemons did not lock their activity record. Keep the foreground
 	// check for those records while upgrading the service definition.
@@ -157,10 +166,6 @@ func (s *Service) Install(binary string) error {
 		if err := s.prepareLogs(); err != nil {
 			return err
 		}
-	}
-	installed, err := os.ReadFile(s.path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
 	}
 	if !bytes.Equal(definition, installed) {
 		if current.loaded {
