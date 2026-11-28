@@ -103,8 +103,8 @@ grep -Fq "$invite_id" "$state/invites.json"
 invite_admin approve --id "$invite_id" > /dev/null
 invite_admin revoke --id "$invite_id" > /dev/null
 
-sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|queued-denial|room-events|claims|concurrency|live-stream|invites|member-sync)$'
-go test -count=1 -v ./test/hubconformance -run "$sections" -args \
+sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|queued-denial|room-events|claims|concurrency|live-stream|invites|member-sync|hook-policy-age)$'
+OPENPLEXER_BIN_DIR="$state/bin" go test -count=1 -v ./test/hubconformance -run "$sections" -args \
   -hub-url "$origin" -wrangler-dev -lead-token-file "$state/lead.token" -member-token-file "$state/member.token" \
   -revoked-token-file "$state/revoked.token"
 

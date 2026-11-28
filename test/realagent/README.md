@@ -106,7 +106,7 @@ The harness passes no `--allowedTools`, so no permission rule approves a tool. A
 
 ### Codex
 
-The harness runs `openplexer install codex --project <project>`, which writes `project/.codex/hooks.json`. Codex reads that file only in a project that `$CODEX_HOME/config.toml` trusts, and the harness never writes your `~/.codex/config.toml`. So the harness reads the installed file and passes each event in it to Codex as a session flag, `-c hooks.<Event>=<the entry as TOML>`. [The Codex trust step](#the-codex-trust-step) shows that Codex sees the same hook, with the same hash, in both forms.
+The harness runs `openplexer install codex --project <project>`, which writes `project/.codex/hooks.json`. Codex reads that file only in a project that `$CODEX_HOME/config.toml` trusts, and the harness never writes your `~/.codex/config.toml`. So the harness reads the installed file and passes each event in it to Codex as a session flag, `-c hooks.<Event>=<the entry as TOML>`. The trust step compares the hash of each installed handler with its hash in the session flags. [The Codex trust step](#the-codex-trust-step)
 
 The harness passes these flags to `codex`. They come from the help of `codex-cli 0.167.1`, and `0.169.0` accepted them too.
 
@@ -126,7 +126,7 @@ The harness passes these flags to `codex`. They come from the help of `codex-cli
 | `-c approval_policy="never"` | Never asks for approval. A command or patch that needs approval fails, and Codex does not ask to run it outside the sandbox. |
 | `-c sqlite_home=<run>/state`, `-c log_dir=<run>/state/log` | Codex writes its state and log databases in the run directory instead of `~/.codex`. |
 | `-C <run>/project` | Sets the workspace to the throwaway project. |
-| `-c hooks.<Event>=[...]` | The hook entry that `openplexer install` wrote, for each event in `project/.codex/hooks.json`. Install writes only `PreToolUse`. |
+| `-c hooks.<Event>=[...]` | The hook entries from `project/.codex/hooks.json`. Install writes one handler each for `PreToolUse` and `SessionStart`. |
 
 The harness adds `OPENPLEXER_HOME=<run>/home` to the environment of `codex`, as for Claude Code.
 
@@ -142,11 +142,11 @@ trusted_hash = "sha256:<hex>"
 A real session needs your sign-in in `~/.codex`, and the harness must not write `~/.codex/config.toml`. So the harness checks the trust step without a model, through the JSON-RPC interface of `codex app-server`, which is the interface that the Codex interface itself uses. Before each Codex session, and in `realagent trust`, it starts `codex app-server` with `CODEX_HOME` set to an empty directory in the run directory, and checks each step:
 
 1. `hooks/list` for the project, which nothing trusts yet, lists no hook.
-2. `config/batchWrite` trusts the project. `hooks/list` then lists one hook, from the project file, with the status `untrusted` and a hash.
-3. `config/batchWrite` writes the trust record of that hook with that hash. `hooks/list` then lists the hook as `trusted`.
-4. A second `codex app-server`, with the session flags that the session gets, lists one hook from the session flags, with the same hash.
+2. `config/batchWrite` trusts the project. `hooks/list` must list one handler per installed event, each from the project file with the status `untrusted` and a hash.
+3. `config/batchWrite` writes the trust record of each handler with its hash. `hooks/list` must list the same handlers as `trusted`.
+4. A second `codex app-server` uses the session flags. It must list one handler per installed event from the session flags, with the corresponding hash.
 
-If a step does not give that result, the harness does not start the agent. `result.json` records the report as `codexTrust`.
+If a step does not give that result, the harness does not start the agent. `result.json` records the report for each event in `codexTrust.hooks`.
 
 The step that is not covered is the interface itself: the folder prompt and `/hooks`. The check calls the same interface methods that they call. A session that runs a hook that you trusted in `~/.codex/config.toml` is not covered either, because the sessions run with `--dangerously-bypass-hook-trust`.
 

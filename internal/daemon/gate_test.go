@@ -688,8 +688,8 @@ func TestGateChecksSignedBundleSizesBeforeVerification(t *testing.T) {
 						if status.State != Rejected || !strings.Contains(status.Detail, c.wantLimit.Error()) {
 							t.Fatalf("reopen = %+v, want %v", status, c.wantLimit)
 						}
-					} else if status.State != Verified || status.Version != 2 {
-						t.Fatalf("reopen = %+v, want verified version 2", status)
+					} else if status.State != Stale || status.Version != 2 {
+						t.Fatalf("reopen = %+v, want stale version 2 without a hub confirmation", status)
 					}
 					return
 				}
@@ -727,8 +727,14 @@ func TestGateChecksSignedBundleSizesBeforeVerification(t *testing.T) {
 					if status != before || open(t, home, loadedAt).Status() != before {
 						t.Errorf("rejected bundle changed the policy in force: %+v", status)
 					}
-				} else if err != nil || status.State != Verified || status.Version != 2 {
-					t.Errorf("incoming bundle = %+v, %v, want verified version 2", status, err)
+				} else {
+					want := Verified
+					if path == "load" {
+						want = Stale
+					}
+					if err != nil || status.State != want || status.Version != 2 {
+						t.Errorf("incoming bundle = %+v, %v, want %s version 2", status, err, want)
+					}
 				}
 			})
 		}

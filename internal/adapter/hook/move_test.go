@@ -25,7 +25,7 @@ func TestMovingAGuardedPathAwayIsDenied(t *testing.T) {
 			{Path: ".claude/settings.json", Why: "it holds the hook of OpenPlexer"},
 		},
 	}
-	allow := func(policy.Query, ...policy.Query) Verdict { return Verdict{} }
+	allow := func(...policy.Query) Verdict { return Verdict{} }
 	bash := func(command string) []byte {
 		return []byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"` + root + `","tool_input":{"command":"` + command + `"}}`)
 	}
@@ -82,8 +82,8 @@ func TestThePolicyJudgesEveryPathThatAMoveTakesAway(t *testing.T) {
 	} {
 		t.Run(command, func(t *testing.T) {
 			var got []string
-			judge := func(first policy.Query, rest ...policy.Query) Verdict {
-				for _, q := range append([]policy.Query{first}, rest...) {
+			judge := func(queries ...policy.Query) Verdict {
+				for _, q := range queries {
 					got = append(got, q.Path)
 				}
 				return Verdict{}

@@ -2,6 +2,7 @@ package hook
 
 import (
 	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -37,6 +38,11 @@ type Env struct {
 	// command is then also judged as `exec`. Otherwise the commands of the
 	// member are not limited, and the command is judged by its write targets.
 	ExecGated bool
+	// Prepare opens the policy after guards pass and before shell queries use
+	// the policy's exec grants. A blocked refresh makes a matched shell
+	// produce a query for the denial audit record.
+	// An error denies the call before it can reach the judge.
+	Prepare func() (execGated, refreshBlocked bool, err error)
 }
 
 // ExecGated reports whether the role of member in bundle lists commands.
@@ -86,9 +92,11 @@ func ParseCall(stdin []byte) (Call, error) {
 		{"cwd", &call.Cwd}, {"session_id", &call.Session},
 	} {
 		if value, ok := raw[field.name]; ok {
-			if err := json.Unmarshal(value, field.dest); err != nil {
-				return Call{}, fmt.Errorf("invalid %s: %w", field.name, err)
+			text, ok := hookString(value)
+			if !ok {
+				return Call{}, fmt.Errorf("invalid %s: expected a string", field.name)
 			}
+			*field.dest = text
 		}
 	}
 	if input, ok := raw["tool_input"]; ok {
@@ -101,11 +109,19 @@ func ParseCall(stdin []byte) (Call, error) {
 
 // Text returns the string field of the tool input.
 func (c Call) Text(field string) (string, error) {
-	var text string
-	if err := json.Unmarshal(c.Input[field], &text); err != nil {
+	text, ok := hookString(c.Input[field])
+	if !ok {
 		return "", fmt.Errorf("%s of a %s call has no string value", field, c.Tool)
 	}
 	return text, nil
+}
+
+func hookString(raw json.RawMessage) (string, bool) {
+	var text *string
+	if err := json.Unmarshal(raw, &text); err != nil || text == nil {
+		return "", false
+	}
+	return *text, true
 }
 
 type Effect struct {
@@ -213,13 +229,13 @@ func (e Env) queries(call Call, targets []target, effect Effect) []policy.Query 
 	return out
 }
 
-// Judge decides the queries of one tool call, in the order that the call
-// makes them. The adapter calls it only for a call that makes a query.
-type Judge func(first policy.Query, rest ...policy.Query) Verdict
+// Judge decides one tool call. Queries are in call order and may be empty
+// for a call that prepared a policy.
+type Judge func(queries ...policy.Query) Verdict
 
 func FirstDeny(evaluate func(policy.Query) policy.Result) Judge {
-	return func(first policy.Query, rest ...policy.Query) Verdict {
-		for _, q := range append([]policy.Query{first}, rest...) {
+	return func(queries ...policy.Query) Verdict {
+		for _, q := range queries {
 			if result := evaluate(q); result.Decision == policy.Deny {
 				return Denied(q, result)
 			}
@@ -281,9 +297,29 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	if v, guarded := env.guard(root, targets); guarded {
 		return v
 	}
+	var refreshBlocked bool
+	prepared := env.Prepare != nil && (call.Tool == "Bash" || slices.ContainsFunc(targets, func(t target) bool { return t.judged }))
+	if prepared {
+		execGated, blocked, err := env.Prepare()
+		if err != nil {
+			return Verdict{Deny, err.Error()}
+		}
+		refreshBlocked = blocked
+		env.ExecGated = execGated || refreshBlocked
+		if refreshBlocked && call.Tool == "Bash" && len(effect.Commands) == 0 {
+			command, _ := call.Text("command")
+			effect.Commands = []string{command}
+		}
+	}
 	if noRoot != nil {
+		if refreshBlocked && call.Tool == "Bash" {
+			return judge(env.queries(call, nil, effect)...)
+		}
 		if len(effect.Writes) > 0 || env.ExecGated && len(effect.Commands) > 0 {
 			return Verdict{Deny, fmt.Sprintf("OpenPlexer blocked this call because it cannot place the paths of the call in a project: %v.", noRoot)}
+		}
+		if prepared {
+			return judge()
 		}
 		return Verdict{}
 	}
@@ -293,19 +329,31 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 		}
 	}
 	queries := env.queries(call, targets, effect)
-	if len(queries) == 0 {
+	if len(queries) == 0 && !prepared {
 		return Verdict{}
 	}
-	return judge(queries[0], queries[1:]...)
+	return judge(queries...)
 }
 
 func coveredCall(stdin []byte, tools Tools) (Call, Translate, error) {
+	if !jsontext.Value(stdin).IsValid() {
+		return Call{}, nil, errors.New("the hook input is invalid JSON or has a duplicate member")
+	}
 	call, err := ParseCall(stdin)
 	if err != nil {
 		return Call{}, nil, err
 	}
+	if call.Event == "" {
+		return call, nil, errors.New("the hook input has no hook_event_name")
+	}
+	if call.Event != "PreToolUse" {
+		return call, nil, nil
+	}
+	if call.Tool == "" {
+		return call, nil, errors.New("the hook input has no tool_name")
+	}
 	translate, gated := tools[call.Tool]
-	if call.Event != "PreToolUse" || !gated {
+	if !gated {
 		return call, nil, nil
 	}
 	if call.Cwd == "" {

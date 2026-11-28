@@ -255,4 +255,5 @@ func TestHub(t *testing.T) {
 	t.Run("live-stream", f.liveStream)
 	t.Run("invites", f.invites)
 	t.Run("member-sync", f.memberSync)
+	t.Run("hook-policy-age", f.hookPolicyAge)
 }

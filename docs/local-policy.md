@@ -17,7 +17,7 @@ openplexer policy sync
 openplexer daemon
 ```
 
-`policy sync` fetches the first policy immediately. `daemon` syncs on startup and every 15 seconds. It writes received Room events as JSON lines to standard output and connection errors to standard error. Run one daemon per home. The hooks continue to open the verified local policy for each call.
+`policy sync` fetches the first policy immediately. `daemon` syncs on startup and every 15 seconds. It writes received Room events as JSON lines to standard output and connection errors to standard error. Run one daemon per home. The hooks check the age of the local policy for each covered call.
 
 The daemon verifies the bundle against both the advertised JWKS and the operator-provided pin. Replace the pin explicitly with `configure --keys <jwks.json>` after you confirm the new keys with the operator. To renew a member token, run `configure --token-file <file>`. Use the same member ID as the token's owner.
 
@@ -69,12 +69,14 @@ You need two files from the person who signs the policy of your team: the signed
 |---|---|
 | `openplexer configure --keys <jwks.json>` | Stores the key set that verifies a bundle. The file is a JSON Web Key Set, as `spec/policy/v1/jwks.schema.json` defines. |
 | `openplexer configure --member <member-id>` | Stores the member id of the developer. |
-| `openplexer configure --stale-after-days <days>` | Stores the number of days after which a policy is stale. The default is 14. |
+| `openplexer configure --stale-after-days <days>` | Sets the advisory age of a local-only policy. The default is 14 days. |
+| `openplexer configure --max-policy-age <duration>` | Sets the maximum age of a hub policy. Accepts 1 minute through 1 hour in whole seconds. The default is 5 minutes. |
 | `openplexer policy load <signed-bundle.json>` | Verifies a signed bundle and makes it the policy in force. The file is a message, as `spec/policy/v1/signed-bundle.schema.json` defines. |
 | `openplexer policy sync` | Fetches and verifies the current hub policy once. |
 | `openplexer daemon` | Runs policy sync and the Room client in the foreground. |
 | `openplexer room post` | Validates and queues one JSON event request from standard input. |
-| `openplexer policy status` | Prints the state of the stored policy, the member, and the home directory. |
+| `openplexer policy status` | Prints local policy state, including the hub confirmation, age limit, and daemon heartbeat for a hub-connected home. |
+| `openplexer policy check-session` | Checks policy at startup. Tries one bounded sync if the hub policy is stale. |
 | `openplexer policy check [--agent <name>] [--session <id>] [--repo <repo>] <action> <target>` | Decides one action and prints the result. The action is `read`, `write`, `exec`, or `git.push`. The target is a path for `read` and `write`, a command for `exec`, and a repo for `git.push`. |
 
 One `configure` command can take several of its options.
@@ -84,8 +86,8 @@ One `configure` command can take several of its options.
 | 0 | The command succeeded. For `status`, the policy is verified. For `check`, the action is allowed. |
 | 1 | The command failed. For `load`, the bundle is rejected or the file cannot be read, and the policy in force is unchanged. |
 | 2 | The command line is not valid. The command prints its usage. |
-| 3 | `status` only: the policy is stale. |
-| 4 | `status` and `check`: no verified policy is in force. The state is absent or rejected. |
+| 3 | `status` and `check-session` report a stale policy. |
+| 4 | `status`, `check-session`, and `check` report an unavailable policy. The state is absent or rejected. |
 | 5 | `check` only: the action is denied. |
 
 ## The home directory
@@ -95,11 +97,11 @@ The gate keeps its files in the directory that `OPENPLEXER_HOME` names, or in `.
 | File | Content | Written by |
 |---|---|---|
 | `keys.json` | The key set | `configure --keys` |
-| `config.json` | Local member and stale settings. A hub configuration also holds its URL, project, and bearer token. Created with mode `0600`. | `configure` |
+| `config.json` | Local member and stale settings. A hub configuration also holds its URL, project, bearer token, and optional `max_policy_age_seconds`. Created with mode `0600`. | `configure` |
 | `room-cursor.json` | Highest Room sequence received, including skipped event types | `daemon` |
 | `room-outbox/` | Filtered posts waiting for acknowledgement, with one idempotency key per file | `room post`, hooks, and `daemon` |
 | `room.lock` | Exclusive lock for the daemon that owns the Room cursor | `daemon` |
-| `policy.json` | The signed token of the policy in force, and the time `confirmed_at` at which a load last confirmed it | `policy load` and hub sync |
+| `policy.json` | The signed policy and its local load time `confirmed_at`. An authenticated sync also records `hub_confirmed_at` and its binding to the hub and pinned trust settings. | `policy load` and hub sync |
 | `policy-floor.json` | The highest admitted version and SHA-256 hash of its canonical bundle JSON, keyed by project ID | `policy load` and hub sync |
 | `audit.jsonl` | The audit log, one record on each line | `policy load` and `policy check` |
 | `installs/` | The install journal, one record for each hook file: the agent, the file, the project root of a project-scope install, and what `install` added ([The project root](hooks-claude-code.md#the-project-root)) | `install` and `uninstall` |
@@ -116,8 +118,8 @@ The gate limits the compact JWS token to 2 MiB and the raw payload to 1 MiB befo
 | State | Meaning | What the gate does |
 |---|---|---|
 | `absent` | No policy is stored. | It reports that no policy is in force. Future loads still use the version floor. |
-| `verified` | The stored policy passes its reopen checks, and a load confirmed it within the stale limit. | It decides each action. |
-| `stale` | The stored policy passes its reopen checks, and no load confirmed it within the stale limit. | It decides each action and reports that the policy is stale. |
+| `verified` | The stored policy passes its reopen checks. Its confirmation is within the age limit. | It decides each action. |
+| `stale` | The stored policy passes its reopen checks, but its confirmation is missing or outside the age limit. | It denies covered actions if the hub policy stays stale. A local-only policy still decides actions. |
 | `rejected` | The stored policy failed a reopen check. | It reports the reason and makes no decision. Future loads still use the version floor. |
 
 The gate computes the state from `policy.json`, `keys.json`, `config.json`, and the clock each time it opens the policy.
@@ -148,7 +150,7 @@ With no verified policy, the gate does not answer allow or deny. It answers that
 | Bundle | Result |
 |---|---|
 | A version above the floor and any version in force | Accepted. It becomes the policy in force and raises the project's floor. |
-| A version that matches the floor, with the same canonical content | Accepted if it also passes the checks against any policy in force. It becomes fresh and can carry a new signature. |
+| A version that matches the floor, with the same canonical content | Accepted if it also passes the checks against any policy in force. It can carry a new signature. An authenticated sync refreshes hub confirmation. |
 | A version below the floor | Refused, even when the state is absent or rejected. |
 | A version that matches the floor, with different content | Refused, even when the state is absent or rejected. |
 | A bundle for another project | A hub home requires its configured project. A file-based home can switch projects when no policy is in force. The incoming project's floor still applies. |
@@ -162,11 +164,15 @@ For an existing home without a floor file, the first load or sync that verifies 
 
 ## Offline and stale
 
-The gate reads local files. It keeps enforcing any policy in force if the source is unavailable, the pinned key check fails, or a sync fails a version check. The daemon retries while it runs.
+Hub policy age needs a build newer than `v0.1.0-rc.1`. The private home config stores `max_policy_age_seconds`. Existing hub homes default to 300 seconds. For a two-minute limit, run `openplexer configure --max-policy-age 2m`.
 
-A bundle carries no issue time and no expiry. So the gate measures the age of a policy on the machine: a policy is stale when no load has confirmed it for `stale_after_days`. A stale policy stays in force. `policy status` reports it with exit status 3, `policy check` prints a notice, and each decision record names the state in `meta.policy_state`. The records of a load do not carry it. A successful load or hub sync confirms the policy and makes it fresh.
+The gate measures hub policy age on the local wall clock. A successful authenticated sync stores the local time at the start of the fetch as `hub_confirmed_at`, in the same write as the policy. A sync can confirm the same bundle again. Changing the hub origin, project, member, credential, or pinned keys invalidates the confirmation. Loading a policy from a file also clears it for a hub home.
 
-`confirmed_at` is a local time and is not signed. A program that runs as you can change it.
+A missing or future confirmation is stale. A policy becomes stale as soon as its age reaches the limit. Moving the clock back within the confirmation window reduces the measured age. After an upgrade, sync once to confirm a policy cached by an older build.
+
+A covered hook call makes one automatic sync attempt per home with stale or rejected hub policy. The hook treats an absent hub policy as stale. The attempts share two seconds. A recorded failure pauses automatic attempts for that home for five seconds. If the hook cannot record the failure, it blocks the call and reports the write error. If the policy stays stale or rejected, the hook denies the covered action. `policy check` also denies an action under a stale hub policy. Run `openplexer policy sync` to retry immediately. Use `policy status` to inspect local state without contacting the hub.
+
+For a local-only home, `stale_after_days` is an advisory after a successful file load. It defaults to 14 days. The policy keeps deciding actions. The local confirmation times are recorded by this machine.
 
 ## How the gate evaluates an action
 

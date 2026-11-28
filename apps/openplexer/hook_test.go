@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
@@ -105,6 +106,73 @@ func callJSON(tool, cwd string, input map[string]string) string {
 		"session_id": "ses-1", "hook_event_name": "PreToolUse", "tool_name": tool, "cwd": cwd, "tool_input": input,
 	})
 	return string(text)
+}
+
+func TestHookRefusesInvalidRequiredStrings(t *testing.T) {
+	for _, agent := range []string{"claude-code", "codex"} {
+		for _, portable := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/portable=%t", agent, portable), func(t *testing.T) {
+				c := newCLI(t)
+				userHome := t.TempDir()
+				t.Setenv("HOME", userHome)
+				root := filepath.Join(userHome, "project")
+				if err := os.MkdirAll(filepath.Join(root, ".git"), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				keys, message := signedPolicy(t, testBundle)
+				c.must(exitOK, "configure", "--keys", keys, "--member", "mem-dev", "--project-root", root)
+				c.must(exitOK, "policy", "load", message)
+				args := []string{"hook", agent, "pre-tool"}
+				if portable {
+					args = append(args, "--project-home")
+				}
+				tools := map[string]string{"Bash": "command"}
+				if agent == "claude-code" {
+					tools["Write"], tools["Edit"], tools["NotebookEdit"] = "file_path", "file_path", "notebook_path"
+				} else {
+					tools["apply_patch"] = "command"
+				}
+				refuses := func(t *testing.T, input, field string) {
+					t.Helper()
+					c := c
+					c.t, c.stdin = t, input
+					code, out, diagnostic := c.run(args...)
+					if code != 2 || out != "" || !strings.Contains(diagnostic, field) {
+						t.Errorf("exit %d, stdout %q, stderr %q, want a refusal naming %s", code, out, diagnostic, field)
+					}
+				}
+				for tool, field := range tools {
+					for name, value := range map[string]string{"null": "null", "missing": "", "number": "42"} {
+						t.Run(tool+"/"+name, func(t *testing.T) {
+							input := "{}"
+							if value != "" {
+								input = fmt.Sprintf(`{%q:%s}`, field, value)
+							}
+							refuses(t, fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":%q,"cwd":%q,"tool_input":%s}`, tool, root, input), field)
+						})
+					}
+				}
+				for _, field := range []string{"hook_event_name", "tool_name", "cwd"} {
+					for name, value := range map[string]any{"null": nil, "missing": nil, "number": 42} {
+						t.Run(field+"/"+name, func(t *testing.T) {
+							call := map[string]any{"hook_event_name": "PreToolUse", "tool_name": "Bash", "cwd": root, "tool_input": map[string]string{"command": "tee"}}
+							if name == "missing" {
+								delete(call, field)
+							} else {
+								call[field] = value
+							}
+							input, err := json.Marshal(call)
+							if err != nil {
+								t.Fatal(err)
+							}
+							refuses(t, string(input), field)
+						})
+					}
+				}
+				refuses(t, fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":%q,"tool_input":{"command":null,"command":"tee"}}`, root), "duplicate member")
+			})
+		}
+	}
 }
 
 func (c cli) hookCall(agent, call string) (status int, reason, stderr string) {

@@ -1,6 +1,10 @@
 package daemon
 
 import (
+	"bytes"
+	"context"
+	"crypto/rand"
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,11 +29,13 @@ const (
 const defaultStaleAfterDays = 14
 
 type config struct {
-	MemberID       string `json:"member_id,omitempty"`
-	StaleAfterDays int    `json:"stale_after_days,omitempty"`
-	HubURL         string `json:"hub_url,omitempty"`
-	ProjectID      string `json:"project_id,omitempty"`
-	Token          string `json:"token,omitempty"`
+	MemberID            string `json:"member_id,omitempty"`
+	StaleAfterDays      int    `json:"stale_after_days,omitempty"`
+	HubURL              string `json:"hub_url,omitempty"`
+	ProjectID           string `json:"project_id,omitempty"`
+	Token               string `json:"token,omitempty"`
+	MaxPolicyAgeSeconds int    `json:"max_policy_age_seconds,omitempty"`
+	HubTrustRevision    string `json:"hub_trust_revision,omitempty"`
 }
 
 func (c config) staleAfter() time.Duration {
@@ -61,14 +67,16 @@ func readJSON(home, name string, fields map[string]any) (bool, error) {
 	if root.Kind != jsonedit.Object {
 		return false, fmt.Errorf("%s must be a JSON object", name)
 	}
-	if member, duplicate := root.DuplicateKey(); duplicate {
-		return false, fmt.Errorf("%s: duplicate key %q", name, member.Key)
+	if _, duplicate := root.DuplicateKey(); duplicate {
+		return false, fmt.Errorf("%s: duplicate member", name)
 	}
 	for _, member := range root.Members {
-		if target, ok := fields[member.Key]; ok {
-			if member.Value.Kind == jsonedit.Null || doc.Decode(member.Value, target) != nil {
-				return false, fmt.Errorf("%s: invalid %s", name, member.Key)
-			}
+		target, ok := fields[member.Key]
+		if !ok {
+			return false, fmt.Errorf("%s: unexpected member", name)
+		}
+		if member.Value.Kind == jsonedit.Null || doc.Decode(member.Value, target) != nil {
+			return false, fmt.Errorf("%s: invalid %s", name, member.Key)
 		}
 	}
 	return true, nil
@@ -91,12 +99,20 @@ func readPolicyFile(path string) ([]byte, error) {
 
 func readConfig(home string) (config, error) {
 	var c config
+	var maxAge *int
 	_, err := readJSON(home, configFile, map[string]any{
 		"member_id": &c.MemberID, "stale_after_days": &c.StaleAfterDays,
 		"hub_url": &c.HubURL, "project_id": &c.ProjectID, "token": &c.Token,
+		"max_policy_age_seconds": &maxAge, "hub_trust_revision": &c.HubTrustRevision,
 	})
 	if err != nil {
 		return config{}, err
+	}
+	if maxAge != nil {
+		if !validMaxPolicyAge(*maxAge) {
+			return config{}, errors.New("config.json: max_policy_age_seconds must be between 60 and 3600")
+		}
+		c.MaxPolicyAgeSeconds = *maxAge
 	}
 	if c.StaleAfterDays < 0 {
 		return config{}, fmt.Errorf("%s: stale_after_days must not be negative", configFile)
@@ -110,18 +126,23 @@ func readConfig(home string) (config, error) {
 }
 
 func readKeys(home string) (*policy.KeySet, error) {
+	keys, _, err := readPinnedKeys(home)
+	return keys, err
+}
+
+func readPinnedKeys(home string) (*policy.KeySet, [sha256.Size]byte, error) {
 	text, err := os.ReadFile(filepath.Join(home, keysFile))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, nil
+		return nil, [sha256.Size]byte{}, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, [sha256.Size]byte{}, err
 	}
 	keys, err := policy.ParseKeySet(text)
 	if err != nil {
-		return nil, err
+		return nil, [sha256.Size]byte{}, err
 	}
-	return &keys, nil
+	return &keys, sha256.Sum256(text), nil
 }
 
 // ValidateConfiguredHome checks the settings of an existing local or hub home.
@@ -148,6 +169,7 @@ func readStoredPolicy(home string) (*storedPolicy, error) {
 	var stored storedPolicy
 	found, err := readJSON(home, policyFile, map[string]any{
 		"token": &stored.Token, "confirmed_at": &stored.ConfirmedAt,
+		"hub_confirmed_at": &stored.HubConfirmedAt, "hub_binding": &stored.HubBinding,
 	})
 	if err != nil || !found {
 		return nil, err
@@ -200,10 +222,11 @@ type Settings struct {
 	MemberID string
 	// StaleAfterDays is the number of days after which a policy that its
 	// source has not confirmed is stale.
-	StaleAfterDays int
-	HubURL         string
-	ProjectID      string
-	Token          string
+	StaleAfterDays      int
+	HubURL              string
+	ProjectID           string
+	Token               string
+	MaxPolicyAgeSeconds int
 }
 
 // Configure applies a change to the configuration in the home directory.
@@ -218,6 +241,9 @@ func ConfigureAndRegister(home string, change Settings, publish func() error) er
 }
 
 func configureSettings(home string, change Settings, publish func() error) error {
+	if change.MaxPolicyAgeSeconds != 0 && !validMaxPolicyAge(change.MaxPolicyAgeSeconds) {
+		return errors.New("maximum policy age must be between 1 minute and 1 hour")
+	}
 	if change.StaleAfterDays < 0 {
 		return errors.New("stale-after-days must not be negative")
 	}
@@ -251,6 +277,9 @@ func configureSettings(home string, change Settings, publish func() error) error
 	if change.StaleAfterDays != 0 {
 		next.StaleAfterDays = change.StaleAfterDays
 	}
+	if change.MaxPolicyAgeSeconds != 0 {
+		next.MaxPolicyAgeSeconds = change.MaxPolicyAgeSeconds
+	}
 	if next.hasHubSettings() {
 		if err := next.checkHub(); err != nil {
 			return err
@@ -263,8 +292,18 @@ func configureSettings(home string, change Settings, publish func() error) error
 		}
 	}
 	var files []settingsFile
+	keysChanged := false
 	if change.KeySet != nil {
+		previous, err := os.ReadFile(filepath.Join(home, keysFile))
+		if err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		keysChanged = !bytes.Equal(previous, change.KeySet)
 		files = append(files, settingsFile{keysFile, change.KeySet})
+	}
+	if next.hasHubSettings() && (next.Token != current.Token || keysChanged) {
+		// Restoring an earlier pin or credential must not revive its confirmation.
+		next.HubTrustRevision = rand.Text()
 	}
 	if next != current {
 		data, err := json.MarshalIndent(next, "", "  ")
@@ -343,14 +382,21 @@ func saveSettings(home string, files []settingsFile, publish func() error) (err 
 }
 
 func lockHome(home string) (unlock func(), err error) {
+	return lockHomeFile(context.Background(), home, lockFile)
+}
+
+func lockHomeFile(ctx context.Context, home, name string) (func(), error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return nil, err
 	}
-	file, err := os.OpenFile(filepath.Join(home, lockFile), os.O_CREATE|os.O_RDWR, 0o600)
+	file, err := os.OpenFile(filepath.Join(home, name), os.O_CREATE|os.O_RDWR, 0o600)
 	if err != nil {
 		return nil, err
 	}
-	if err := lockFileExclusive(file); err != nil {
+	if err := lockFileContext(ctx, file); err != nil {
 		file.Close()
 		return nil, fmt.Errorf("cannot lock %s: %w", home, err)
 	}

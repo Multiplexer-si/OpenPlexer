@@ -9,8 +9,8 @@ import (
 
 func TestOneCallIsJudgedOnceWithEveryQuery(t *testing.T) {
 	var calls [][]policy.Query
-	judge := func(first policy.Query, rest ...policy.Query) Verdict {
-		calls = append(calls, append([]policy.Query{first}, rest...))
+	judge := func(queries ...policy.Query) Verdict {
+		calls = append(calls, slices.Clone(queries))
 		return Verdict{}
 	}
 	call := []byte(`{"hook_event_name":"PreToolUse","tool_name":"Bash","cwd":"/p","tool_input":{"command":"touch a b && go test"}}`)
@@ -28,7 +28,7 @@ func TestOneCallIsJudgedOnceWithEveryQuery(t *testing.T) {
 }
 
 func TestACallWithNoQueryIsNotJudged(t *testing.T) {
-	judge := func(policy.Query, ...policy.Query) Verdict {
+	judge := func(...policy.Query) Verdict {
 		t.Fatal("the judge was asked about a call that makes no query")
 		return Verdict{}
 	}

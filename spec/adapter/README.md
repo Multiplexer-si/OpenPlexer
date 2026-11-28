@@ -138,9 +138,11 @@ The reference is at commit `7d80045a`.
 | The adapter reads every operand of `mv` and of `git mv` as a write: each source, the destination, and each source of the `-t` form. The reference reads only the destination of `mv`, and nothing of `git mv`, so it allows `mv api/server.ts src/server.ts` for a role that may write only `src`. | A move removes the file at its source. With only the destination read, `mv ~/.claude/settings.json /tmp/s.json` moves a guarded hook file away, and a move takes a file out of an area that the role may not write. |
 | The text of a reason is not the text of the reference. | The reference tells the agent to draft a request in the Room. A reason here names the intent, the area, and the rule. |
 | The caller names guarded paths, and the adapter denies a write to one of them before it asks the policy. The `openplexer hook` command guards the OpenPlexer home and the hook files of both agents. The reference guards its home only when a policy is stored, and it warns otherwise. | A write into the home can replace the key set or roll the policy back, and a write to a hook file can remove the hook. The home and the user hook files are outside the project, so the policy never judges a write to them, with a policy or without one. |
-| The adapter has no claim check, no warning, no event, no `PostToolUse`, `SessionStart`, `UserPromptSubmit`, `SessionEnd`, or `ConfigChange` hook, no drift check, no native deny rule, and no git hook. | They need the hub, the Room, the audit log, or the install, and they belong to other issues. [The trust model](../../docs/trust-model.md) records each decision. |
+| The adapter has no claim check, no claim warning, no Room event, no `PostToolUse`, `UserPromptSubmit`, `SessionEnd`, or `ConfigChange` hook, no drift check, no native deny rule, and no git hook. | They need the hub, the Room, the audit log, or the install, and they belong to other issues. [The trust model](../../docs/trust-model.md) records each decision. |
 
 No fixture case depends on one of these differences. Every expected value is the value that the reference returns.
+
+The CLI also handles `SessionStart` for the hub policy age check. A synthetic event tests the startup warning. [Startup test](../../apps/openplexer/freshness_test.go)
 
 ## Open questions
 

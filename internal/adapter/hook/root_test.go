@@ -115,8 +115,8 @@ func TestRootsFind(t *testing.T) {
 }
 
 func recordQueries(asked *[]string) Judge {
-	return func(first policy.Query, rest ...policy.Query) Verdict {
-		for _, q := range append([]policy.Query{first}, rest...) {
+	return func(queries ...policy.Query) Verdict {
+		for _, q := range queries {
 			*asked = append(*asked, string(q.Action)+" "+q.Path+q.Command)
 		}
 		return Verdict{Deny, "denied"}
@@ -199,7 +199,7 @@ func TestWithNoRootEveryWriteAndGatedCommandIsDenied(t *testing.T) {
 	home := t.TempDir()
 	cwd := filepath.Join(home, "loose", "dir")
 	mkdirs(t, cwd)
-	never := func(policy.Query, ...policy.Query) Verdict {
+	never := func(...policy.Query) Verdict {
 		t.Fatal("the policy was asked about a call with no project root")
 		return Verdict{}
 	}

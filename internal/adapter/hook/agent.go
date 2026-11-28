@@ -1,7 +1,6 @@
 package hook
 
 import (
-	"encoding/json/jsontext"
 	"maps"
 	"path/filepath"
 	"regexp"
@@ -21,7 +20,11 @@ type Agent struct {
 	NextStep     string
 }
 
-const PreTool = "pre-tool"
+const (
+	PreTool           = "pre-tool"
+	SessionStart      = "session-start"
+	sessionStartEvent = "SessionStart"
+)
 
 func (a Agent) Matcher() string {
 	return strings.Join(slices.Sorted(maps.Keys(a.Tools)), "|")
@@ -33,9 +36,6 @@ func (a Agent) Handle(stdin []byte, env Env, judge Judge) Output {
 
 // HandleProject passes a covered call and its translator to the portable check.
 func (a Agent) HandleProject(stdin []byte, check func(Call, Translate) Verdict) Output {
-	if !jsontext.Value(stdin).IsValid() {
-		return Render(Verdict{Refuse, "the hook input is invalid JSON or has a duplicate member"})
-	}
 	call, translate, err := coveredCall(stdin, a.Tools)
 	if err != nil {
 		return Render(Verdict{Refuse, err.Error()})
@@ -55,6 +55,16 @@ func (a Agent) Handler(executable string) Handler {
 		Command:   shellQuote(executable) + " hook " + a.Name + " " + PreTool,
 		Timeout:   a.Timeout,
 		OnFailure: a.OnFailure,
+	}
+}
+
+func (a Agent) SessionHandler(executable string) Handler {
+	return Handler{
+		Agent:   a.Name,
+		Event:   sessionStartEvent,
+		Matcher: "startup|resume",
+		Command: shellQuote(executable) + " hook " + a.Name + " " + SessionStart,
+		Timeout: a.Timeout,
 	}
 }
 

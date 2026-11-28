@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"fmt"
 	"io/fs"
 	"os"
@@ -14,11 +15,12 @@ import (
 )
 
 type hookFile struct {
-	agent    hook.Agent
-	path     string
-	root     string
-	home     string
-	portable bool
+	agent        hook.Agent
+	path         string
+	root         string
+	home         string
+	portable     bool
+	keepPortable bool
 }
 
 func (c command) hookFile(name string, args []string) (hookFile, bool) {
@@ -34,6 +36,12 @@ func (c command) hookFile(name string, args []string) (hookFile, bool) {
 	if len(args) == 0 || flags.Parse(args[1:]) != nil || flags.NArg() != 0 {
 		return hookFile{}, false
 	}
+	portableSet := false
+	flags.Visit(func(f *flag.Flag) {
+		if f.Name == "portable" {
+			portableSet = true
+		}
+	})
 	agent, ok := adapter.Lookup(args[0])
 	if !ok {
 		return hookFile{}, false
@@ -80,7 +88,7 @@ func (c command) hookFile(name string, args []string) (hookFile, bool) {
 		fmt.Fprintf(c.stderr, "openplexer: %v\n", err)
 		return hookFile{}, false
 	}
-	return hookFile{agent, path, root, *home, portable}, true
+	return hookFile{agent, path, root, *home, portable, root != "" && !portableSet}, true
 }
 
 var executablePath = os.Executable
@@ -103,13 +111,20 @@ func (c command) install(args []string) int {
 	if err != nil {
 		return c.fail(fmt.Errorf("the path of this binary is not known, so the hook cannot name it: %w", err))
 	}
-	handler := agent.Handler(executable)
+	handler, startup := agent.Handler(executable), agent.SessionHandler(executable)
 	var change hook.Change
+	var keptPortable bool
 	if file.portable {
 		handler.Command += " --project-home"
-		change, err = c.installPortable(root, path, handler)
+		startup.Command += " --project-home"
+		change, err = c.installPortable(root, path, handler, startup)
+	} else if file.keepPortable {
+		change, keptPortable, err = c.journal().InstallProject(path, handler, root, startup)
+		if keptPortable {
+			executable = "openplexer"
+		}
 	} else {
-		change, err = c.journal().Install(path, handler, root)
+		change, err = c.journal().Install(path, handler, root, startup)
 	}
 	if err != nil {
 		return c.fail(err)
@@ -124,7 +139,7 @@ func (c command) install(args []string) int {
 	}
 	if file.portable {
 		fmt.Fprintf(c.stdout, "registered %s in the project registry\n", root)
-	} else if root != "" {
+	} else if root != "" && !keptPortable {
 		fmt.Fprintf(c.stdout, "recorded %s as the project root, so a repository inside it does not move the root\n", root)
 	}
 	fmt.Fprintln(c.stdout, agent.NextStep)
@@ -134,7 +149,7 @@ func (c command) install(args []string) int {
 	return exitOK
 }
 
-func (c command) installPortable(root, path string, handler hook.Handler) (hook.Change, error) {
+func (c command) installPortable(root, path string, handler, startup hook.Handler) (hook.Change, error) {
 	user, err := os.UserHomeDir()
 	if err != nil {
 		return hook.Unchanged, err
@@ -148,7 +163,7 @@ func (c command) installPortable(root, path string, handler hook.Handler) (hook.
 			}
 		}
 		var err error
-		change, err = journal.InstallAndRegister(path, handler, publish)
+		change, err = journal.InstallAndRegister(path, handler, publish, startup)
 		return err
 	})
 	return change, err

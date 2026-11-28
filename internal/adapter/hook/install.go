@@ -18,7 +18,7 @@ import (
 // Handler is the hook handler that OpenPlexer owns in one agent's hook file.
 type Handler struct {
 	Agent     string // "claude-code" or "codex": the word after `hook` in Command. It is the identity.
-	Event     string // "PreToolUse"
+	Event     string // "PreToolUse" or "SessionStart"
 	Matcher   string
 	Command   string
 	Timeout   int
@@ -83,6 +83,7 @@ func isBlank(text []byte) bool {
 type ours struct {
 	command            jsonedit.Node
 	commandText        string
+	session            bool
 	list               jsonedit.Node
 	event              jsonedit.Node
 	eventIdx, groupIdx int
@@ -149,9 +150,9 @@ func inspect(text []byte, agent, event string) (*layout, error) {
 				if m, dup := handler.DuplicateKey(); dup {
 					return nil, l.refuse(m.KeyStart, "duplicate key %q in %s.hooks[%d]", m.Key, where, hi)
 				}
-				if cmd, text, ok := l.ownedBy(handler, agent); ok {
+				if cmd, text, session, ok := l.ownedBy(handler, agent); ok {
 					l.ours = append(l.ours, ours{
-						command: cmd, commandText: text, list: list, event: em.Value,
+						command: cmd, commandText: text, session: session, list: list, event: em.Value,
 						eventIdx: ei, groupIdx: gi, handlerIdx: hi,
 					})
 				}
@@ -166,11 +167,11 @@ func (l *layout) refuse(offset int, format string, args ...any) error {
 	return fmt.Errorf("%s at line %d, column %d", fmt.Sprintf(format, args...), line, col)
 }
 
-func (l *layout) ownedBy(handler jsonedit.Node, agent string) (jsonedit.Node, string, bool) {
+func (l *layout) ownedBy(handler jsonedit.Node, agent string) (jsonedit.Node, string, bool, bool) {
 	node, ok, _ := handler.Get("command")
 	var command string
 	if !ok || node.Kind != jsonedit.String || l.doc.Decode(node, &command) != nil {
-		return node, "", false
+		return node, "", false, false
 	}
 	var args []string
 	if argsNode, ok, _ := handler.Get("args"); ok && argsNode.Kind == jsonedit.Array {
@@ -190,11 +191,11 @@ func (l *layout) ownedBy(handler jsonedit.Node, agent string) (jsonedit.Node, st
 	for _, words := range segments {
 		for i := 0; i+2 < len(words); i++ {
 			if isOpenplexer(words[i]) && words[i+1] == "hook" && words[i+2] == agent {
-				return node, command, true
+				return node, command, i+3 < len(words) && words[i+3] == SessionStart, true
 			}
 		}
 	}
-	return node, "", false
+	return node, "", false, false
 }
 
 func isOpenplexer(word string) bool {
@@ -211,7 +212,7 @@ func Install(text []byte, exists bool, h Handler) ([]byte, Change, Level, error)
 	if h.Agent == "" || h.Event == "" || h.Command == "" {
 		return nil, Unchanged, AddedUnknown, errors.New("handler needs an agent, an event, and a command")
 	}
-	if !canonical(h.Command, h.Agent) {
+	if !canonical(h.Command, h) {
 		return nil, Unchanged, AddedUnknown, fmt.Errorf("the command %q does not run a binary named openplexer, so uninstall could not find the entry. Rename the binary to openplexer", h.Command)
 	}
 	if !exists {
@@ -224,6 +225,7 @@ func Install(text []byte, exists bool, h Handler) ([]byte, Change, Level, error)
 	if err != nil {
 		return nil, Unchanged, AddedUnknown, err
 	}
+	l.ours = slices.DeleteFunc(l.ours, func(o ours) bool { return o.session != (h.Event == sessionStartEvent) })
 	if len(l.ours) > 0 {
 		out, change, err := l.repoint(text, h)
 		return out, change, AddedUnknown, err
@@ -258,7 +260,7 @@ func newFile(h Handler) []byte {
 	return b.Bytes()
 }
 
-func canonical(command, agent string) bool {
+func canonical(command string, h Handler) bool {
 	segments := Segments(command)
 	if len(segments) != 1 {
 		return false
@@ -267,13 +269,35 @@ func canonical(command, agent string) bool {
 	if len(w) != 4 && !(len(w) == 5 && w[0] == "openplexer" && w[4] == "--project-home") {
 		return false
 	}
-	return isOpenplexer(w[0]) && w[1] == "hook" && w[2] == agent && w[3] == "pre-tool"
+	stage := PreTool
+	if h.Event == sessionStartEvent {
+		stage = SessionStart
+	}
+	return isOpenplexer(w[0]) && w[1] == "hook" && w[2] == h.Agent && w[3] == stage
+}
+
+func hasPortablePreTool(text []byte, agent string) (bool, error) {
+	if isBlank(text) {
+		return false, nil
+	}
+	l, err := inspect(text, agent, preToolUse)
+	if err != nil {
+		return false, err
+	}
+	want := []string{"openplexer", "hook", agent, PreTool, "--project-home"}
+	for _, o := range l.ours {
+		segments := Segments(o.commandText)
+		if o.eventIdx == l.eventIdx && len(segments) == 1 && slices.Equal(segments[0], want) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 func (l *layout) repoint(text []byte, h Handler) ([]byte, Change, error) {
 	var edits []jsonedit.Edit
 	for _, o := range l.ours {
-		if o.commandText != h.Command && canonical(o.commandText, h.Agent) {
+		if o.commandText != h.Command && canonical(o.commandText, h) {
 			e, err := l.doc.ReplaceValue(o.command, h.Command)
 			if err != nil {
 				return nil, Unchanged, err
@@ -293,8 +317,15 @@ func (l *layout) repoint(text []byte, h Handler) ([]byte, Change, error) {
 // it removes each emptied container and keeps the top level. remove tells the
 // caller to delete the file.
 func Uninstall(text []byte, agent string, added Level) (out []byte, remove bool, change Change, err error) {
+	return uninstall(text, agent, added, AddedUnknown)
+}
+
+func uninstall(text []byte, agent string, added, sessionAdded Level) (out []byte, remove bool, change Change, err error) {
 	if added == AddedUnknown {
 		added = AddedHooksObject
+	}
+	if sessionAdded == AddedUnknown {
+		sessionAdded = AddedHooksObject
 	}
 	cur := text
 	for {
@@ -308,11 +339,17 @@ func Uninstall(text []byte, agent string, added Level) (out []byte, remove bool,
 		if len(l.ours) == 0 {
 			return cur, false, change, nil
 		}
-		edit, wholeDocument, err := l.removal(l.ours[0], added)
+		// Remove the startup entry first. The first installed entry owns
+		// any parent containers created by the install.
+		entry, level := l.ours[0], added
+		if i := slices.IndexFunc(l.ours, func(o ours) bool { return o.session }); i >= 0 {
+			entry, level = l.ours[i], sessionAdded
+		}
+		edit, wholeDocument, err := l.removal(entry, level)
 		if err != nil {
 			return nil, false, Unchanged, err
 		}
-		if wholeDocument && added == AddedFile {
+		if wholeDocument && level == AddedFile {
 			return nil, true, Removed, nil
 		}
 		if cur, err = l.doc.Apply(edit); err != nil {
