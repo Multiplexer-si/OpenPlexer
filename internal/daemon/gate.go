@@ -33,17 +33,34 @@ func Open(home string, now func() time.Time) (*Gate, error) {
 }
 
 func openGate(home string, now func() time.Time, verifier policy.BundleVerifier) (*Gate, error) {
+	g, err := openPolicy(home, now, verifier)
+	if err != nil {
+		return nil, err
+	}
+	g.status = g.status.localStatusAt(now())
+	return g, nil
+}
+
+func openPolicy(home string, now func() time.Time, verifier policy.BundleVerifier) (*Gate, error) {
 	config, err := readConfig(home)
 	if err != nil {
 		return nil, err
 	}
 	g := &Gate{home: home, now: now, config: config, verifier: verifier}
-	g.read()
+	g.readPolicy()
 	return g, nil
 }
 
-func (g *Gate) read() *policy.Verified {
-	status, verified := classify(g.home, g.config, g.now(), g.verifier)
+func (g *Gate) read() (*policy.Verified, error) {
+	verified, err := g.readPolicy()
+	if g.config.maxPolicyAge() == 0 {
+		g.status = g.status.localStatusAt(g.now())
+	}
+	return verified, err
+}
+
+func (g *Gate) readPolicy() (*policy.Verified, error) {
+	status, verified, readErr := classify(g.home, g.config, g.verifier)
 	status.Member = g.config.MemberID
 	g.bundle = nil
 	if verified != nil {
@@ -58,7 +75,7 @@ func (g *Gate) read() *policy.Verified {
 	}
 	status.MaxPolicyAge = g.config.maxPolicyAge()
 	g.status = status
-	return verified
+	return verified, readErr
 }
 
 // Status reports the state of the policy this gate read at the current hub age.
@@ -102,13 +119,14 @@ func bundleSizeError(err error) bool {
 // ErrRejected. An error that wraps only ErrNotRecorded means that the
 // bundle is in force.
 func (g *Gate) Load(ctx context.Context, source Source) (Status, error) {
-	return g.load(ctx, source, storedPolicy{})
+	err := g.load(ctx, source, storedPolicy{}, false)
+	return g.Status(), err
 }
 
-func (g *Gate) load(ctx context.Context, source Source, stored storedPolicy) (Status, error) {
+func (g *Gate) load(ctx context.Context, source Source, stored storedPolicy, requireCachedPolicy bool) error {
 	token, err := source.Fetch(ctx)
 	if err != nil && !bundleSizeError(err) {
-		return g.Status(), fmt.Errorf("the policy source is not available, and the policy in force stays: %w", err)
+		return fmt.Errorf("the policy source is not available, and the policy in force stays: %w", err)
 	}
 	var signed *policy.SignedBundle
 	if err == nil {
@@ -116,7 +134,7 @@ func (g *Gate) load(ctx context.Context, source Source, stored storedPolicy) (St
 	}
 	unlock, lockErr := lockHomeFile(ctx, g.home, lockFile)
 	if lockErr != nil {
-		return g.Status(), lockErr
+		return lockErr
 	}
 	defer unlock()
 
@@ -128,7 +146,12 @@ func (g *Gate) load(ctx context.Context, source Source, stored storedPolicy) (St
 		return g.reject(configErr)
 	}
 	g.config = current
-	inForce := g.read()
+	inForce, readErr := g.read()
+	if requireCachedPolicy {
+		if err := g.requireHubPolicy(readErr); err != nil {
+			return g.reject(err)
+		}
+	}
 	if stored.HubBinding != "" {
 		_, binding, err := current.hubSnapshot(g.home)
 		if err != nil || binding != stored.HubBinding {
@@ -136,7 +159,7 @@ func (g *Gate) load(ctx context.Context, source Source, stored storedPolicy) (St
 		}
 	}
 	if err := ctx.Err(); err != nil {
-		return g.Status(), err
+		return err
 	}
 	if err != nil {
 		return g.reject(err)
@@ -146,26 +169,26 @@ func (g *Gate) load(ctx context.Context, source Source, stored storedPolicy) (St
 		return g.reject(err)
 	}
 	if err := ctx.Err(); err != nil {
-		return g.Status(), err
+		return err
 	}
 	stored.Token, stored.ConfirmedAt = token, g.now().UTC()
 	if err := writeJSON(g.home, policyFile, stored); err != nil {
-		return g.Status(), err
+		return err
 	}
 	g.read()
-	return g.Status(), g.record(audit.Record{
+	return g.record(audit.Record{
 		Action: action,
 		Target: candidate.Bundle.ProjectID,
 		Meta:   map[string]any{"version": candidate.Bundle.Version},
 	})
 }
 
-func (g *Gate) reject(err error) (Status, error) {
+func (g *Gate) reject(err error) error {
 	reason := err.Error()
 	// A failed record does not join the rejection, because a caller takes
 	// an error that wraps ErrNotRecorded to mean that the bundle is in force.
 	_ = g.record(audit.Record{Action: "policy.rejected", Target: g.status.ProjectID, Reason: &reason})
-	return g.Status(), fmt.Errorf("%w, and the policy in force stays: %w", ErrRejected, err)
+	return fmt.Errorf("%w, and the policy in force stays: %w", ErrRejected, err)
 }
 
 // ErrNotRecorded is the error of a Load or a Decide that did its work and
@@ -289,9 +312,13 @@ func (g *Gate) Decide(agent string, first policy.Query, rest ...policy.Query) (V
 
 // DecideContext bounds the wait to append a decision record.
 func (g *Gate) DecideContext(ctx context.Context, agent string, first policy.Query, rest ...policy.Query) (Verdict, error) {
-	queries := append([]policy.Query{first}, rest...)
 	now := g.now()
-	verdict := Verdict{Policy: g.statusAt(now), Query: first}
+	return g.decideAt(ctx, agent, g.statusAt(now), now, first, rest...)
+}
+
+func (g *Gate) decideAt(ctx context.Context, agent string, status Status, now time.Time, first policy.Query, rest ...policy.Query) (Verdict, error) {
+	queries := append([]policy.Query{first}, rest...)
+	verdict := Verdict{Policy: status, Query: first}
 	if verdict.Policy.MaxPolicyAge != 0 && verdict.Policy.State == Stale {
 		verdict.Query.Member, verdict.Query.Now, verdict.Query.Overrides = g.config.MemberID, policy.TimestampOf(now), nil
 		if first.Action == policy.Read || first.Action == policy.Write {
@@ -302,8 +329,8 @@ func (g *Gate) DecideContext(ctx context.Context, agent string, first policy.Que
 		verdict.result = policy.Result{Decision: policy.Deny, Rule: StalePolicyReason}
 	} else if verdict.Policy.Enforced() {
 		verdict.decided = true
-		verdict.Query, verdict.result = g.evaluate(queries)
-		verdict.decidedAt = g.now()
+		verdict.Query, verdict.result = g.evaluate(queries, now)
+		verdict.decidedAt = now
 	}
 	unlock, err := lockHomeFile(ctx, g.home, lockFile)
 	if err != nil {
@@ -313,8 +340,8 @@ func (g *Gate) DecideContext(ctx context.Context, agent string, first policy.Que
 	return verdict, g.record(decisionRecord(agent, verdict, queries))
 }
 
-func (g *Gate) evaluate(queries []policy.Query) (policy.Query, policy.Result) {
-	now := policy.TimestampOf(g.now())
+func (g *Gate) evaluate(queries []policy.Query, at time.Time) (policy.Query, policy.Result) {
+	now := policy.TimestampOf(at)
 	var firstQuery policy.Query
 	var firstResult policy.Result
 	budget := policy.NewBudget()

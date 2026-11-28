@@ -15,23 +15,13 @@ import (
 func (c command) checkSession() int {
 	ctx, cancel := context.WithTimeout(context.Background(), daemon.RefreshBudget)
 	defer cancel()
-	gate, err := c.openForHook(ctx)
+	decision, err := daemon.OpenForHook(ctx, c.home, c.now)
 	if err != nil {
 		return c.fail(err)
 	}
-	c.report(gate.Status())
-	return policyStatusExit(gate.Status())
-}
-
-func (c command) openForHook(ctx context.Context) (*daemon.Gate, error) {
-	gate, err := daemon.Open(c.home, c.now)
-	if err != nil {
-		return nil, err
-	}
-	if err := gate.RefreshForHook(ctx); err != nil {
-		return nil, err
-	}
-	return gate, nil
+	status := decision.Status()
+	c.report(status)
+	return policyStatusExit(status)
 }
 
 func (c command) sessionStart(portable bool, userHome string, input []byte, ctx context.Context) int {
@@ -73,14 +63,15 @@ func (c command) sessionStart(portable bool, userHome string, input []byte, ctx 
 		}
 		c.home = project.Home
 	}
-	gate, err := c.openForHook(ctx)
+	decision, err := daemon.OpenForHook(ctx, c.home, c.now)
 	if err != nil {
 		return warn("OpenPlexer could not read policy settings. Run `openplexer policy status`.")
 	}
-	if gate.HubStale() {
+	status := decision.Status()
+	if status.MaxPolicyAge != 0 && status.State == daemon.Stale {
 		return warn("OpenPlexer: " + daemon.StalePolicyReason + ".")
 	}
-	if gate.Status().MaxPolicyAge != 0 && !gate.Status().Enforced() {
+	if status.MaxPolicyAge != 0 && !status.Enforced() {
 		return warn("OpenPlexer has no verified hub policy. Run `openplexer policy status` and `openplexer policy sync`.")
 	}
 	return exitOK

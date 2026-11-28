@@ -22,7 +22,7 @@ func TestAWriteToAGuardedPathIsDeniedBeforeThePolicy(t *testing.T) {
 			{Path: ".claude/settings.json", Why: "it holds the hook of OpenPlexer"},
 		},
 	}
-	allow := func(policy.Query, ...policy.Query) Verdict { return Verdict{} }
+	allow := func(...policy.Query) Verdict { return Verdict{} }
 	tools := Tools{"Write": FileTool("file_path"), "Bash": ShellTool, "apply_patch": func(call Call) (Effect, error) {
 		text, err := call.Text("command")
 		return Effect{Writes: []string{text}}, err

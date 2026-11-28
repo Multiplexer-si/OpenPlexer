@@ -285,7 +285,7 @@ func TestHookBindsRequiredRefresh(t *testing.T) {
 				for _, tool := range []string{"zero-command", "matched-shell", "native-write"} {
 					name := fmt.Sprintf("%s/%s/portable=%t/%s", scenario.name, agent, portable, tool)
 					t.Run(name, func(t *testing.T) {
-					testHookRequiredRefresh(t, agent, portable, tool, scenario)
+						testHookRequiredRefresh(t, agent, portable, tool, scenario)
 					})
 				}
 			}
@@ -446,6 +446,7 @@ func TestRejectedHubHookRefreshesAndDenies(t *testing.T) {
 					if !strings.Contains(out, `"permissionDecision":"deny"`) || !strings.Contains(out, "cannot verify its policy") || fetches != 2 {
 						t.Errorf("rejected cache got %q after %d bundle fetches, want denial and one refresh", out, fetches)
 					}
+					c.now = c.now.Add(daemon.RefreshBudget)
 				}
 			})
 		}
@@ -498,6 +499,7 @@ func TestStaleHookRefreshOrDeny(t *testing.T) {
 				strings.Contains(out, "openplexer policy sync") == reachable || fetches != 2 {
 				t.Errorf("hook returned %q after %d bundle fetches", out, fetches)
 			}
+			c.now = c.now.Add(daemon.RefreshBudget)
 			if reachable {
 				if out := c.must(exitOK, "policy", "status"); !strings.Contains(out, "version 2 ") {
 					t.Errorf("refreshed policy missing: %s", out)
@@ -547,10 +549,14 @@ func TestStaleHookConcurrentRefresh(t *testing.T) {
 	c.must(exitOK, "policy", "sync")
 	c.now = c.now.Add(5 * time.Minute)
 	c.stdin = ageWrite(project)
+	started := time.Now()
+	clock := func() time.Time { return c.now.Add(time.Since(started)) }
 	var calls sync.WaitGroup
 	runHook := func() {
-		if exit, out, err := c.run("hook", "claude-code", "pre-tool"); exit != exitOK || out != "" || err != "" {
-			t.Errorf("hook: %d %q %q", exit, out, err)
+		var out, diagnostic strings.Builder
+		exit := run([]string{"hook", "claude-code", "pre-tool"}, strings.NewReader(c.stdin), &out, &diagnostic, clock)
+		if exit != exitOK || out.Len() != 0 || diagnostic.Len() != 0 {
+			t.Errorf("hook: %d %q %q", exit, out.String(), diagnostic.String())
 		}
 	}
 	calls.Go(runHook)
@@ -684,7 +690,13 @@ func TestCheckSessionRefreshesHubAndPreservesLocalAdvisory(t *testing.T) {
 	})
 	c.must(exitOK, "policy", "sync")
 	c.now = c.now.Add(5 * time.Minute)
-	if out := c.must(exitOK, "policy", "check-session"); !strings.Contains(out, c.now.Format(time.RFC3339)) || fetches != 2 {
+	out := c.must(exitOK, "policy", "check-session")
+	var saved struct {
+		HubConfirmedAt time.Time `json:"hub_confirmed_at"`
+	}
+	readJSON(t, filepath.Join(home, "policy.json"), &saved)
+	if saved.HubConfirmedAt.Before(c.now) || saved.HubConfirmedAt.Sub(c.now) > daemon.RefreshBudget ||
+		!strings.Contains(out, saved.HubConfirmedAt.Format(time.RFC3339Nano)) || fetches != 2 {
 		t.Errorf("startup check returned %q after %d fetches", out, fetches)
 	}
 	c.now = c.now.Add(5 * time.Minute)

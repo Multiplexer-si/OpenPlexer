@@ -68,16 +68,24 @@ type storedPolicy struct {
 	HubBinding     string    `json:"hub_binding,omitempty"`
 }
 
-func classify(home string, cfg config, now time.Time, verifier policy.BundleVerifier) (Status, *policy.Verified) {
-	rejected := func(format string, args ...any) (Status, *policy.Verified) {
-		return Status{State: Rejected, Detail: fmt.Sprintf(format, args...)}, nil
+func (s Status) localStatusAt(now time.Time) Status {
+	if s.MaxPolicyAge == 0 && s.State == Verified && !now.Before(s.StaleAt) {
+		s.State = Stale
+		s.Detail += fmt.Sprintf(", stale since %s", s.StaleAt.UTC().Format(time.RFC3339))
+	}
+	return s
+}
+
+func classify(home string, cfg config, verifier policy.BundleVerifier) (Status, *policy.Verified, error) {
+	rejected := func(format string, args ...any) (Status, *policy.Verified, error) {
+		return Status{State: Rejected, Detail: fmt.Sprintf(format, args...)}, nil, nil
 	}
 	stored, err := readStoredPolicy(home)
 	switch {
 	case err != nil:
-		return rejected("the stored policy cannot be read: %v", err)
+		return Status{State: Rejected, Detail: fmt.Sprintf("the stored policy cannot be read: %v", err)}, nil, err
 	case stored == nil:
-		return Status{State: Absent, Detail: "no policy is loaded"}, nil
+		return Status{State: Absent, Detail: "no policy is loaded"}, nil, nil
 	}
 	signed, err := policy.ReadSignedBundle(stored.Token)
 	if err != nil {
@@ -112,9 +120,6 @@ func classify(home string, cfg config, now time.Time, verifier policy.BundleVeri
 		if !status.HubConfirmedAt.IsZero() {
 			status.StaleAt = status.HubConfirmedAt.Add(cfg.maxPolicyAge())
 		}
-	} else if !now.Before(status.StaleAt) {
-		status.State = Stale
-		status.Detail += fmt.Sprintf(", stale since %s", status.StaleAt.UTC().Format(time.RFC3339))
 	}
-	return status, verified
+	return status, verified, nil
 }

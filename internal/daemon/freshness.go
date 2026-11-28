@@ -2,7 +2,10 @@ package daemon
 
 import (
 	"context"
+	"errors"
 	"time"
+
+	"github.com/multiplexer-si/openplexer/internal/policy"
 )
 
 const (
@@ -34,36 +37,89 @@ func (s Status) hubStaleAt(now time.Time) bool {
 		hubPolicyStale(s.HubConfirmedAt, s.MaxPolicyAge, now)
 }
 
-// HubStale distinguishes an expired cached hub policy from a local advisory
-// and from a policy that is absent or cannot be verified.
-func (g *Gate) HubStale() bool {
-	return g.status.hubStaleAt(g.now())
-}
-
-// HubNeedsRefresh reports whether a connected home has stale or rejected policy.
-func (s Status) HubNeedsRefresh() bool {
+func (s Status) hubNeedsRefresh() bool {
 	return s.MaxPolicyAge != 0 && (s.State == Rejected || s.State == Stale)
 }
 
-// RefreshForHook reopens the policy under the automatic refresh lock and
-// after any attempt. The caller supplies a deadline shared across its homes.
-func (g *Gate) RefreshForHook(ctx context.Context) error {
-	if !g.Status().HubNeedsRefresh() {
-		return nil
+// HookDecision is the policy, configuration and refresh result for one home
+// in one hook call. The decision uses the opened state and its captured time.
+type HookDecision struct {
+	gate            Gate
+	status          Status
+	at              time.Time
+	refreshRequired bool
+	refreshErr      error
+}
+
+// OpenForHook prepares one home. The caller supplies a refresh deadline shared
+// across all its homes.
+func OpenForHook(ctx context.Context, home string, now func() time.Time) (HookDecision, error) {
+	g, err := openPolicy(home, now, policy.BundleVerifier{})
+	if err != nil {
+		return HookDecision{}, err
 	}
-	unlock, lockErr := lockHomeFile(ctx, g.home, automaticLockFile)
-	if lockErr != nil {
-		if err := g.reopen(); err != nil {
-			return err
+	d := g.prepareHook(ctx)
+	return d, d.refreshErr
+}
+
+func (g *Gate) prepareHook(ctx context.Context) HookDecision {
+	at, started := g.now(), time.Now()
+	d := HookDecision{gate: *g, at: at, status: g.statusAt(at).localStatusAt(at)}
+	// Anchor fetch, reopen and audit timestamps to one wall-clock reading.
+	// Monotonic elapsed time lets a newly confirmed policy be used after
+	// waiting for a peer or doing our own fetch.
+	d.gate.now = func() time.Time { return at.Add(time.Since(started)) }
+	d.refreshRequired = d.status.hubNeedsRefresh()
+	if d.refreshRequired {
+		d.refreshErr = d.refresh(ctx)
+		d.at = d.gate.now()
+	}
+	return d
+}
+
+func (d HookDecision) Status() Status { return d.status }
+
+func (d HookDecision) ExecGated() bool { return !d.status.Enforced() || d.gate.ExecGated() }
+
+// RefreshBlocked applies even when the call produces no policy queries.
+func (d HookDecision) RefreshBlocked() bool {
+	return d.refreshRequired && (d.refreshErr != nil || !d.status.freshHubPolicy())
+}
+
+func (d HookDecision) DecideContext(ctx context.Context, agent string, first policy.Query, rest ...policy.Query) (Verdict, error) {
+	if d.refreshErr != nil {
+		return Verdict{Policy: d.status, Query: first}, d.refreshErr
+	}
+	return d.gate.decideAt(ctx, agent, d.status, d.at, first, rest...)
+}
+
+func (d HookDecision) QueueDenial(v Verdict, agent string) error {
+	return d.gate.QueueDenial(v, agent)
+}
+
+func (s Status) freshHubPolicy() bool { return s.MaxPolicyAge != 0 && s.State == Verified }
+
+func (d *HookDecision) refresh(ctx context.Context) error {
+	g := &d.gate
+	unlock, err := lockHomeFile(ctx, g.home, automaticLockFile)
+	if err != nil {
+		if ctx.Err() != nil {
+			return nil // The stale or rejected snapshot still blocks the call.
 		}
-		if g.Status().HubNeedsRefresh() {
-			return nil
-		}
-		return lockErr
+		return err
 	}
 	defer unlock()
-	if err := g.reopen(); err != nil || !g.Status().HubNeedsRefresh() {
+	if err := g.reopenHub(); err != nil {
 		return err
+	}
+	// An unchanged confirmation cannot become fresh while this call waits.
+	at := d.at
+	if !g.status.HubConfirmedAt.Equal(d.status.HubConfirmedAt) {
+		at = g.now()
+	}
+	d.status = g.statusAt(at)
+	if d.status.freshHubPolicy() {
+		return nil
 	}
 	var failedAt time.Time
 	if _, err := readJSON(g.home, automaticFailFile, map[string]any{"failed_at": &failedAt}); err != nil {
@@ -73,27 +129,47 @@ func (g *Gate) RefreshForHook(ctx context.Context) error {
 	if ctx.Err() != nil || !failedAt.IsZero() && !now.Before(failedAt) && now.Sub(failedAt) < automaticBackoff {
 		return nil
 	}
-	_, syncErr := g.Sync(ctx)
-	if err := g.reopen(); err != nil {
-		return err
-	}
-	if syncErr != nil {
-		// Stale and rejected policies reach the gate's normal denial path.
-		// A sync can return an error even after committing a fresh policy.
-		if !g.Status().HubNeedsRefresh() {
-			return syncErr
+	syncErr := g.sync(ctx, true)
+	reopenErr := g.reopenHub()
+	if reopenErr == nil {
+		if syncErr == nil || !g.status.HubConfirmedAt.Equal(d.status.HubConfirmedAt) {
+			at = g.now()
 		}
+		d.status = g.statusAt(at)
+	}
+	if syncErr != nil || reopenErr != nil || !d.status.freshHubPolicy() {
 		_ = writeJSON(g.home, automaticFailFile, map[string]time.Time{"failed_at": g.now().UTC()})
+	}
+	if reopenErr != nil {
+		return reopenErr
+	}
+	if d.status.freshHubPolicy() {
+		// A sync can fail after publishing a fresh policy. Its error still
+		// blocks this call. Stale and rejected states have their own denials.
+		return syncErr
 	}
 	return nil
 }
 
-func (g *Gate) reopen() error {
+func (g *Gate) reopenHub() error {
 	cfg, err := readConfig(g.home)
 	if err != nil {
 		return err
 	}
 	g.config = cfg
-	g.read()
+	_, readErr := g.readPolicy()
+	return g.requireHubPolicy(readErr)
+}
+
+func (g *Gate) requireHubPolicy(readErr error) error {
+	if !g.config.hasHubSettings() {
+		return errors.New("config.json no longer contains hub settings")
+	}
+	if readErr != nil {
+		return readErr
+	}
+	if g.status.State == Absent {
+		return errors.New("policy.json is missing")
+	}
 	return nil
 }

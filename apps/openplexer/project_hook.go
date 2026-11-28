@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
+	"github.com/multiplexer-si/openplexer/internal/daemon"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 	"github.com/multiplexer-si/openplexer/internal/projects"
 )
@@ -115,23 +116,20 @@ func (c command) checkProjectCall(refreshCtx, decisionCtx context.Context, agent
 	}
 	for _, group := range groups {
 		c.home = group.home
-		gate, err := c.openForHook(refreshCtx)
+		decision, err := daemon.OpenForHook(refreshCtx, c.home, c.now)
 		if err != nil {
 			return hook.Verdict{Outcome: hook.Deny, Reason: c.hookPolicyError(err).Error()}
 		}
 		queries := group.writes
-		status := gate.Status()
-		if !status.Enforced() || gate.ExecGated() {
+		if decision.ExecGated() {
 			queries = append(queries, group.commands...)
 		}
-		if len(queries) == 0 && group.shell && status.HubNeedsRefresh() {
+		if len(queries) == 0 && group.shell && decision.RefreshBlocked() {
 			command, _ := call.Text("command")
 			queries = append(queries, policy.Query{Action: policy.Exec, Command: command, AgentSessionID: session})
 		}
-		if len(queries) > 0 {
-			if verdict := c.judge(decisionCtx, agent, gate, projectDenied)(queries[0], queries[1:]...); verdict.Outcome != hook.Allow {
-				return verdict
-			}
+		if verdict := c.judge(decisionCtx, agent, decision, projectDenied, queries); verdict.Outcome != hook.Allow {
+			return verdict
 		}
 	}
 	return hook.Verdict{}

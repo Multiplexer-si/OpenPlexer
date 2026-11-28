@@ -45,9 +45,15 @@ func TestHookRefreshReportsErrorsWithoutAStaleVerdict(t *testing.T) {
 			if err := os.Mkdir(filepath.Join(home, want), 0o700); err != nil {
 				t.Fatal(err)
 			}
-			err = g.RefreshForHook(t.Context())
+			decision := g.prepareHook(t.Context())
+			err = decision.refreshErr
 			if err == nil || !strings.Contains(err.Error(), want) || name == "sync audit" && !errors.Is(err, ErrNotRecorded) {
-				t.Errorf("policy %s, refresh error %v; want the error for %s", g.Status().State, err, want)
+				t.Errorf("policy %s, refresh error %v; want the error for %s", decision.Status().State, err, want)
+			}
+			if name == "sync audit" {
+				if _, err := os.Stat(filepath.Join(home, automaticFailFile)); err != nil {
+					t.Errorf("an audit failure after publication must start backoff: %v", err)
+				}
 			}
 		})
 	}

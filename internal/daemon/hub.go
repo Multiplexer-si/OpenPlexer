@@ -198,9 +198,14 @@ func (c config) hubSnapshot(home string) (hubClient, string, error) {
 
 // Sync fetches and admits the latest policy from the configured hub.
 func (g *Gate) Sync(ctx context.Context) (Status, error) {
+	err := g.sync(ctx, false)
+	return g.Status(), err
+}
+
+func (g *Gate) sync(ctx context.Context, requireCachedPolicy bool) error {
 	unlock, err := lockHomeFile(ctx, g.home, lockFile)
 	if err != nil {
-		return g.Status(), err
+		return err
 	}
 	cfg, err := readConfig(g.home)
 	var client hubClient
@@ -210,11 +215,11 @@ func (g *Gate) Sync(ctx context.Context) (Status, error) {
 	}
 	unlock()
 	if err != nil {
-		return g.Status(), err
+		return err
 	}
 	if err := ctx.Err(); err != nil {
-		return g.Status(), err
+		return err
 	}
 	confirmation := storedPolicy{HubConfirmedAt: g.now().UTC(), HubBinding: binding}
-	return g.load(ctx, hubSource{hubClient: client, verifier: g.verifier}, confirmation)
+	return g.load(ctx, hubSource{hubClient: client, verifier: g.verifier}, confirmation, requireCachedPolicy)
 }
