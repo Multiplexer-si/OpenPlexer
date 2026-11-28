@@ -16,4 +16,8 @@ func tryLockFileExclusive(*os.File) error {
 	return errors.ErrUnsupported
 }
 
+func tryLockFileShared(*os.File) error {
+	return errors.ErrUnsupported
+}
+
 func lockFileContext(context.Context, *os.File) error { return errors.ErrUnsupported }

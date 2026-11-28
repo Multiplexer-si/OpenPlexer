@@ -47,12 +47,7 @@ func lockRoom(home string) (*os.File, error) {
 // A local delivery or cursor write failure stops the process. An unavailable
 // hub leaves the policy and cursor on disk for the next attempt.
 func Run(ctx context.Context, home string, now func() time.Time, receive func(room.Event) error, report func(error)) error {
-	cfg, err := readConfig(home)
-	if err != nil {
-		return err
-	}
-	client, err := cfg.client()
-	if err != nil {
+	if _, err := readRoomClient(home); err != nil {
 		return err
 	}
 	file, err := lockRoom(home)
@@ -70,10 +65,20 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	if found && (cursor.LastSeq <= 0 || cursor.LastSeq > 1<<53-1) {
 		return errors.New("invalid stored Room cursor")
 	}
+	// A member token can rotate while the daemon reads the cursor.
+	client, err := readRoomClient(home)
+	if err != nil {
+		return err
+	}
 	receiver := room.NewReceiver()
-	receiver.Restore(cfg.ProjectID, cursor.LastSeq)
-	activity := DaemonActivity{PID: os.Getpid(), StartedAt: started, HeartbeatAt: time.Now().UTC()}
-	if err := writeJSON(home, daemonPIDFile, activity); err != nil {
+	receiver.Restore(client.project, cursor.LastSeq)
+	mode := daemonForeground
+	if os.Getenv(serviceEnv) == "1" {
+		mode = daemonManaged
+	}
+	activity := DaemonActivity{PID: os.Getpid(), StartedAt: started, HeartbeatAt: time.Now().UTC(), Mode: mode}
+	lease, err := activity.publish(home)
+	if err != nil {
 		return fmt.Errorf("publish daemon activity: %w", err)
 	}
 	defer os.Remove(filepath.Join(home, daemonPIDFile))
@@ -81,7 +86,7 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	ctx, cancel := context.WithCancel(ctx)
 	var workers sync.WaitGroup
 	workers.Go(func() { pollHub(ctx, home, now, report) })
-	workers.Go(func() { activity.heartbeat(ctx, home, report) })
+	workers.Go(func() { activity.heartbeat(ctx, home, lease, report) })
 	defer func() {
 		cancel()
 		workers.Wait()
@@ -115,16 +120,20 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 		if ctx.Err() != nil {
 			break
 		}
-		cfg, err := readConfig(home)
-		if err != nil {
-			return err
-		}
-		client, err = cfg.client()
+		client, err = readRoomClient(home)
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func readRoomClient(home string) (hubClient, error) {
+	cfg, err := readConfig(home)
+	if err != nil {
+		return hubClient{}, err
+	}
+	return cfg.client()
 }
 
 func pollHub(ctx context.Context, home string, now func() time.Time, report func(error)) {

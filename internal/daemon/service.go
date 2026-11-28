@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"syscall"
 	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/projects"
@@ -130,15 +131,26 @@ func (s *Service) Install(binary string) error {
 	defer lock.Close()
 
 	ctx := context.Background()
-	current, err := s.managerStatus(ctx)
+	current, activity, err := s.startupStatus(ctx)
 	if err != nil {
 		return err
 	}
-	activity, err := ReadDaemonActivity(s.Home)
-	if err != nil {
+	installed, err := os.ReadFile(s.path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if activity.PID != current.PID && activity.running() {
+	const foreground = "stop the foreground openplexer daemon before installing the service for this home"
+	if activity.Mode == daemonForeground {
+		// A manager can restart the upgraded binary from the old definition.
+		// The status query is scoped to this home's service name.
+		unmarked := len(installed) > 0 && !bytes.Contains(installed, []byte("\n"+s.definitionMarker()+"\n"))
+		if !unmarked || current.State != "running" || current.PID != activity.PID {
+			return errors.New(foreground)
+		}
+	}
+	// Older daemons did not lock their activity record. Keep the foreground
+	// check for those records while upgrading the service definition.
+	if activity.Mode == "" && activity.PID != current.PID && activity.running() {
 		if current.loaded {
 			// The manager may have started its daemon since the first status check.
 			current, err = s.managerStatus(ctx)
@@ -147,17 +159,13 @@ func (s *Service) Install(binary string) error {
 			}
 		}
 		if activity.PID != current.PID {
-			return errors.New("stop the foreground openplexer daemon before installing the service for this home")
+			return errors.New(foreground)
 		}
 	}
 	if s.platform == "darwin" {
 		if err := s.prepareLogs(); err != nil {
 			return err
 		}
-	}
-	installed, err := os.ReadFile(s.path)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
 	}
 	if !bytes.Equal(definition, installed) {
 		if current.loaded {
@@ -170,27 +178,47 @@ func (s *Service) Install(binary string) error {
 			return err
 		}
 	}
-	var existingPID int
-	if current.State == "running" {
-		existingPID = current.PID
-	}
-	requestedAt := time.Now()
 	if s.platform != "linux" || current.State != "running" || !current.enabled {
 		if err := s.start(current); err != nil {
 			return s.startError(err)
 		}
 	}
-	return s.waitForStart(requestedAt, existingPID)
+	return s.waitForStart()
 }
 
-func (s *Service) waitForStart(requestedAt time.Time, existingPID int) error {
+func (s *Service) startupStatus(ctx context.Context) (ServiceStatus, DaemonActivity, error) {
+	// Open the activity file before asking the manager. If its lock is still
+	// held afterwards, the same daemon owned the Room during the snapshot.
+	activity, file, err := openDaemonActivity(s.Home)
+	if err != nil {
+		return ServiceStatus{}, DaemonActivity{}, err
+	}
+	if file != nil {
+		defer file.Close()
+	}
+	status, err := s.managerStatus(ctx)
+	if err != nil {
+		return ServiceStatus{}, DaemonActivity{}, err
+	}
+	if activity.Mode != "" {
+		switch err := tryLockFileShared(file); {
+		case err == nil:
+			activity = DaemonActivity{}
+		case !errors.Is(err, syscall.EWOULDBLOCK):
+			return ServiceStatus{}, DaemonActivity{}, err
+		}
+	}
+	return status, activity, nil
+}
+
+func (s *Service) waitForStart() error {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 	poll := time.NewTicker(50 * time.Millisecond)
 	defer poll.Stop()
 	failure := "the managed daemon did not finish startup"
 	for ctx.Err() == nil {
-		status, err := s.managerStatus(ctx)
+		status, activity, err := s.startupStatus(ctx)
 		if ctx.Err() != nil {
 			break
 		}
@@ -200,15 +228,11 @@ func (s *Service) waitForStart(requestedAt time.Time, existingPID int) error {
 		if status.Failure != "" {
 			failure = status.Failure
 		}
-		if status.State == "running" {
-			activity, err := ReadDaemonActivity(s.Home)
-			if err != nil {
-				return s.startError(err)
-			}
-			if activity.PID == status.PID && activity.heartbeatFresh() &&
-				(activity.PID == existingPID || !activity.StartedAt.Before(requestedAt)) {
+		if status.State == "running" && activity.Mode == daemonManaged && activity.PID == status.PID {
+			if activity.heartbeatFresh() {
 				return nil
 			}
+			failure = "the managed daemon stopped reporting heartbeats"
 		}
 		select {
 		case <-poll.C:

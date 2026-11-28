@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -62,7 +63,7 @@ func serviceTestHome(t *testing.T, home string) {
 	})
 }
 
-func holdServiceTestRoom(t *testing.T, home string, pid int) {
+func holdServiceTestRoom(t *testing.T, home string, pid int, mode string) {
 	t.Helper()
 	file, err := lockRoom(home)
 	if err != nil {
@@ -70,9 +71,11 @@ func holdServiceTestRoom(t *testing.T, home string, pid int) {
 	}
 	t.Cleanup(func() { file.Close() })
 	started := time.Now().UTC()
-	if err := writeJSON(home, daemonPIDFile, DaemonActivity{PID: pid, StartedAt: started, HeartbeatAt: started}); err != nil {
+	lease, err := (DaemonActivity{PID: pid, StartedAt: started, HeartbeatAt: started, Mode: mode}).publish(home)
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { lease.Close() })
 }
 
 func TestServiceCaseAlias(t *testing.T) {
@@ -164,6 +167,8 @@ func TestServiceLifecycle(t *testing.T) {
   <dict>
     <key>OPENPLEXER_HOME</key>
     <string>@HOME@</string>
+    <key>OPENPLEXER_SERVICE</key>
+    <string>1</string>
   </dict>
   <key>RunAtLoad</key>
   <true/>
@@ -198,6 +203,7 @@ Description=OpenPlexer daemon
 Type=exec
 ExecStart=":/opt/OpenPlexer %% $OPENPLEXER_HOME/openplexer" daemon --quiet
 Environment="OPENPLEXER_HOME=@HOME@"
+Environment=OPENPLEXER_SERVICE=1
 Restart=always
 RestartSec=5s
 StandardOutput=journal
@@ -220,7 +226,7 @@ WantedBy=default.target
 			runner.calls = append(runner.calls, missing, missing)
 			runner.onSuccess = func(args []string) {
 				if slices.Equal(args, install[len(install)-1].args) {
-					holdServiceTestRoom(t, home, 42)
+					holdServiceTestRoom(t, home, 42, daemonManaged)
 				}
 			}
 			checkStatus := func(want string, pid int, failure string) {
@@ -287,6 +293,7 @@ WantedBy=default.target
 func TestServiceForegroundLockAndIsolation(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", "relative-config")
+	t.Setenv(serviceEnv, "")
 	one, two := t.TempDir(), t.TempDir()
 	serviceTestHome(t, one)
 	serviceTestHome(t, two)
@@ -332,7 +339,7 @@ func TestServiceForegroundLockAndIsolation(t *testing.T) {
 	}
 	r2.onSuccess = func(args []string) {
 		if args[2] == "enable" {
-			holdServiceTestRoom(t, two, 42)
+			holdServiceTestRoom(t, two, 42, daemonManaged)
 		}
 	}
 	if first.Name == second.Name || second.path != filepath.Join(os.Getenv("HOME"), ".config", "systemd", "user", second.Name) {
@@ -362,9 +369,278 @@ func (run serviceRunnerFunc) run(ctx context.Context, name string, args ...strin
 	return run(ctx, name, args...)
 }
 
+func reinstallService(t *testing.T, platform string, snapshot func() int) *Service {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+	home := t.TempDir()
+	serviceTestHome(t, home)
+	runner := serviceRunnerFunc(func(_ context.Context, name string, args ...string) ([]byte, error) {
+		switch {
+		case name == "launchctl" && args[0] == "print":
+			return fmt.Appendf(nil, "state = running\npid = %d\n", snapshot()), nil
+		case name == "systemctl" && args[1] == "show":
+			return fmt.Appendf(nil, "LoadState=loaded\nActiveState=active\nMainPID=%d\nUnitFileState=enabled\n", snapshot()), nil
+		case name == "launchctl" && args[0] == "enable":
+			return nil, nil
+		default:
+			t.Fatalf("unexpected manager command %s %v", name, args)
+			return nil, nil
+		}
+	})
+	s, err := newService(home, platform, runner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	definition, err := s.definition("/opt/openplexer")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := writeFile(filepath.Dir(s.path), filepath.Base(s.path), definition); err != nil {
+		t.Fatal(err)
+	}
+	return s
+}
+
+func TestServiceReinstallWaitsThroughPIDReuse(t *testing.T) {
+	for _, platform := range []string{"darwin", "linux"} {
+		t.Run(platform, func(t *testing.T) {
+			const pid = 2000000001
+			var home string
+			var snapshots int
+			var ready bool
+			s := reinstallService(t, platform, func() int {
+				snapshots++
+				if snapshots == 3 {
+					holdServiceTestRoom(t, home, pid, daemonManaged)
+					ready = true
+				}
+				return pid
+			})
+			home = s.Home
+			heartbeat := time.Now().UTC()
+			lease, err := (DaemonActivity{
+				PID: pid, StartedAt: heartbeat.Add(-time.Minute), HeartbeatAt: heartbeat, Mode: daemonManaged,
+			}).publish(home)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// A killed daemon leaves its fresh heartbeat on disk, but loses the lease.
+			if err := lease.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Install("/opt/openplexer"); err != nil {
+				t.Fatal(err)
+			}
+			if !ready {
+				t.Fatal("reinstall accepted the dead daemon's record before the replacement held the Room lock")
+			}
+		})
+	}
+}
+
+func TestServiceReinstallAcceptsReplacementDuringPreflight(t *testing.T) {
+	for _, platform := range []string{"darwin", "linux"} {
+		t.Run(platform, func(t *testing.T) {
+			const oldPID, newPID = 2000000001, 2000000002
+			var home string
+			var sampled bool
+			s := reinstallService(t, platform, func() int {
+				if !sampled {
+					sampled = true
+					// Capture the old PID, then let the replacement acquire the lock
+					// before the first manager call returns to the installer.
+					holdServiceTestRoom(t, home, newPID, daemonManaged)
+					return oldPID
+				}
+				return newPID
+			})
+			home = s.Home
+			if err := s.Install("/opt/openplexer"); err != nil {
+				t.Fatalf("reinstall rejected a healthy replacement: %v", err)
+			}
+		})
+	}
+}
+
+func TestServiceReinstallRejectsForegroundWithReusedPID(t *testing.T) {
+	for _, platform := range []string{"darwin", "linux"} {
+		t.Run(platform, func(t *testing.T) {
+			s := reinstallService(t, platform, os.Getpid)
+			holdServiceTestRoom(t, s.Home, os.Getpid(), daemonForeground)
+			err := s.Install("/opt/openplexer")
+			if err == nil || !strings.Contains(err.Error(), "stop the foreground openplexer daemon") {
+				t.Fatalf("reinstall missed the foreground Room lock: %v", err)
+			}
+		})
+	}
+}
+
+func TestServiceReinstallRejectsExpiredHeartbeatAtDecision(t *testing.T) {
+	for _, platform := range []string{"darwin", "linux"} {
+		t.Run(platform, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				checks := 0
+				s := reinstallService(t, platform, func() int {
+					checks++
+					if checks == 2 {
+						// The heartbeat expires while the manager confirms readiness.
+						time.Sleep(2 * time.Second)
+					}
+					return os.Getpid()
+				})
+				holdServiceTestRoom(t, s.Home, os.Getpid(), daemonManaged)
+				// A suspended daemon keeps both locks but publishes no updates.
+				time.Sleep(14 * time.Second)
+				err := s.Install("/opt/openplexer")
+				if err == nil {
+					t.Fatal("reinstall accepted a daemon whose heartbeat stopped")
+				}
+				if !strings.Contains(err.Error(), "the managed daemon stopped reporting heartbeats") ||
+					!strings.Contains(err.Error(), s.LogLocation()) {
+					t.Fatalf("reinstall did not report the stopped heartbeat and log location: %v", err)
+				}
+			})
+		})
+	}
+}
+
+func TestServiceReinstallRefreshesLegacyDefinitionAfterManagedRestart(t *testing.T) {
+	for _, platform := range []string{"darwin", "linux"} {
+		t.Run(platform, func(t *testing.T) {
+			t.Setenv("HOME", t.TempDir())
+			t.Setenv("XDG_CONFIG_HOME", "")
+			t.Setenv(serviceEnv, "")
+			home := t.TempDir()
+			serviceTestHome(t, home)
+			runner := &fakeServiceRunner{t: t}
+			s, err := newService(home, platform, runner)
+			if err != nil {
+				t.Fatal(err)
+			}
+			const binary = "/opt/openplexer"
+			definition, err := s.definition(binary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var marker string
+			var running serviceCall
+			var stop, start, unchanged []serviceCall
+			pid := os.Getpid()
+			if platform == "darwin" {
+				marker = "    <key>OPENPLEXER_SERVICE</key>\n    <string>1</string>\n"
+				target := s.domain + "/" + s.Name
+				running = serviceCall{[]string{"launchctl", "print", target}, fmt.Sprintf("%s = {\nstate = running\npid = %d\n}\n", target, pid), nil}
+				stop = []serviceCall{
+					{args: []string{"launchctl", "disable", target}},
+					{args: []string{"launchctl", "bootout", target}},
+				}
+				unchanged = []serviceCall{{args: []string{"launchctl", "enable", target}}}
+				start = []serviceCall{unchanged[0], {args: []string{"launchctl", "bootstrap", s.domain, s.path}}}
+			} else {
+				marker = "Environment=OPENPLEXER_SERVICE=1\n"
+				running = serviceCall{missingUnit(s.Name).args, fmt.Sprintf("LoadState=loaded\nActiveState=active\nMainPID=%d\nUnitFileState=enabled\n", pid), nil}
+				stop = []serviceCall{
+					{args: []string{"systemctl", "--user", "stop", s.Name}},
+					{args: []string{"systemctl", "--user", "disable", s.Name}},
+				}
+				start = []serviceCall{{args: []string{"systemctl", "--user", "enable", "--now", s.path}}}
+			}
+			legacy := strings.Replace(string(definition), marker, "", 1)
+			if legacy == string(definition) {
+				t.Fatal("could not recreate the unmarked definition")
+			}
+			if err := writeFile(filepath.Dir(s.path), filepath.Base(s.path), []byte(legacy)); err != nil {
+				t.Fatal(err)
+			}
+
+			streaming := make(chan struct{}, 1)
+			useHubTransport(t, roundTripFunc(func(r *http.Request) (*http.Response, error) {
+				if strings.HasSuffix(r.URL.Path, "/stream") {
+					streaming <- struct{}{}
+					<-r.Context().Done()
+					return nil, r.Context().Err()
+				}
+				return &http.Response{StatusCode: 404, Body: http.NoBody}, nil
+			}))
+			stopDaemon := func() {}
+			t.Cleanup(func() { stopDaemon() })
+			launch := func(wantMode string) {
+				t.Helper()
+				if strings.Contains(string(readFile(t, s.path)), marker) {
+					t.Setenv(serviceEnv, "1")
+				}
+				ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+				done := make(chan error, 1)
+				go func() { done <- Run(ctx, home, time.Now, nil, func(error) {}) }()
+				stopDaemon = func() {
+					cancel()
+					if err := <-done; err != nil {
+						t.Error(err)
+					}
+					stopDaemon = func() {}
+				}
+				select {
+				case <-streaming:
+				case <-ctx.Done():
+					t.Fatal("daemon did not reach its Room stream")
+				}
+				activity, err := ReadDaemonActivity(home)
+				if err != nil || activity.Mode != wantMode {
+					t.Fatalf("daemon activity mode = %q, want %q: %v", activity.Mode, wantMode, err)
+				}
+			}
+			// The manager restarted the upgraded binary using the old definition.
+			launch(daemonForeground)
+			runner.calls = append([]serviceCall{running}, stop...)
+			runner.calls = append(runner.calls, start...)
+			runner.calls = append(runner.calls, running, running)
+			runner.calls = append(runner.calls, unchanged...)
+			runner.calls = append(runner.calls, running)
+			stopCommand := stop[0].args
+			if platform == "darwin" {
+				stopCommand = stop[1].args
+			}
+			startCommand := start[len(start)-1].args
+			runner.onSuccess = func(args []string) {
+				if slices.Equal(args, stopCommand) {
+					stopDaemon()
+				}
+				if slices.Equal(args, startCommand) {
+					launch(daemonManaged)
+				}
+			}
+			if err := s.Install(binary); err != nil {
+				t.Fatalf("reinstall after the manager restarted the upgraded daemon: %v", err)
+			}
+			if string(readFile(t, s.path)) != string(definition) {
+				t.Fatal("reinstall did not refresh the service definition")
+			}
+			before, err := os.Stat(s.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := s.Install(binary); err != nil {
+				t.Fatalf("reinstall after refreshing the definition: %v", err)
+			}
+			after, err := os.Stat(s.path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !os.SameFile(before, after) || !before.ModTime().Equal(after.ModTime()) {
+				t.Fatal("second reinstall rewrote the marked definition")
+			}
+			if len(runner.calls) != 0 {
+				t.Fatal("manager calls were skipped")
+			}
+		})
+	}
+}
+
 func TestServiceWaitsForDaemonAfterManagerReportsPID(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv(serviceEnv, "1")
 	home := t.TempDir()
 	serviceTestHome(t, home)
 	stale := time.Date(2001, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -472,7 +748,7 @@ func TestServiceReinstallChecksRunningJobOwnsRoom(t *testing.T) {
 				}
 				checks++
 				if checks == 2 {
-					holdServiceTestRoom(t, home, 43)
+					holdServiceTestRoom(t, home, 43, daemonForeground)
 				}
 				if platform == "darwin" {
 					return []byte("state = running\npid = 42\n"), nil
@@ -539,7 +815,7 @@ func TestServiceForegroundWinsDuringStart(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("install did not reach the manager")
 	}
-	holdServiceTestRoom(t, home, 43)
+	holdServiceTestRoom(t, home, 43, daemonForeground)
 	close(resume)
 	select {
 	case err := <-done:
@@ -584,7 +860,7 @@ func TestServiceFailedStartAndRetry(t *testing.T) {
 	}
 	r.onSuccess = func(args []string) {
 		if slices.Equal(args, enable) {
-			holdServiceTestRoom(t, home, 42)
+			holdServiceTestRoom(t, home, 42, daemonManaged)
 		}
 	}
 	if err := s.Install(binary); err == nil || !strings.Contains(err.Error(), "could not start") ||
