@@ -183,6 +183,12 @@ func readStoredPolicy(home string) (*storedPolicy, error) {
 // Readers of the home take no lock, so writeFile replaces a file by rename:
 // a reader sees the old content or the new content, and never a part.
 func writeFile(home, name string, content []byte) error {
+	return replaceFile(home, name, content, (*os.File).Close)
+}
+
+// prepare runs after sync and before publish. The caller owns any file it
+// leaves open on success.
+func replaceFile(home, name string, content []byte, prepare func(*os.File) error) (err error) {
 	if err := os.MkdirAll(home, 0o700); err != nil {
 		return err
 	}
@@ -190,16 +196,19 @@ func writeFile(home, name string, content []byte) error {
 	if err != nil {
 		return err
 	}
-	defer os.Remove(temporary.Name())
+	defer func() {
+		if err != nil {
+			temporary.Close()
+		}
+		os.Remove(temporary.Name())
+	}()
 	if _, err := temporary.Write(content); err != nil {
-		temporary.Close()
 		return err
 	}
 	if err := temporary.Sync(); err != nil {
-		temporary.Close()
 		return err
 	}
-	if err := temporary.Close(); err != nil {
+	if err := prepare(temporary); err != nil {
 		return err
 	}
 	return os.Rename(temporary.Name(), filepath.Join(home, name))

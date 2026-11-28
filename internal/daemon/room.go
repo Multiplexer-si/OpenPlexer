@@ -72,8 +72,13 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	}
 	receiver := room.NewReceiver()
 	receiver.Restore(cfg.ProjectID, cursor.LastSeq)
-	activity := DaemonActivity{PID: os.Getpid(), StartedAt: started, HeartbeatAt: time.Now().UTC()}
-	if err := writeJSON(home, daemonPIDFile, activity); err != nil {
+	mode := daemonForeground
+	if os.Getenv(serviceEnv) == "1" {
+		mode = daemonManaged
+	}
+	activity := DaemonActivity{PID: os.Getpid(), StartedAt: started, HeartbeatAt: time.Now().UTC(), Mode: mode}
+	lease, err := activity.publish(home)
+	if err != nil {
 		return fmt.Errorf("publish daemon activity: %w", err)
 	}
 	defer os.Remove(filepath.Join(home, daemonPIDFile))
@@ -81,7 +86,7 @@ func Run(ctx context.Context, home string, now func() time.Time, receive func(ro
 	ctx, cancel := context.WithCancel(ctx)
 	var workers sync.WaitGroup
 	workers.Go(func() { pollHub(ctx, home, now, report) })
-	workers.Go(func() { activity.heartbeat(ctx, home, report) })
+	workers.Go(func() { activity.heartbeat(ctx, home, lease, report) })
 	defer func() {
 		cancel()
 		workers.Wait()
