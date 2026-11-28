@@ -18,3 +18,9 @@ class_name = "TeamHub"
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["TeamHub"]
+
+[assets]
+directory = "./assets"
+binding = "DASHBOARD_ASSETS"
+run_worker_first = true
+html_handling = "none"
