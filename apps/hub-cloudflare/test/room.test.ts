@@ -1,6 +1,6 @@
 import { Buffer } from "node:buffer";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { beforeEach, expect, test, vi } from "vitest";
 import activeClaims from "../../../spec/room/v1/fixtures/active-claims.json?raw";
 import { verifyChain } from "../src/audit";
@@ -38,7 +38,7 @@ function request(path: string, method: string, token?: string, body?: string | U
 }
 
 function call(...args: Parameters<typeof request>) {
-  return exports.default.fetch(request(...args));
+  return fetchHub(request(...args), env);
 }
 
 async function check(response: Response, code = 200) {
