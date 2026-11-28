@@ -7,8 +7,9 @@ import { hasDuplicateMembers, isJsonObject, parseJSON } from "../src/canonical";
 import type { JsonObject } from "../src/canonical";
 import { tokenHash } from "../src/http";
 import { verifyPolicyBundle } from "../src/policy";
-import { appendAudit, newSigningKey, newToken, wrappingKey } from "../src/state";
+import { appendAudit, newSigningKey, newToken } from "../src/state";
 import { HubStorage } from "../src/storage";
+import { loadWrappingKey, unwrapPKCS8, wrapPKCS8 } from "../src/wrap";
 
 beforeEach(reset);
 
@@ -568,11 +569,185 @@ test("rolls back both the action and the sealed record if advancing the audit ti
   await check(await addProject(lead), 200, {});
 });
 
+function wrapRequest(token: string, body?: string, operator = env.WRAP_ROTATION_TOKEN) {
+  const request = incoming(admin + "/wrapping-key", body === undefined ? "GET" : "PUT", token, body);
+  if (operator) request.headers.set("OpenPlexer-Operator-Token", operator);
+  return request;
+}
+
+const toV2 = '{"wrap_key_id":"v2"}';
+const wrapRows = (sql: SqlStorage) => sql.exec(
+  "SELECT kid, purpose, status, public_jwk, hex(wrapped_pkcs8) AS ciphertext, hex(nonce) AS nonce, wrap_key_id FROM signing_keys ORDER BY kid",
+).toArray();
+
+test("requires a lead and an operator, and rejects ambiguous rotation requests", async () => {
+  const { lead, bootstrap } = await setup();
+  const member = await addMember(lead, "ana");
+  for (const body of [undefined, toV2]) {
+    const withoutOperator = wrapRequest(lead, body);
+    withoutOperator.headers.delete("OpenPlexer-Operator-Token");
+    await error(await exports.default.fetch(withoutOperator), 401, "invalid bearer token");
+    await error(await exports.default.fetch(wrapRequest(lead, body, bootstrap)), 401, "invalid bearer token");
+    await error(await exports.default.fetch(wrapRequest(newToken(), body)), 401, "invalid bearer token");
+    await error(await exports.default.fetch(wrapRequest(member, body)), 403, "forbidden");
+  }
+  for (const body of ['{}', '{"Wrap_key_id":"v2"}', '{"wrap_key_id":"V2"}', '{"wrap_key_id":"v02"}',
+    '{"wrap_key_id":"v2","wrap_key_id":"v2"}', '{"wrap_key_id":"v2","extra":true}']) {
+    await error(await exports.default.fetch(wrapRequest(lead, body)), 400, "invalid input: expected a versioned wrap_key_id");
+  }
+  await error(await exports.default.fetch(wrapRequest(lead, " ".repeat((64 << 10) + 1))), 413, "request body is too large");
+  await check(await exports.default.fetch(wrapRequest(lead)), 200, { wrap_key_ids: ["v1"] });
+});
+
+test("rewraps mixed active and staged keys, preserves retired keys and pins, and audits once", async () => {
+  const { lead } = await setup();
+  await check(await addProject(lead), 200, {});
+  const replaced = await check(await call(admin + "/keys/audit", "POST", lead), 200);
+  if (!replaced || typeof replaced !== "object" || !("kid" in replaced)) throw new Error("Missing staged kid");
+  await check(await call(admin + "/keys/audit/active", "PUT", lead, JSON.stringify({ kid: replaced.kid })), 200, {});
+  for (const purpose of ["policy", "audit"]) await check(await call(admin + "/keys/" + purpose, "POST", lead), 200);
+  const pinnedPolicy = await (await call(keys)).text();
+  const pinnedAudit = await (await call(auditKeys)).text();
+
+  await runInDurableObject(stub(), async (hub, ctx) => {
+    const sql = ctx.storage.sql;
+    const { kid, wrapped_pkcs8, nonce } = sql.exec<{ kid: string; wrapped_pkcs8: ArrayBuffer; nonce: ArrayBuffer }>(
+      "SELECT kid, wrapped_pkcs8, nonce FROM signing_keys WHERE purpose = 'audit' AND status = 'active'",
+    ).one();
+    const identity = { team: env.TEAM_ID, purpose: "audit", kid } satisfies Parameters<typeof wrapPKCS8>[2];
+    const bytes = await unwrapPKCS8({ ciphertext: wrapped_pkcs8, nonce: new Uint8Array(nonce) },
+      loadWrappingKey(env, "v1").bytes, identity);
+    const mixed = await wrapPKCS8(bytes, loadWrappingKey(env, "v2").bytes, identity);
+    sql.exec("UPDATE signing_keys SET wrapped_pkcs8 = ?, nonce = ?, wrap_key_id = 'v2' WHERE kid = ?",
+      mixed.ciphertext, mixed.nonce.buffer, kid);
+    await check(await hub.fetch(wrapRequest(lead)), 200, { wrap_key_ids: ["v1", "v2"] });
+    await verifyPolicyBundle(await signed(await hub.fetch(incoming(project + "/policy", "PUT", lead, bundle(1))), 1), pinnedPolicy);
+    await verifyCheckpoint((await readAudit(await hub.fetch(incoming(auditPath, "GET", lead)))).token, pinnedAudit);
+
+    const before = wrapRows(sql);
+    await check(await hub.fetch(wrapRequest(lead, toV2)), 200, { wrap_key_ids: ["v2"] });
+    const after = wrapRows(sql);
+    expect(after).toHaveLength(5);
+    for (const [i, row] of before.entries()) {
+      if (row.wrap_key_id !== "v1") {
+        expect(after[i]).toEqual(row);
+      } else {
+        expect(after[i]).toEqual({ ...row, wrap_key_id: "v2", ciphertext: expect.any(String), nonce: expect.any(String) });
+        expect(after[i].ciphertext).not.toBe(row.ciphertext);
+        expect(after[i].nonce).not.toBe(row.nonce);
+      }
+    }
+    await check(await hub.fetch(wrapRequest(lead, toV2)), 200, { wrap_key_ids: ["v2"] });
+    expect(wrapRows(sql)).toEqual(after);
+  });
+  expect(await (await call(keys)).text()).toBe(pinnedPolicy);
+  expect(await (await call(auditKeys)).text()).toBe(pinnedAudit);
+  const audit = await readAudit(await call(auditPath, "GET", lead));
+  await verifyCheckpoint(audit.token, pinnedAudit);
+  const rotations = audit.entries.filter((entry) => entry.action === "wrapping_key.rotated")
+    .map(({ target, actor_member_id, meta }) => ({ target, actor_member_id, meta }));
+  expect(rotations).toEqual([
+    { target: "wrapping-key:v2", actor_member_id: "lee", meta: { previous_wrap_key_ids: ["v1"], rows_rewrapped: 3 } },
+  ]);
+});
+
+test("fails closed with missing source and target secrets", async () => {
+  const { lead } = await setup();
+  await runInDurableObject(stub(), async (hub, ctx) => {
+    const sql = ctx.storage.sql;
+    const before = wrapRows(sql);
+    await error(await hub.fetch(wrapRequest(lead, '{"wrap_key_id":"v3"}')), 503, "Missing WRAP_KEY_V3");
+    expect(wrapRows(sql)).toEqual(before);
+    sql.exec("UPDATE signing_keys SET wrap_key_id = 'v3' WHERE purpose = 'audit'");
+    const mixed = wrapRows(sql);
+    await check(await hub.fetch(wrapRequest(lead)), 200, { wrap_key_ids: ["v1", "v3"] });
+    await error(await hub.fetch(incoming(auditPath, "GET", lead)), 503, "Missing WRAP_KEY_V3");
+    await error(await hub.fetch(wrapRequest(lead, toV2)), 503, "Missing WRAP_KEY_V3");
+    expect(wrapRows(sql)).toEqual(mixed);
+    expect(sql.exec("SELECT audit_seq FROM team").one().audit_seq).toBe(1);
+  });
+});
+
+test.each(["tampered ciphertext", "wrong team", "mismatched public JWK"])("rejects %s without writing any rows", async (failure) => {
+  const { lead } = await setup();
+  await runInDurableObject(stub(), async (hub, ctx) => {
+    const sql = ctx.storage.sql;
+    if (failure === "tampered ciphertext") {
+      sql.exec("UPDATE signing_keys SET wrapped_pkcs8 = zeroblob(length(wrapped_pkcs8)) WHERE purpose = 'policy'");
+    } else if (failure === "wrong team") {
+      const wrong = await newSigningKey("another-team", "policy", loadWrappingKey(env, "v1"));
+      sql.exec("UPDATE signing_keys SET kid = ?, public_jwk = ?, wrapped_pkcs8 = ?, nonce = ? WHERE purpose = 'policy'",
+        wrong.kid, wrong.public_jwk, wrong.wrapped_pkcs8, wrong.nonce);
+      sql.exec("UPDATE team SET policy_kid = ?", wrong.kid);
+    } else {
+      const wrong = await newSigningKey(env.TEAM_ID, "policy", loadWrappingKey(env, "v1"));
+      sql.exec("UPDATE signing_keys SET public_jwk = json_set(?, '$.kid', kid) WHERE purpose = 'policy'", wrong.public_jwk);
+    }
+    const before = wrapRows(sql);
+    await error(await hub.fetch(wrapRequest(lead, toV2)), 500, failure === "mismatched public JWK"
+      ? "Unable to verify rewrapped policy signing key" : "Unable to unwrap policy signing key with WRAP_KEY_V1");
+    expect(wrapRows(sql)).toEqual(before);
+    expect(sql.exec("SELECT audit_seq FROM team").one().audit_seq).toBe(1);
+  });
+});
+
+test("rolls back every ciphertext and its audit record if commit fails after the rewrap", async () => {
+  const { lead } = await setup();
+  await runInDurableObject(stub(), async (hub, ctx) => {
+    const sql = ctx.storage.sql;
+    const rows = wrapRows(sql);
+    const tip = sql.exec("SELECT audit_seq, audit_tip FROM team").one();
+    sql.exec("ALTER TABLE team ADD COLUMN keep_genesis_record INTEGER CHECK (audit_seq = 1)");
+    await error(await hub.fetch(wrapRequest(lead, toV2)), 500, "hub state unavailable");
+    expect(wrapRows(sql)).toEqual(rows);
+    expect(sql.exec("SELECT seq FROM audit_records").toArray()).toEqual([{ seq: 1 }]);
+    expect(sql.exec("SELECT audit_seq, audit_tip FROM team").one()).toEqual(tip);
+    sql.exec("ALTER TABLE team DROP COLUMN keep_genesis_record");
+    await check(await hub.fetch(wrapRequest(lead, toV2)), 200, { wrap_key_ids: ["v2"] });
+  });
+});
+
+test("refuses a stale rotation if a signing key gets staged during rewrapping", async () => {
+  const { lead } = await setup();
+  await runInDurableObject(stub(), async (hub, ctx) => {
+    const encrypt = crypto.subtle.encrypt.bind(crypto.subtle);
+    const spy = vi.spyOn(crypto.subtle, "encrypt").mockImplementationOnce(async (...args) => {
+      await check(await hub.fetch(incoming(admin + "/keys/policy", "POST", lead)), 200);
+      return encrypt(...args);
+    });
+    try {
+      await error(await hub.fetch(wrapRequest(lead, toV2)), 409,
+        "already exists or conflicts with current state: signing keys changed during wrapping key rotation; retry");
+      expect(wrapRows(ctx.storage.sql).map((row) => row.wrap_key_id)).toEqual(["v1", "v1", "v1"]);
+      await check(await hub.fetch(wrapRequest(lead, toV2)), 200, { wrap_key_ids: ["v2"] });
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
+test("a stage started before wrapping key rotation uses the new binding when it commits", async () => {
+  const { lead } = await setup();
+  await runInDurableObject(stub(), async (hub, ctx) => {
+    const encrypt = crypto.subtle.encrypt.bind(crypto.subtle);
+    const spy = vi.spyOn(crypto.subtle, "encrypt").mockImplementationOnce(async (...args) => {
+      await check(await hub.fetch(wrapRequest(lead, toV2)), 200, { wrap_key_ids: ["v2"] });
+      return encrypt(...args);
+    });
+    try {
+      await check(await hub.fetch(incoming(admin + "/keys/policy", "POST", lead)), 200);
+      expect(wrapRows(ctx.storage.sql).map((row) => row.wrap_key_id)).toEqual(["v2", "v2", "v2"]);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+});
+
 test("re-signs with the new active key if it changes while signing and advertises retired keys", async () => {
   const { lead } = await setup();
   await check(await addProject(lead), 200, {});
   const old = await check(await call(keys), 200);
-  const replacement = await newSigningKey(env.TEAM_ID, "policy", wrappingKey(env.WRAP_KEY_V1));
+  const replacement = await newSigningKey(env.TEAM_ID, "policy", loadWrappingKey(env, "v1"));
   const signature = await runInDurableObject(stub(), async (hub, ctx) => {
     const sign = crypto.subtle.sign.bind(crypto.subtle);
     const spy = vi.spyOn(crypto.subtle, "sign").mockImplementationOnce((...args) => {

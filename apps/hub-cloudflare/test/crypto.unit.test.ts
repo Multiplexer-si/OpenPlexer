@@ -14,6 +14,52 @@ import { exportPKCS8, exportPrivateJWK, exportPublicJWK, generateSigningKey, imp
 import type { JWSStage } from "../src/jws";
 import { parsePolicyBundle, verifyPolicyBundle } from "../src/policy";
 import { unwrapPKCS8, wrapPKCS8 } from "../src/wrap";
+import { newSigningKey, signingKey } from "../src/state";
+import { loadWrappingKey } from "../src/wrap";
+import { rewrapSigningKey } from "../src/wrapping-key";
+
+test("rewrap verifies the public key and preserves signing with only the target binding", async () => {
+  const bindings = { WRAP_KEY_V1: "1".repeat(64), WRAP_KEY_V2: "2".repeat(64) };
+  const target = loadWrappingKey(bindings, "v2");
+  const original = await newSigningKey("demo", "audit", loadWrappingKey(bindings, "v1"));
+  const rewrapped = await rewrapSigningKey(original, "demo", bindings, target);
+  expect(rewrapped.wrap_key_id).toBe("v2");
+  expect(new Uint8Array(rewrapped.nonce)).not.toEqual(new Uint8Array(original.nonce));
+  const signer = await signingKey({ ...original, ...rewrapped }, "demo", { WRAP_KEY_V2: bindings.WRAP_KEY_V2 });
+  expect(await exportPKCS8(signer)).toEqual(await exportPKCS8(await signingKey(original, "demo", bindings)));
+
+  const unrelated = await newSigningKey("demo", "audit", loadWrappingKey(bindings, "v1"));
+  const wrongJWK = JSON.parse(unrelated.public_jwk);
+  wrongJWK.kid = original.kid;
+  await expect(rewrapSigningKey({ ...original, public_jwk: JSON.stringify(wrongJWK) }, "demo", bindings, target))
+    .rejects.toThrow("Unable to verify rewrapped audit signing key");
+  await expect(rewrapSigningKey(original, "another-team", bindings, target))
+    .rejects.toThrow("Unable to unwrap audit signing key with WRAP_KEY_V1");
+});
+
+test("uses only the exact versioned binding recorded on a signing row", async () => {
+  const { privateKey, publicKey } = await generateSigningKey();
+  const { kid } = await exportPublicJWK(publicKey, "policy");
+  const pkcs8 = await exportPKCS8(privateKey);
+  const raw = crypto.getRandomValues(new Uint8Array(32));
+  const secret = Array.from(raw, (byte) => byte.toString(16).padStart(2, "0")).join("");
+  const identity = { team: "demo", purpose: "policy", kid } satisfies Parameters<typeof wrapPKCS8>[2];
+  const { ciphertext, nonce } = await wrapPKCS8(pkcs8, raw, identity);
+  const row = { kid, purpose: identity.purpose, wrapped_pkcs8: ciphertext, nonce: nonce.buffer, wrap_key_id: "v2" };
+  await expect(signingKey(row, "demo", { WRAP_KEY_V2: secret })).resolves.toMatchObject({ type: "private" });
+  await expect(signingKey(row, "demo", { WRAP_KEY_V1: secret })).rejects.toThrow("Missing WRAP_KEY_V2");
+});
+
+test("rejects malformed wrapping secrets and noncanonical row key IDs", async () => {
+  const row = { kid: "kid", purpose: "policy" as const, wrapped_pkcs8: new ArrayBuffer(0),
+    nonce: new ArrayBuffer(12), wrap_key_id: "v2" };
+  for (const secret of ["f".repeat(63), "f".repeat(65), "g".repeat(64), "f".repeat(63) + "\n", 123]) {
+    await expect(signingKey(row, "demo", { WRAP_KEY_V2: secret })).rejects.toThrow("Invalid WRAP_KEY_V2");
+  }
+  for (const id of ["V2", "v02", "v0", "v2\n", "__proto__"]) {
+    await expect(signingKey({ ...row, wrap_key_id: id }, "demo", {})).rejects.toThrow("Invalid wrapping key ID");
+  }
+});
 import { verifyExportFixture } from "./fixture-verifiers";
 
 function object(value: JsonValue): JsonObject {

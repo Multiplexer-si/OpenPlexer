@@ -13,6 +13,8 @@ export default defineConfig({
       bindings: {
         BOOTSTRAP_TOKEN: randomBytes(32).toString("base64url"),
         WRAP_KEY_V1: randomBytes(32).toString("hex"),
+        WRAP_KEY_V2: randomBytes(32).toString("hex"),
+        WRAP_ROTATION_TOKEN: randomBytes(32).toString("hex"),
       },
     },
   })],

@@ -4,8 +4,10 @@ import type { JsonObject } from "./canonical";
 import type { Env } from "./index";
 import { bearer, cappedBody, conflict, invalid, notFound, tokenHash, unauthorized } from "./http";
 import type { SigningPurpose } from "./jws";
-import { activeSigningKey, activeTeam, appendAudit, authenticate, bearerLead, insertMember, insertSigningKey, memberReserved, newSigningKey, newToken, team, wrappingKey } from "./state";
+import { activeSigningKey, activeTeam, appendAudit, authenticate, bearerLead, insertMember, insertSigningKey, memberReserved, newSigningKey, newToken, team } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
+import { loadWrappingKey } from "./wrap";
+import type { WrapKeyBindings } from "./wrap";
 
 const adminLimit = 64 << 10;
 const idPattern = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/;
@@ -56,7 +58,7 @@ function alreadyInitialized(sql: TransactionSQL, memberID: string, hash: ArrayBu
   return true;
 }
 
-export async function initialize(request: Request, storage: HubStorage, env: Pick<Env, "TEAM_ID" | "BOOTSTRAP_TOKEN" | "WRAP_KEY_V1">) {
+export async function initialize(request: Request, storage: HubStorage, env: Pick<Env, "TEAM_ID" | "BOOTSTRAP_TOKEN"> & WrapKeyBindings) {
   const presented = bearer(request, true);
   const body = await cappedBody(request, adminLimit);
   if (!env.BOOTSTRAP_TOKEN || !crypto.subtle.timingSafeEqual(presented, tokenHash(env.BOOTSTRAP_TOKEN))) throw unauthorized();
@@ -67,7 +69,7 @@ export async function initialize(request: Request, storage: HubStorage, env: Pic
   const hash = Uint8Array.from(Buffer.from(hex, "hex")).buffer;
   if (storage.transaction((sql) => alreadyInitialized(sql, id, hash))) return {};
 
-  const key = wrappingKey(env.WRAP_KEY_V1);
+  const key = loadWrappingKey(env, "v1");
   const [policy, audit] = await Promise.all([
     newSigningKey(env.TEAM_ID, "policy", key),
     newSigningKey(env.TEAM_ID, "audit", key),
@@ -137,30 +139,34 @@ export async function addProject(request: Request, storage: HubStorage, dashboar
 }
 
 export async function stageKey(request: Request, storage: HubStorage, purpose: SigningPurpose,
-  env: Pick<Env, "TEAM_ID" | "WRAP_KEY_V1">) {
+  env: Pick<Env, "TEAM_ID"> & WrapKeyBindings) {
   const hash = bearer(request);
   await cappedBody(request, adminLimit);
-  function pending(sql: TransactionSQL) {
-    const [row] = sql.exec<{ public_jwk: string }>(
+  function current(sql: TransactionSQL) {
+    const [staged] = sql.exec<{ public_jwk: string }>(
       "SELECT public_jwk FROM signing_keys WHERE purpose = ? AND status = 'staged'", purpose);
-    return row;
+    if (staged) return { kind: "staged", jwk: staged.public_jwk } as const;
+    const active = activeTeam(sql);
+    const kid = purpose === "policy" ? active.policy_kid : active.audit_kid;
+    return { kind: "pending", id: activeSigningKey(sql, purpose, kid).wrap_key_id } as const;
   }
 
-  const existing = storage.transaction((sql) => {
+  let state = storage.transaction((sql) => {
     authenticate(sql, hash, true);
-    return pending(sql);
+    return current(sql);
   });
-  if (existing) return JSON.parse(existing.public_jwk);
-
-  const row = await newSigningKey(env.TEAM_ID, purpose, wrappingKey(env.WRAP_KEY_V1));
-  return storage.transaction((sql) => {
-    const actor = authenticate(sql, hash, true);
-    const staged = pending(sql);
-    if (staged) return JSON.parse(staged.public_jwk);
-    insertSigningKey(sql, row, "staged");
-    appendAudit(sql, { action: "key.staged", target: "key:" + row.kid, actor_member_id: actor, meta: { purpose } });
-    return JSON.parse(row.public_jwk);
-  });
+  while (state.kind === "pending") {
+    const row = await newSigningKey(env.TEAM_ID, purpose, loadWrappingKey(env, state.id));
+    state = storage.transaction((sql) => {
+      const actor = authenticate(sql, hash, true);
+      const latest = current(sql);
+      if (latest.kind === "staged" || latest.id !== row.wrap_key_id) return latest;
+      insertSigningKey(sql, row, "staged");
+      appendAudit(sql, { action: "key.staged", target: "key:" + row.kid, actor_member_id: actor, meta: { purpose } });
+      return { kind: "staged", jwk: row.public_jwk } as const;
+    });
+  }
+  return JSON.parse(state.jwk);
 }
 
 export async function activateKey(request: Request, storage: HubStorage, purpose: SigningPurpose) {

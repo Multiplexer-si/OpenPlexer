@@ -1,13 +1,14 @@
 import { Buffer } from "node:buffer";
 import { seal } from "./audit";
 import type { UnsealedRecord } from "./audit";
-import { bearer, forbidden, unauthorized } from "./http";
+import { bearer, forbidden, HubError, unauthorized } from "./http";
 import {
   exportPKCS8, exportPublicJWK, generateSigningKey, importPKCS8,
 } from "./jws";
 import type { SigningPurpose } from "./jws";
 import type { TransactionSQL } from "./storage";
-import { unwrapPKCS8, wrapPKCS8 } from "./wrap";
+import { loadWrappingKey, unwrapPKCS8, wrapPKCS8 } from "./wrap";
+import type { WrapKeyBindings } from "./wrap";
 
 type Team = {
   workspace_id: string;
@@ -90,18 +91,13 @@ export function newToken(): string {
   return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 }
 
-export function wrappingKey(secret: string | undefined): Uint8Array<ArrayBuffer> {
-  if (secret?.length !== 64 || /[^0-9a-f]/i.test(secret)) throw new Error("Invalid WRAP_KEY_V1");
-  return Buffer.from(secret, "hex");
-}
-
-export async function newSigningKey(teamID: string, purpose: SigningPurpose, wrapKey: Uint8Array<ArrayBuffer>) {
+export async function newSigningKey(teamID: string, purpose: SigningPurpose, wrapKey: ReturnType<typeof loadWrappingKey>) {
   const pair = await generateSigningKey();
   const jwk = await exportPublicJWK(pair.publicKey, purpose);
-  const wrapped = await wrapPKCS8(await exportPKCS8(pair.privateKey), wrapKey, { team: teamID, purpose, kid: jwk.kid });
+  const wrapped = await wrapPKCS8(await exportPKCS8(pair.privateKey), wrapKey.bytes, { team: teamID, purpose, kid: jwk.kid });
   return {
     kid: jwk.kid, purpose, public_jwk: JSON.stringify(jwk),
-    wrapped_pkcs8: wrapped.ciphertext, nonce: wrapped.nonce.buffer, wrap_key_id: "v1",
+    wrapped_pkcs8: wrapped.ciphertext, nonce: wrapped.nonce.buffer, wrap_key_id: wrapKey.id,
   };
 }
 
@@ -129,9 +125,16 @@ export function activeSigningKey(sql: TransactionSQL, purpose: SigningPurpose, k
   return key;
 }
 
-export async function signingKey(row: SigningKeyRow, teamID: string, secret: string | undefined): Promise<CryptoKey> {
-  if (row.wrap_key_id !== "v1") throw new Error("Unknown wrapping key ID");
-  const bytes = await unwrapPKCS8({ ciphertext: row.wrapped_pkcs8, nonce: new Uint8Array(row.nonce) },
-    wrappingKey(secret), { team: teamID, purpose: row.purpose, kid: row.kid });
-  return importPKCS8(bytes);
+export async function unwrapSigningKey(row: SigningKeyRow, teamID: string, bindings: WrapKeyBindings): Promise<ArrayBuffer> {
+  const key = loadWrappingKey(bindings, row.wrap_key_id);
+  try {
+    return await unwrapPKCS8({ ciphertext: row.wrapped_pkcs8, nonce: new Uint8Array(row.nonce) },
+      key.bytes, { team: teamID, purpose: row.purpose, kid: row.kid });
+  } catch {
+    throw new HubError(500, `Unable to unwrap ${row.purpose} signing key with ${key.binding}`);
+  }
+}
+
+export async function signingKey(row: SigningKeyRow, teamID: string, bindings: WrapKeyBindings): Promise<CryptoKey> {
+  return importPKCS8(await unwrapSigningKey(row, teamID, bindings));
 }

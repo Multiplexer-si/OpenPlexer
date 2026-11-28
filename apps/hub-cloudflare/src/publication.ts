@@ -6,6 +6,7 @@ import { observeMember } from "./members";
 import { parsePolicyBundle } from "./policy";
 import { activeSigningKey, activeTeam, appendAudit, bearerLead, signingKey } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
+import type { WrapKeyBindings } from "./wrap";
 
 type Project = { id: string; repo: string };
 type SignedPolicy = {
@@ -67,7 +68,7 @@ export function parsePublication(body: Uint8Array, strict = false): ReturnType<t
   }
 }
 
-export async function publishPolicy(request: Request, storage: HubStorage, id: string, teamID: string, wrapSecret: string | undefined,
+export async function publishPolicy(request: Request, storage: HubStorage, id: string, teamID: string, bindings: WrapKeyBindings,
   dashboard?: { authorize: ReturnType<typeof bearerLead> },
 ) {
   const authorize = dashboard?.authorize ?? bearerLead(request);
@@ -108,7 +109,7 @@ export async function publishPolicy(request: Request, storage: HubStorage, id: s
   let candidate = storage.transaction(check);
   while (candidate.kind === "publish") {
     const { key, parsed } = candidate;
-    const signer = await signingKey(key, teamID, wrapSecret);
+    const signer = await signingKey(key, teamID, bindings);
     const token = await signCanonicalJWS(candidate.canonical, signer, key.kid, "policy");
     const [jws_header, , jws_signature] = token.split(".");
     const result = storage.transaction((sql) => {
