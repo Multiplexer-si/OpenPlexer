@@ -240,10 +240,17 @@ test("runs onboarding writes with the lead actor, then shows the laptop's policy
   const exported = await read("/audit/export");
   const checkpoint = exported.headers.get("OpenPlexer-Audit-Checkpoint");
   if (!checkpoint) throw new Error("missing signed checkpoint");
-  const data: { entries: Parameters<typeof verifyChain>[0] } = await exported.json();
-  expect(verifyChain(data.entries)).toMatchObject({ ok: true });
+  const data: { entries: Parameters<typeof verifyChain>[0]; next_cursor: null } = await exported.json();
+  expect(data.next_cursor).toBeNull();
+  expect(data.entries[0]).toMatchObject({ id: "12", action: "member.removed", target: "member:ana", actor_member_id: "lee" });
+  expect(verifyChain(data.entries.toReversed())).toEqual({ ok: true, entries: data.entries.length });
+  const bearerExport = await call("/api/v1/audit/export", { headers: authorization(lead) });
+  expect(bearerExport.status).toBe(200);
+  expect(JSON.stringify(await bearerExport.json()) === JSON.stringify(data)).toBe(true);
   const keys = await call("/.well-known/audit-jwks.json");
-  expect((await verifyCheckpoint(checkpoint, await keys.text())).entries).toBe(data.entries.length);
+  expect(await verifyCheckpoint(checkpoint, await keys.text())).toMatchObject({
+    entries: data.entries.length, tip_hash: data.entries[0].hash,
+  });
   expect(data.entries.filter((entry) => ["project.added", "invite.created", "invite.approved", "invite.revoked", "policy.updated",
     "member.removed"].includes(String(entry.action))).every((entry) => entry.actor_member_id === "lee")).toBe(true);
   expect(JSON.stringify(data).includes(code)).toBe(false);
@@ -271,24 +278,31 @@ test("GET and HEAD never change roster, audit, observations, invites or sessions
   expect(await (await call(api + "/invites", { headers })).json()).toEqual({ invites: [], next_cursor: null });
 });
 
-test("rechecks lead role in the policy transaction after signing", async () => {
+test.each(["dashboard", "bearer"])("rechecks lead role in the policy transaction after signing (%s)", async (auth) => {
   const lead = await setup();
   const { headers, write } = await signInAs(lead);
   expect((await write("/projects", "POST", '{"id":"demo","repo":"demo"}')).status).toBe(200);
   const { csrf }: { csrf: string } = await (await call(api + "/session", { headers })).json();
-  const request = new Request(origin() + api + "/projects/demo/policy", {
-    method: "PUT", headers: { ...headers, Origin: origin(), "X-CSRF-Token": csrf },
-    body: '{"version":1,"project_id":"demo","repos":["demo"],"areas":[],"roles":{},"members":{}}',
-  });
+  const path = (auth === "dashboard" ? api : "/api/v1") + "/projects/demo/policy";
+  const requestHeaders = auth === "dashboard" ? { ...headers, Origin: origin(), "X-CSRF-Token": csrf } : authorization(lead);
+  const message = auth === "dashboard" ? "invalid or expired dashboard session" : "invalid bearer token";
   const stub = env.TEAM_HUB.get(env.TEAM_HUB.idFromName("team:" + env.TEAM_ID));
   await runInDurableObject(stub, async (hub, ctx) => {
+    // The request body must be created in the Durable Object's I/O context.
+    const request = new Request(origin() + path, {
+      method: "PUT", headers: requestHeaders,
+      body: '{"version":1,"project_id":"demo","repos":["demo"],"areas":[],"roles":{},"members":{}}',
+    });
     const sign = crypto.subtle.sign.bind(crypto.subtle);
-    const spy = vi.spyOn(crypto.subtle, "sign").mockImplementationOnce((...args) => {
+    const spy = vi.spyOn(crypto.subtle, "sign").mockImplementationOnce(async (...args) => {
+      const signature = await sign(...args);
       ctx.storage.sql.exec("DELETE FROM members WHERE member_id = 'lee'");
-      return sign(...args);
+      return signature;
     });
     try {
-      expect((await hub.fetch(request)).status).toBe(401);
+      const response = await hub.fetch(request);
+      expect(response.status).toBe(401);
+      expect(await response.json()).toEqual({ error: message });
       expect(spy).toHaveBeenCalledTimes(1);
       expect(ctx.storage.sql.exec("SELECT version FROM policies").toArray()).toEqual([]);
       expect(ctx.storage.sql.exec("SELECT action FROM audit_records WHERE action = 'policy.updated'").toArray()).toEqual([]);
