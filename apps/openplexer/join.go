@@ -134,7 +134,7 @@ func (c command) offerJoinInstalls(result enrollment.Result, input *bufio.Reader
 				agent.Name, agent.Name, quoteJoinPath(result.Root), quoteJoinPath(result.Home))
 		}
 	} else {
-		fmt.Fprintln(c.stdout, "Portable hook setup requires a checkout with a matching Git origin.")
+		fmt.Fprintln(c.stdout, "Portable hooks were skipped because the checkout's Git origin does not match the project repository.")
 	}
 	if runtime.GOOS != "darwin" && runtime.GOOS != "linux" {
 		fmt.Fprintln(c.stdout, "The login service requires macOS or Linux.")
@@ -162,39 +162,63 @@ func quoteJoinPath(path string) string {
 }
 
 func sameRepository(repo, remote string) bool {
-	if remote == "" {
+	project, origin := repositoryParts(repo), repositoryParts(remote)
+	if project.path == "" || origin.path == "" {
 		return false
 	}
-	if repo == remote {
+	if project.host != "" {
+		return project.scheme == origin.scheme && strings.EqualFold(project.host, origin.host) &&
+			project.port == origin.port && project.path == origin.path
+	}
+	if project.path == origin.path {
 		return true
 	}
-	remoteHost, remotePath := repositoryParts(remote)
-	repoHost, repoPath := repositoryParts(repo)
-	if remotePath == "" {
-		return false
-	}
-	if remotePath == repoPath {
-		return repoHost == "" || strings.EqualFold(repoHost, remoteHost)
-	}
-	prefix, path, qualified := strings.Cut(repoPath, "/")
-	return repoHost == "" && qualified && path == remotePath && strings.EqualFold(prefix, remoteHost)
+	prefix, path, qualified := strings.Cut(project.path, "/")
+	return qualified && path == origin.path && strings.EqualFold(prefix, origin.host)
 }
 
-func repositoryParts(name string) (host, path string) {
+type repositoryLocation struct {
+	scheme, host, port, path string
+}
+
+func repositoryParts(name string) repositoryLocation {
+	var location repositoryLocation
 	switch {
 	case strings.Contains(name, "://"):
 		u, err := url.Parse(name)
 		if err != nil || u.Hostname() == "" || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
-			return "", ""
+			return repositoryLocation{}
 		}
-		host, path = u.Hostname(), u.EscapedPath()
+		location = repositoryLocation{u.Scheme, u.Hostname(), u.Port(), u.EscapedPath()}
+		if location.port == defaultGitPort(location.scheme) {
+			location.port = ""
+		}
 	case strings.Contains(name, ":"):
-		host, path, _ = strings.Cut(name, ":")
+		host, path, _ := strings.Cut(name, ":")
 		if _, afterUser, found := strings.Cut(host, "@"); found {
 			host = afterUser
 		}
+		if host == "" {
+			return repositoryLocation{}
+		}
+		location = repositoryLocation{scheme: "ssh", host: host, path: path}
 	default:
-		path = name
+		location.path = name
 	}
-	return host, strings.TrimSuffix(strings.TrimPrefix(path, "/"), ".git")
+	location.path = strings.TrimSuffix(strings.TrimPrefix(location.path, "/"), ".git")
+	return location
+}
+
+func defaultGitPort(scheme string) string {
+	switch scheme {
+	case "https":
+		return "443"
+	case "http":
+		return "80"
+	case "ssh":
+		return "22"
+	case "git":
+		return "9418"
+	}
+	return ""
 }

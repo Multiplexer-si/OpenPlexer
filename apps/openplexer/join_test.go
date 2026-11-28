@@ -26,6 +26,11 @@ func (tr joinHandlerTransport) RoundTrip(req *http.Request) (*http.Response, err
 
 func joinCLI(t *testing.T) (c cli, user, root, code string) {
 	t.Helper()
+	return joinCLIWithRepo(t, "team/demo", "git@github.example.test:team/demo.git")
+}
+
+func joinCLIWithRepo(t *testing.T, repo, remote string) (c cli, user, root, code string) {
+	t.Helper()
 	user, err := projects.CanonicalPath(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
@@ -37,7 +42,7 @@ func joinCLI(t *testing.T) (c cli, user, root, code string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", "git@github.example.test:team/demo.git"}} {
+	for _, args := range [][]string{{"init", "-q"}, {"remote", "add", "origin", remote}} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = root
 		if err := cmd.Run(); err != nil {
@@ -54,10 +59,14 @@ func joinCLI(t *testing.T) (c cli, user, root, code string) {
 	if err := store.Init(); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.AddProject("demo", "team/demo"); err != nil {
+	if err := store.AddProject("demo", repo); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.PublishPolicy("demo", []byte(`{"project_id":"demo","repos":["team/demo"],"version":1,"areas":[],"roles":{},"members":{}}`)); err != nil {
+	repos, err := json.Marshal([]string{repo})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PublishPolicy("demo", []byte(`{"project_id":"demo","repos":`+string(repos)+`,"version":1,"areas":[],"roles":{},"members":{}}`)); err != nil {
 		t.Fatal(err)
 	}
 	invite, err := store.CreateInvite(hub.InviteInput{ProjectID: "demo", MemberID: "dev", Role: hub.Member, ExpiresIn: 60})
@@ -177,7 +186,15 @@ func TestJoinRepositoryMatch(t *testing.T) {
 		{"team/demo", "git@host:team/demo.git", true},
 		{"team/demo", "https://host/team/demo", true},
 		{"host/team/demo", "ssh://git@host/team/demo.git", true},
-		{"https://host/team/demo", "git@host:team/demo.git", true},
+		{"ssh://host/team/demo", "git@host:team/demo.git", true},
+		{"https://host/team/demo", "git@host:team/demo.git", false},
+		{"ssh://host:2222/team/demo", "git@host:team/demo.git", false},
+		{"https://host/team/demo", "http://host/team/demo", false},
+		{"https://host:8443/team/demo", "https://host:9443/team/demo", false},
+		{"https://host:8443/team/demo", "https://host/team/demo", false},
+		{"https://host/team/demo", "https://HOST:443/team/demo.git", true},
+		{"https://host:8443/team/demo", "https://host:8443/team/demo.git", true},
+		{"https://host/team/demo", "https://host/team/Demo", false},
 		{"https://other/team/demo", "git@host:team/demo.git", false},
 		{"team/demo", "git@host:team/another.git", false},
 		{"team/demo", "", false},
@@ -185,6 +202,22 @@ func TestJoinRepositoryMatch(t *testing.T) {
 		if got := sameRepository(tc.repo, tc.remote); got != tc.match {
 			t.Errorf("repository match for %q and %q = %t", tc.repo, tc.remote, got)
 		}
+	}
+}
+
+func TestJoinSkipsPortableHooksForDifferentOriginPort(t *testing.T) {
+	c, _, root, code := joinCLIWithRepo(t, "https://git.example.test:8443/team/demo", "https://git.example.test:9443/team/demo")
+	status, out, stderr := c.run("join", "--link-stdin", "--install-hook")
+	if status != exitOK || !strings.Contains(out, "policy: verified") || strings.Contains(out+stderr, code) {
+		t.Fatalf("join did not finish safely (exit %d)", status)
+	}
+	for _, path := range []string{".claude/settings.json", ".codex/hooks.json"} {
+		if _, err := os.Lstat(filepath.Join(root, path)); !os.IsNotExist(err) {
+			t.Errorf("join wrote %s for a checkout on a different origin port", path)
+		}
+	}
+	if !strings.Contains(out, "Git origin does not match the project repository") {
+		t.Error("join omitted the reason it skipped portable hooks")
 	}
 }
 
