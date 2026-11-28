@@ -51,8 +51,9 @@ start_wrangler() {
 }
 
 check_health() {
-  local deadline=$((SECONDS + 60))
-  until curl -fs -o "$state/health.json" --max-time 2 "$origin/healthz"; do
+  local deadline=$((SECONDS + 60)) status
+  until status=$(curl -fs -o "$state/health.json" -w '%{http_code}' --max-time 2 "$origin/healthz") &&
+    [[ $status == 200 ]]; do
     if (( SECONDS >= deadline )) || ! kill -0 "$wrangler_pid" 2>/dev/null; then
       echo "Wrangler did not become ready at /healthz" >&2
       return 1
