@@ -2,14 +2,56 @@ package daemon
 
 import (
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
+
+func TestHookRefreshReportsErrorsWithoutAStaleVerdict(t *testing.T) {
+	for _, name := range []string{"lock", "backoff", "sync audit"} {
+		t.Run(name, func(t *testing.T) {
+			home, clock, _, setResponse := ageHub(t)
+			g, err := Open(home, clock)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := g.Sync(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+			setResponse(loadedAt.Add(5*time.Minute), 1)
+			var want string
+			switch name {
+			case "lock":
+				want = automaticLockFile
+				// A reread after the lock error can no longer make a stale decision.
+				if err := os.Remove(filepath.Join(home, policyFile)); err != nil {
+					t.Fatal(err)
+				}
+			case "backoff":
+				want = automaticFailFile
+			case "sync audit":
+				want = auditFile
+				if err := os.Remove(filepath.Join(home, auditFile)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := os.Mkdir(filepath.Join(home, want), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			err = g.RefreshForHook(t.Context())
+			if err == nil || !strings.Contains(err.Error(), want) || name == "sync audit" && !errors.Is(err, ErrNotRecorded) {
+				t.Errorf("policy %s, refresh error %v; want the error for %s", g.Status().State, err, want)
+			}
+		})
+	}
+}
 
 func TestHubPolicyAge(t *testing.T) {
 	home, clock, signature, setResponse := ageHub(t)

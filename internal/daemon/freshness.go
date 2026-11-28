@@ -51,16 +51,24 @@ func (g *Gate) RefreshForHook(ctx context.Context) error {
 	if !g.Status().HubNeedsRefresh() {
 		return nil
 	}
-	unlock, err := lockHomeFile(ctx, g.home, automaticLockFile)
-	if err != nil {
-		return g.reopen()
+	unlock, lockErr := lockHomeFile(ctx, g.home, automaticLockFile)
+	if lockErr != nil {
+		if err := g.reopen(); err != nil {
+			return err
+		}
+		if g.Status().HubNeedsRefresh() {
+			return nil
+		}
+		return lockErr
 	}
 	defer unlock()
 	if err := g.reopen(); err != nil || !g.Status().HubNeedsRefresh() {
 		return err
 	}
 	var failedAt time.Time
-	_, _ = readJSON(g.home, automaticFailFile, map[string]any{"failed_at": &failedAt})
+	if _, err := readJSON(g.home, automaticFailFile, map[string]any{"failed_at": &failedAt}); err != nil {
+		return err
+	}
 	now := g.now().UTC()
 	if ctx.Err() != nil || !failedAt.IsZero() && !now.Before(failedAt) && now.Sub(failedAt) < automaticBackoff {
 		return nil
@@ -69,7 +77,12 @@ func (g *Gate) RefreshForHook(ctx context.Context) error {
 	if err := g.reopen(); err != nil {
 		return err
 	}
-	if syncErr != nil && g.Status().HubNeedsRefresh() {
+	if syncErr != nil {
+		// Stale and rejected policies reach the gate's normal denial path.
+		// A sync can return an error even after committing a fresh policy.
+		if !g.Status().HubNeedsRefresh() {
+			return syncErr
+		}
 		_ = writeJSON(g.home, automaticFailFile, map[string]time.Time{"failed_at": g.now().UTC()})
 	}
 	return nil
