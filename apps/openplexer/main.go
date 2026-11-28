@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"math/big"
 	"os"
 	"strings"
 	"time"
@@ -175,11 +176,11 @@ func (c command) configure(args []string) int {
 	}
 	change := daemon.Settings{MemberID: *member, StaleAfterDays: *staleAfterDays, HubURL: *hub, ProjectID: *project}
 	if settingAge {
-		age, err := time.ParseDuration(*maxPolicyAge)
-		if err != nil || age < time.Minute || age > time.Hour || age%time.Second != 0 {
+		seconds, ok := parseMaxPolicyAge(*maxPolicyAge)
+		if !ok {
 			return c.fail(errors.New("maximum policy age must be between 1 minute and 1 hour in whole seconds"))
 		}
-		change.MaxPolicyAgeSeconds = int(age / time.Second)
+		change.MaxPolicyAgeSeconds = seconds
 	}
 	if *tokenFile != "" {
 		token, err := os.ReadFile(*tokenFile)
@@ -206,6 +207,34 @@ func (c command) configure(args []string) int {
 		return c.fail(err)
 	}
 	return exitOK
+}
+
+func parseMaxPolicyAge(value string) (int, bool) {
+	// Sum exactly so time.ParseDuration cannot truncate a fractional second
+	// to an integer at nanosecond precision.
+	const decimal = "0123456789."
+	value, _ = strings.CutPrefix(value, "+")
+	var total big.Rat
+	for value != "" {
+		unit := strings.TrimLeft(value, decimal)
+		number := value[:len(value)-len(unit)]
+		end := strings.IndexAny(unit, decimal)
+		if end < 0 {
+			end = len(unit)
+		}
+		unit, value = unit[:end], unit[end:]
+		multiplier, err := time.ParseDuration("1" + unit)
+		var amount big.Rat
+		if _, ok := amount.SetString(number); !ok || err != nil {
+			return 0, false
+		}
+		total.Add(&total, amount.Mul(&amount, big.NewRat(int64(multiplier), int64(time.Second))))
+	}
+	if !total.IsInt() || !total.Num().IsInt64() {
+		return 0, false
+	}
+	seconds := total.Num().Int64()
+	return int(seconds), seconds >= int64(time.Minute/time.Second) && seconds <= int64(time.Hour/time.Second)
 }
 
 func (c command) load(path string) int {

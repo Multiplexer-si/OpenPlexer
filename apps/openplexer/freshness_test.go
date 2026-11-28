@@ -26,10 +26,12 @@ func TestConfigureMaxPolicyAge(t *testing.T) {
 	if out := c.must(exitUnenforced, "policy", "status"); !strings.Contains(out, "maximum policy age: 5m0s") {
 		t.Errorf("upgrade default missing from status: %s", out)
 	}
-	for _, value := range []string{"0s", "59s", "1m1ms", "1h1s"} {
-		c.must(exitFailure, "configure", "--max-policy-age", value)
+	for _, value := range []string{"0s", "59s", "1m1ms", "1h1s", "60.0000000001s", "1m0.0000000001ns", "3600.0000000001s"} {
+		if code, _, _ := c.run("configure", "--max-policy-age", value); code != exitFailure {
+			t.Errorf("configure accepted %q with exit %d", value, code)
+		}
 	}
-	for _, value := range []string{"1m", "1h"} {
+	for _, value := range []string{"1m", "0.5m30s", "59.9999999999s0.0000000001s", "1h"} {
 		c.must(exitOK, "configure", "--max-policy-age", value)
 	}
 	out := c.must(exitUnenforced, "policy", "status")
