@@ -40,7 +40,7 @@ A denial reaches Claude Code as the `deny` verdict of `PreToolUse` with the reas
 
    The command adds pre-tool and startup entries to `~/.claude/settings.json`, or to `$CLAUDE_CONFIG_DIR/settings.json` if that variable is set. It keeps every other byte of the file. To connect one project only, run `openplexer install claude-code --scope project` in the project, or pass `--project <dir>`, which means the project scope. That writes `.claude/settings.json` of the project, and it records the directory as a project root, as [The project root](#the-project-root) describes. `--file <path>` writes another file, such as `.claude/settings.local.json`.
 3. For a project file, start Claude Code in the project and accept the workspace trust dialog. Claude Code holds back the hooks of a project until you do. It reads a change to a settings file while it runs.
-4. Type `/hooks` and check for entries under `PreToolUse` and `SessionStart`.
+4. Type `/hooks` and check for the OpenPlexer entry under `PreToolUse`.
 
 The pre-tool entry looks like this. The command is the absolute path of the binary that ran `install`.
 
@@ -90,13 +90,13 @@ The hook reads `~/.openplexer/projects.json`. It uses the deepest registered roo
 
 ## Hub policy age
 
-Policy age and the startup check need a build newer than `v0.1.0-rc.1`. Re-run `openplexer install claude-code` with the same scope to add the startup entry.
+Policy age and the startup check need a build newer than `v0.1.0-rc.1`. Re-run `openplexer install claude-code` with the same scope to add the startup entry. Reinstalling at project scope keeps an existing portable hook portable. Pass `--portable=false` to switch it to a hook that names the local binary.
 
-`SessionStart` checks policy when Claude Code starts or resumes a session. It uses the working directory to select the home for a portable install. If a hub policy is still stale after an attempted sync, the hook shows a warning and the session can continue. Run `openplexer policy check-session` to make the same check yourself. [Claude Code SessionStart](https://code.claude.com/docs/en/hooks#sessionstart)
+The startup handler accepts a `SessionStart` event and uses its working directory to select a portable home. It returns a warning if the policy stays stale after sync. The tests send synthetic events to the handler. Delivery and warning display in Claude Code still need a real-agent check. Run `openplexer policy check-session` to check directly. [Startup test](../apps/openplexer/freshness_test.go)
 
 The default maximum age is five minutes from the last authenticated policy fetch. The hook uses this machine's wall clock. A confirmation in the future or a missing confirmation counts as stale. An older cache needs a new sync after you upgrade.
 
-When a covered action needs stale policy, the hook tries to sync from the hub. All refreshes in the call share two seconds. If the policy stays stale, the hook blocks the action. This includes a shell tool call even when the cached role has no command grants. Tools outside the adapter's coverage keep their existing behavior.
+When a covered action needs stale or rejected hub policy, the hook tries to sync from the hub. All refreshes in the call share two seconds. If the policy stays stale or rejected, the hook blocks the action. This includes a shell tool call even when the cached role has no command grants. Tools outside the adapter's coverage keep their existing behavior.
 
 Run `openplexer policy status` to see the last hub confirmation, the age limit, and the daemon heartbeat. Run `openplexer policy sync` for the affected home to recover. For a different home, run `openplexer --home <dir> policy sync`. [Configure the age limit](local-policy.md#offline-and-stale)
 

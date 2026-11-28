@@ -9,7 +9,7 @@ This page is for a developer who connects Codex to OpenPlexer, and for a reviewe
 | Agent | Version | How it was checked |
 |---|---|---|
 | Codex | 0.167.1 | The hooks page of the Codex documentation. |
-| Codex | 0.169.0 | Six real sessions through the installed hook on 2026-11-18, which [the results of the harness](../test/realagent/results.md) record. |
+| Codex | 0.169.0 | Six real sessions through the installed pre-tool hook on 2026-11-18. [Harness results](../test/realagent/results.md) |
 
 The patch grammar that the adapter reads is the grammar of Codex 0.164.0, which the existing implementation checked against that version. The sessions of 0.169.0 sent only patches that add one file, and the adapter read each one. Nothing checks the other patch forms against 0.169.0, so a patch that Codex accepts and the adapter rejects is blocked, and a patch that the adapter accepts and Codex reads differently is not caught.
 
@@ -33,7 +33,7 @@ A denial reaches Codex as the `deny` verdict of `PreToolUse` with the reason. A 
 
    The command adds pre-tool and startup entries to `~/.codex/hooks.json`, or to `$CODEX_HOME/hooks.json` if that variable is set. It keeps every other byte of the file, and it never edits `config.toml`. To connect one project only, run `openplexer install codex --scope project` in the project, or pass `--project <dir>`, which means the project scope. That writes `.codex/hooks.json` of the project, and it records the directory as a project root, as [The project root](#the-project-root) describes. `--file <path>` writes another file.
 3. Start `codex`. For a project file, trust the project. Codex loads the hooks of a project only when the project is trusted.
-4. Type `/hooks`, review the two new hooks, and trust them. Codex records the trust against the hash of the hook in `config.toml`, skips a new or changed hook until you trust it, and marks an edited hook as modified.
+4. Type `/hooks`, review the OpenPlexer hooks listed there, and trust them. Codex records the trust against the hash of the hook in `config.toml`, skips a new or changed hook until you trust it, and marks an edited hook as modified.
 
 The pre-tool entry looks like this. The command is the absolute path of the binary that ran `install`.
 
@@ -84,13 +84,13 @@ Trust the hook in `/hooks` after you install it. Codex can let a call run if it 
 
 ## Hub policy age
 
-Policy age and the startup check need a build newer than `v0.1.0-rc.1`. Re-run `openplexer install codex` with the same scope to add the startup entry.
+Policy age and the startup check need a build newer than `v0.1.0-rc.1`. Re-run `openplexer install codex` with the same scope to add the startup entry. Reinstalling at project scope keeps an existing portable hook portable. Pass `--portable=false` to switch it to a hook that names the local binary.
 
-`SessionStart` checks policy when Codex starts or resumes a session. It uses the working directory to select the home for a portable install. If a hub policy is still stale after an attempted sync, the hook shows a warning and the session can continue. Run `openplexer policy check-session` to make the same check yourself. [Codex SessionStart](https://learn.chatgpt.com/docs/hooks#sessionstart)
+The startup handler accepts a `SessionStart` event and uses its working directory to select a portable home. It returns a warning if the policy stays stale after sync. The tests send synthetic events to the handler. Delivery and warning display in Codex still need a real-agent check. Run `openplexer policy check-session` to check directly. [Startup test](../apps/openplexer/freshness_test.go)
 
 The default maximum age is five minutes from the last authenticated policy fetch. The hook uses this machine's wall clock. A confirmation in the future or a missing confirmation counts as stale. An older cache needs a new sync after you upgrade.
 
-When a covered action needs stale policy, the hook tries to sync from the hub. All refreshes in the call share two seconds. If the policy stays stale, the hook blocks the action. This includes a shell tool call even when the cached role has no command grants. Tools outside the adapter's coverage keep their existing behavior.
+When a covered action needs stale or rejected hub policy, the hook tries to sync from the hub. All refreshes in the call share two seconds. If the policy stays stale or rejected, the hook blocks the action. This includes a shell tool call even when the cached role has no command grants. Tools outside the adapter's coverage keep their existing behavior.
 
 Run `openplexer policy status` to see the last hub confirmation, the age limit, and the daemon heartbeat. Run `openplexer policy sync` for the affected home to recover. For a different home, run `openplexer --home <dir> policy sync`. [Configure the age limit](local-policy.md#offline-and-stale)
 
