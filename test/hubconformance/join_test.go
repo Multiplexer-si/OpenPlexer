@@ -3,12 +3,16 @@ package hubconformance
 import (
 	"crypto/rand"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/multiplexer-si/openplexer/internal/hub"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 	"github.com/multiplexer-si/openplexer/internal/projects"
 	"github.com/multiplexer-si/openplexer/internal/testbin"
@@ -102,12 +106,60 @@ func (f *fixture) joinFingerprint(t *testing.T) string {
 	return fp
 }
 
+type joinFixtureTransport struct{ http.Handler }
+
+func (tr joinFixtureTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	res := httptest.NewRecorder()
+	tr.ServeHTTP(res, req)
+	return res.Result(), nil
+}
+
+func TestJoinUsesSeededProject(t *testing.T) {
+	const currentVersion = 5
+	store := hub.Open(t.TempDir())
+	if err := store.Init(); err != nil {
+		t.Fatal(err)
+	}
+	lead, err := store.AddMember("lead", hub.Lead)
+	if err != nil {
+		t.Fatal(err)
+	}
+	member, err := store.AddMember("member", hub.Member)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.AddProject(*project, seedRepo); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.PublishPolicy(*project, []byte(bundleJSON(*project, seedRepo, currentVersion, ""))); err != nil {
+		t.Fatal(err)
+	}
+	f := &fixture{
+		origin: "https://hub.example.test", lead: lead, member: member,
+		client: &http.Client{Transport: joinFixtureTransport{store.Handler()}},
+	}
+	id, repo, version := f.joinProject(t)
+	if id != *project || repo != seedRepo || version != currentVersion {
+		t.Fatal("join did not use the seeded project and its current policy")
+	}
+}
+
+func (f *fixture) joinProject(t *testing.T) (string, string, int) {
+	t.Helper()
+	id := *project
+	repo := f.repo(t, id)
+	res := f.call(t, head, projectPath(id)+"/policy.bundle", f.member, "", http.StatusOK)
+	version, err := strconv.Atoi(res.header.Get(hub.PolicyVersionHeader))
+	if err != nil || version < 1 {
+		t.Fatal("seeded project did not report a valid policy version")
+	}
+	return id, repo, version
+}
+
 func (f *fixture) join(t *testing.T) {
-	const repo = "team/demo"
-	id, member := "join-"+rand.Text(), "developer-"+rand.Text()
-	f.call(t, post, "/api/v1/admin/projects", f.lead, fmt.Sprintf(`{"id":%q,"repo":%q}`, id, repo), 200)
+	id, repo, version := f.joinProject(t)
+	member := "developer-" + rand.Text()
 	policyPath := projectPath(id) + "/policy"
-	f.call(t, put, policyPath, f.lead, bundleJSON(id, repo, 1, ""), 200)
 
 	fp := f.joinFingerprint(t)
 	bin := joinBinary(t)
@@ -126,7 +178,7 @@ func (f *fixture) join(t *testing.T) {
 	mustReport(t, checkout.join(t, 1, f.origin, first.Code, fp), "pending_approval: "+first.Invite.ID)
 	f.call(t, post, invitePath+"/"+first.Invite.ID+"/approve", f.lead, "", 200)
 	mustReport(t, checkout.join(t, 0, f.origin, first.Code, fp), "project: "+id, "member: "+member,
-		"hub role: member", "policy: verified", "policy version: 1", "no policy role yet")
+		"hub role: member", "policy: verified", fmt.Sprintf("policy version: %d\n", version), "no policy role yet")
 	mustReport(t, checkout.run(t, 5, "", "policy", "check", "write", "src/main.go"), "deny:")
 	mustReport(t, checkout.run(t, 0, "", "join", "--discard-pending"), "no pending join")
 
@@ -135,15 +187,15 @@ func (f *fixture) join(t *testing.T) {
 		if assigned {
 			membership = fmt.Sprintf(`{%q:"developer"}`, member)
 		}
-		return fmt.Sprintf(`{"project_id":%q,"repos":[%q],"version":%d,
+		return fmt.Sprintf(`{"project_id":%q,"repos":[%s],"version":%d,
 			"areas":[{"name":"source","patterns":["src/**"]}],
-			"roles":{"developer":{"read":[],"write":["source"],"exec":[]}},"members":%s}`, id, repo, version, membership)
+			"roles":{"developer":{"read":[],"write":["source"],"exec":[]}},"members":%s}`, id, jsonString(repo), version, membership)
 	}
-	f.call(t, put, policyPath, f.lead, repoBundle(2, true), 200)
-	mustReport(t, checkout.run(t, 0, "", "policy", "sync"), "policy: verified", "version 2")
+	f.call(t, put, policyPath, f.lead, repoBundle(version+1, true), 200)
+	mustReport(t, checkout.run(t, 0, "", "policy", "sync"), "policy: verified", fmt.Sprintf("version %d ", version+1))
 	mustReport(t, checkout.run(t, 0, "", "policy", "check", "write", "src/main.go"), "allow:")
-	f.call(t, put, policyPath, f.lead, repoBundle(3, false), 200)
-	mustReport(t, checkout.run(t, 0, "", "policy", "sync"), "policy: verified", "version 3")
+	f.call(t, put, policyPath, f.lead, repoBundle(version+2, false), 200)
+	mustReport(t, checkout.run(t, 0, "", "policy", "sync"), "policy: verified", fmt.Sprintf("version %d ", version+2))
 	mustReport(t, checkout.run(t, 5, "", "policy", "check", "write", "src/main.go"), "deny:")
 
 	other := newJoinCheckout(t, bin, repo)
@@ -152,7 +204,7 @@ func (f *fixture) join(t *testing.T) {
 	mustReport(t, other.join(t, 1, f.origin, first.Code, fp), "HTTP 409")
 	mustReport(t, other.run(t, 0, "", "join", "--discard-pending"), "discarded")
 	replacement := f.issueInvite(t, createInviteJSON(id, "replacement-"+rand.Text(), 60, false))
-	mustReport(t, other.join(t, 0, f.origin, replacement.Code, fp), "policy: verified", "policy version: 3")
+	mustReport(t, other.join(t, 0, f.origin, replacement.Code, fp), "policy: verified", fmt.Sprintf("policy version: %d\n", version+2))
 
 	r, err := projects.Read(checkout.user)
 	if err != nil || len(r.Projects()) != 1 {

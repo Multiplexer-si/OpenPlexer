@@ -84,7 +84,7 @@ Select `go test -count=1 ./test/hubconformance -run '^TestHub$/^hook-policy-age$
 
 ## Join from an invite
 
-Run `go test -count=1 ./test/hubconformance -run '^TestHub$/^join$'` for the CLI journey. It creates a separate project and private laptop homes. The journey checks approval, the initial policy, a published grant, and removal of the grant. It also checks that a wrong pin leaves the invite available and that a new invite can join after discarding a rejected claim. The `invites/expiry` case drives join with the expired link. The Wrangler run also checks the pending join through policy key staging and activation.
+Run `go test -count=1 ./test/hubconformance -run '^TestHub$/^join$'` for the CLI journey. It uses the primary fixture project and creates private laptop homes. The journey checks approval, the initial policy, a published grant, and removal of the grant. It also checks that a wrong pin leaves the invite available and that a new invite can join after discarding a rejected claim. The `invites/expiry` case drives join with the expired link. The Wrangler run also checks the pending join through policy key staging and activation.
 
 ## Coverage limits
 
