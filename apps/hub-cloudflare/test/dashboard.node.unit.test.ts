@@ -1,7 +1,55 @@
 import { DatabaseSync } from "node:sqlite";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import { dashboardResponse } from "../src/dashboard-http";
 import { parsePolicyBundle } from "../src/policy";
 import { schemaMigrations } from "../src/storage";
+
+test("the dashboard sign-in form sends the page origin under no-referrer", async () => {
+  const origin = "https://hub.example.com";
+  const page = new Request(origin + "/admin/");
+  const policy = dashboardResponse(page, new Response()).headers.get("Referrer-Policy");
+  const button = { disabled: false };
+  const tokenInput = { value: "" };
+  const signInPanel = { hidden: true };
+  let submit: (() => void) | undefined;
+  let signInOrigin: string | undefined;
+  const inert = {
+    querySelectorAll: () => [], addEventListener() {}, setAttribute() {},
+    toggleAttribute() {}, removeAttribute() {}, replaceChildren() {},
+  };
+  vi.stubGlobal("Option", class {});
+  vi.stubGlobal("document", {
+    getElementById(id: string) {
+      if (id === "lead-token") return tokenInput;
+      if (id === "sign-in-panel") return signInPanel;
+      if (id === "sign-in-form") return {
+        addEventListener(_type: string, listener: (event: { preventDefault(): void; submitter: typeof button }) => void) {
+          submit = () => listener({ preventDefault() {}, submitter: button });
+        },
+      };
+      return inert;
+    },
+  });
+  vi.stubGlobal("fetch", async (path: string, options: { method: string; mode?: string }) => {
+    if (path === "/admin/api/sign-in" && options.method === "POST") {
+      // Fetch's Origin header algorithm for a same-origin POST with no redirects.
+      signInOrigin = options.mode !== "cors" && policy === "no-referrer" ? "null" : origin;
+    }
+    return new Response(null, { status: 401 });
+  });
+  try {
+    // @ts-expect-error Plain browser module.
+    await import("../assets/admin/dashboard.js");
+    await vi.waitFor(() => expect(signInPanel.hidden).toBe(false));
+    if (!submit) throw new Error("missing dashboard sign-in handler");
+    tokenInput.value = "lead credential";
+    submit();
+    await vi.waitFor(() => expect(button.disabled).toBe(false));
+    expect(signInOrigin).toBe(origin);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+});
 
 test("dashboard schema installs a session digest table and expiry index at migration 5", () => {
   using db = new DatabaseSync(":memory:");

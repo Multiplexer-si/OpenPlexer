@@ -33,8 +33,10 @@ class RequestError extends Error {
 }
 
 function send(path, options = {}) {
+  // Fetch keeps the serialized Origin on CORS-mode writes under no-referrer.
+  // https://fetch.spec.whatwg.org/#append-a-request-origin-header
   return fetch("/admin/api" + path, {
-    credentials: "same-origin", mode: "same-origin", cache: "no-store", redirect: "error", ...options,
+    credentials: "same-origin", mode: "cors", cache: "no-store", redirect: "error", ...options,
   });
 }
 
