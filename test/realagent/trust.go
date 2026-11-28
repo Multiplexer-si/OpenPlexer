@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,12 +15,16 @@ import (
 )
 
 type trustReport struct {
-	UntrustedProject int    `json:"untrustedProject"`
-	Before           string `json:"before"`
-	After            string `json:"after"`
-	SessionFlags     string `json:"sessionFlags"`
-	Hash             string `json:"hash"`
-	SameHash         bool   `json:"sameHash"`
+	UntrustedProject int                  `json:"untrustedProject"`
+	Hooks            map[string]hookTrust `json:"hooks"`
+}
+
+type hookTrust struct {
+	Before       string `json:"before"`
+	After        string `json:"after"`
+	SessionFlags string `json:"sessionFlags"`
+	Hash         string `json:"hash"`
+	SameHash     bool   `json:"sameHash"`
 }
 
 type hookInfo struct {
@@ -144,58 +147,101 @@ func codexTrust(project, codexHome string, sessionFlags []string) (trustReport, 
 	}
 	defer s.close()
 
-	hooks, err := s.hooks(project)
+	return checkCodexTrust(project, s.hooks, s.write, func() ([]hookInfo, error) {
+		flagged, err := startAppServer(ctx, project, filepath.Join(codexHome, "flags"), sessionFlags)
+		if err != nil {
+			return nil, err
+		}
+		defer flagged.close()
+		return flagged.hooks(project)
+	})
+}
+
+func checkCodexTrust(project string, list func(string) ([]hookInfo, error), write func(string, any) error, flags func() ([]hookInfo, error)) (trustReport, error) {
+	report := trustReport{Hooks: make(map[string]hookTrust)}
+	hooks, err := list(project)
 	if err != nil {
 		return report, err
 	}
 	report.UntrustedProject = len(hooks)
-	if err := s.write("projects", map[string]any{project: map[string]string{"trust_level": "trusted"}}); err != nil {
+	if report.UntrustedProject != 0 {
+		return report, fmt.Errorf("an untrusted project lists %d hooks, want 0", report.UntrustedProject)
+	}
+	if err := write("projects", map[string]any{project: map[string]string{"trust_level": "trusted"}}); err != nil {
 		return report, err
 	}
-	if hooks, err = s.hooks(project); err != nil {
+	if hooks, err = list(project); err != nil {
 		return report, err
 	}
-	if len(hooks) != 1 {
-		return report, fmt.Errorf("a trusted project lists %d hooks, want 1", len(hooks))
-	}
-	report.Before, report.Hash = hooks[0].TrustStatus, hooks[0].CurrentHash
-	if hooks[0].Source != "project" {
-		return report, fmt.Errorf("the project hook has source %q, want project", hooks[0].Source)
-	}
-	if err := s.write("hooks.state", map[string]any{hooks[0].Key: map[string]string{"trusted_hash": hooks[0].CurrentHash}}); err != nil {
-		return report, err
-	}
-	if hooks, err = s.hooks(project); err != nil {
-		return report, err
-	}
-	if len(hooks) != 1 {
-		return report, fmt.Errorf("after trusting, %d hooks are listed, want 1", len(hooks))
-	}
-	report.After = hooks[0].TrustStatus
-
-	flagged, err := startAppServer(ctx, project, filepath.Join(codexHome, "flags"), sessionFlags)
+	before, err := installedHooks(hooks, "project", "untrusted")
 	if err != nil {
 		return report, err
 	}
-	defer flagged.close()
-	if hooks, err = flagged.hooks(project); err != nil {
+	state := make(map[string]any, len(before))
+	for event, h := range before {
+		report.Hooks[event] = hookTrust{Before: h.TrustStatus, Hash: h.CurrentHash}
+		state[h.Key] = map[string]string{"trusted_hash": h.CurrentHash}
+	}
+	if err := write("hooks.state", state); err != nil {
 		return report, err
 	}
-	if len(hooks) != 1 || hooks[0].Source != "sessionFlags" {
-		return report, fmt.Errorf("the session flags list %d hooks %+v, want one with source sessionFlags", len(hooks), hooks)
+	if hooks, err = list(project); err != nil {
+		return report, err
 	}
-	report.SessionFlags = hooks[0].TrustStatus
-	report.SameHash = hooks[0].CurrentHash == report.Hash
+	after, err := installedHooks(hooks, "project", "trusted")
+	if err != nil {
+		return report, err
+	}
+	for event, h := range after {
+		check := report.Hooks[event]
+		check.After = h.TrustStatus
+		report.Hooks[event] = check
+		if h.Key != before[event].Key || h.CurrentHash != check.Hash {
+			return report, fmt.Errorf("%s project hook changed identity or hash after trusting", event)
+		}
+	}
+	hooks, err = flags()
+	if err != nil {
+		return report, err
+	}
+	flagged, err := installedHooks(hooks, "sessionFlags", "")
+	if err != nil {
+		return report, err
+	}
+	for event, h := range flagged {
+		check := report.Hooks[event]
+		check.SessionFlags = h.TrustStatus
+		check.SameHash = h.CurrentHash == check.Hash
+		report.Hooks[event] = check
+		if !check.SameHash {
+			return report, fmt.Errorf("%s session flag hook has a different hash from the project hook", event)
+		}
+	}
+	return report, nil
+}
 
-	var problems []error
-	if report.UntrustedProject != 0 {
-		problems = append(problems, fmt.Errorf("an untrusted project lists %d hooks, want 0", report.UntrustedProject))
+func installedHooks(hooks []hookInfo, source, status string) (map[string]hookInfo, error) {
+	// The harness installs into an empty project, with one group and handler per event.
+	events := map[string]string{"PreToolUse": ":pre_tool_use:0:0", "SessionStart": ":session_start:0:0"}
+	if len(hooks) != len(events) {
+		return nil, fmt.Errorf("%s lists %d hooks, want one per installed event", source, len(hooks))
 	}
-	if report.Before != "untrusted" || report.After != "trusted" {
-		problems = append(problems, fmt.Errorf("trust status went %q then %q, want untrusted then trusted", report.Before, report.After))
+	byEvent := make(map[string]hookInfo, len(events))
+	for _, h := range hooks {
+		if h.Source != source || h.CurrentHash == "" || status != "" && h.TrustStatus != status {
+			return nil, fmt.Errorf("unexpected %s hook listing: %+v", source, h)
+		}
+		for event, suffix := range events {
+			if strings.HasSuffix(h.Key, suffix) {
+				byEvent[event] = h
+				break
+			}
+		}
 	}
-	if !report.SameHash {
-		problems = append(problems, errors.New("the session flag hook has another hash than the project hook"))
+	for event := range events {
+		if _, ok := byEvent[event]; !ok {
+			return nil, fmt.Errorf("%s does not list exactly one %s handler", source, event)
+		}
 	}
-	return report, errors.Join(problems...)
+	return byEvent, nil
 }
