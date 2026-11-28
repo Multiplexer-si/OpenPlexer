@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -257,6 +258,137 @@ func TestHookBlocksOnRefreshReopenError(t *testing.T) {
 					})
 				}
 			})
+		}
+	}
+}
+
+type hookRefreshCase struct {
+	name, file, reason string
+	unreadable         bool
+	duringFetch        bool
+	rejected           bool
+	fetches            int
+}
+
+func TestHookBindsRequiredRefresh(t *testing.T) {
+	for _, scenario := range []hookRefreshCase{
+		{name: "failed-fetch", reason: daemon.StalePolicyReason, fetches: 1},
+		{name: "rejected-bundle", reason: daemon.StalePolicyReason, rejected: true, fetches: 1},
+		{name: "missing-config", file: "config.json", reason: "config.json"},
+		{name: "missing-policy", file: "policy.json", reason: "policy.json"},
+		{name: "unreadable-config", file: "config.json", reason: "config.json", unreadable: true},
+		{name: "unreadable-policy", file: "policy.json", reason: "policy.json", unreadable: true},
+		{name: "policy-lost-during-fetch", file: "policy.json", reason: "policy.json", duringFetch: true, fetches: 1},
+	} {
+		for _, agent := range []string{"claude-code", "codex"} {
+			for _, portable := range []bool{false, true} {
+				for _, tool := range []string{"zero-command", "matched-shell", "native-write"} {
+					name := fmt.Sprintf("%s/%s/portable=%t/%s", scenario.name, agent, portable, tool)
+					t.Run(name, func(t *testing.T) {
+					testHookRequiredRefresh(t, agent, portable, tool, scenario)
+					})
+				}
+			}
+		}
+	}
+}
+
+func testHookRequiredRefresh(t *testing.T, agent string, portable bool, tool string, scenario hookRefreshCase) {
+	t.Helper()
+	c := newCLI(t)
+	c.bin = ""
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("CODEX_HOME", "")
+	home, project := os.Getenv("OPENPLEXER_HOME"), ageProject(t)
+	removeFile := func() {
+		path := filepath.Join(home, scenario.file)
+		if err := os.Remove(path); err != nil {
+			t.Fatal(err)
+		}
+		if scenario.unreadable {
+			if err := os.Mkdir(path, 0o700); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	fixture := newAgeHub(t, home, "https://age.invalid")
+	oldBundle := fixture.publish(1, true)
+	fixture.publish(2, true)
+	checking := false
+	fetched := 0
+	testAgeTransport(t, func(r *http.Request) (*http.Response, error) {
+		if checking && strings.HasSuffix(r.URL.Path, "policy.bundle") {
+			fetched++
+			if scenario.duringFetch {
+				removeFile()
+				return ageResponse(fixture.store.Handler(), r)
+			}
+			w := httptest.NewRecorder()
+			if scenario.rejected {
+				w.Write(oldBundle)
+			} else {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			}
+			return w.Result(), nil
+		}
+		return ageResponse(fixture.store.Handler(), r)
+	})
+	args := []string{"hook", agent, "pre-tool"}
+	if portable {
+		c.must(exitOK, "configure", "--project-root", project)
+		args = append(args, "--project-home")
+	}
+	c.must(exitOK, "policy", "sync")
+	switch tool {
+	case "zero-command":
+		c.stdin = callJSON("Bash", project, map[string]string{"command": "tee"})
+	case "matched-shell":
+		c.stdin = callJSON("Bash", project, map[string]string{"command": "echo ok"})
+	case "native-write":
+		c.stdin = ageWrite(project)
+		if agent == "codex" {
+			c.stdin = callJSON("apply_patch", project, map[string]string{"command": "*** Begin Patch\n*** Add File: src/app.ts\n+new\n*** End Patch\n"})
+		}
+	}
+	if code, out, diagnostic := c.run(args...); code != exitOK || out != "" || diagnostic != "" {
+		t.Fatalf("fresh control returned exit %d, stdout %q, stderr %q", code, out, diagnostic)
+	}
+	policyPath := filepath.Join(home, "policy.json")
+	before := readAgeFixture(t, policyPath)
+	checking = true
+	reads := 0
+	var stdout, stderr strings.Builder
+	code := run(args, strings.NewReader(c.stdin), &stdout, &stderr, func() time.Time {
+		reads++
+		if scenario.file != "" {
+			if reads == 1 && !scenario.duringFetch {
+				removeFile()
+			}
+			return c.now.Add(5*time.Minute + time.Duration(reads-1)*time.Millisecond)
+		}
+		// The old confirmation is a millisecond in the future until the
+		// failed attempt has written its backoff marker.
+		if _, err := os.Stat(filepath.Join(home, "policy-refresh-failure.json")); os.IsNotExist(err) {
+			return c.now.Add(-time.Millisecond)
+		}
+		return c.now
+	})
+	if out := stdout.String(); code != exitOK || !strings.Contains(out, `"permissionDecision":"deny"`) || !strings.Contains(out, scenario.reason) {
+		t.Errorf("required refresh returned exit %d, stdout %q, stderr %q; want denial mentioning %q", code, out, stderr.String(), scenario.reason)
+	}
+	if reads != 1 || fetched != scenario.fetches {
+		t.Errorf("hook read the clock %d times and fetched %d bundles; want one clock read and %d fetches", reads, fetched, scenario.fetches)
+	}
+	if scenario.file == "" {
+		if !bytes.Equal(before, readAgeFixture(t, policyPath)) {
+			t.Error("the unsuccessful refresh changed the cached policy")
+		}
+		if scenario.rejected {
+			audit := readAgeFixture(t, filepath.Join(home, "audit.jsonl"))
+			if !bytes.Contains(audit, []byte(`"action":"policy.rejected"`)) {
+				t.Error("the HTTP success did not reach bundle admission")
+			}
 		}
 	}
 }
