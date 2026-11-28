@@ -1,10 +1,10 @@
 import { Buffer } from "node:buffer";
 import { canonicalJSON } from "./canonical";
-import { bearer, cappedBody, conflict, invalid, jsonText, notFound } from "./http";
+import { cappedBody, conflict, invalid, jsonText, notFound } from "./http";
 import { maxBundleBytes, signCanonicalJWS } from "./jws";
 import { observeMember } from "./members";
 import { parsePolicyBundle } from "./policy";
-import { activeSigningKey, activeTeam, appendAudit, authenticate, signingKey } from "./state";
+import { activeSigningKey, activeTeam, appendAudit, bearerLead, signingKey } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
 
 type Project = { id: string; repo: string };
@@ -50,25 +50,35 @@ function quotedRepo(repo: string): string {
   });
 }
 
-function parsePublication(body: Uint8Array): ReturnType<typeof parsePolicyBundle> {
+export function parsePublication(body: Uint8Array, strict = false): ReturnType<typeof parsePolicyBundle> {
   try {
-    return parsePolicyBundle(body);
+    let input: string | Uint8Array = body;
+    if (strict) {
+      try {
+        input = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(body);
+      } catch {
+        throw new SyntaxError("is not valid UTF-8");
+      }
+    }
+    return parsePolicyBundle(input, { strict });
   } catch (error) {
     if (!(error instanceof SyntaxError)) throw error;
     throw invalid("policy: " + error.message);
   }
 }
 
-export async function publishPolicy(request: Request, storage: HubStorage, id: string, teamID: string, wrapSecret: string | undefined) {
-  const hash = bearer(request);
+export async function publishPolicy(request: Request, storage: HubStorage, id: string, teamID: string, wrapSecret: string | undefined,
+  dashboard?: { authorize: ReturnType<typeof bearerLead> },
+) {
+  const authorize = dashboard?.authorize ?? bearerLead(request);
   const body = await cappedBody(request, maxBundleBytes);
   let policy: ReturnType<typeof parsePolicyBundle> | undefined;
   let canonical: string | undefined;
 
   function check(sql: TransactionSQL) {
-    const actor = authenticate(sql, hash, true);
+    const actor = authorize(sql);
     const { repo } = readProject(sql, id);
-    const parsed = policy ??= parsePublication(body);
+    const parsed = policy ??= parsePublication(body, dashboard !== undefined);
     if (parsed.project !== id || parsed.repos.length !== 1 || parsed.repos[0] !== repo) {
       throw invalid(`bundle must target project ${JSON.stringify(id)} and its repository ${quotedRepo(repo)}`);
     }
@@ -83,7 +93,7 @@ export async function publishPolicy(request: Request, storage: HubStorage, id: s
     }
     const latest = latestPolicy(sql, id);
     if (latest && parsed.version <= latest.version) {
-      if (parsed.version === latest.version && canonical === latest.bundle_json) return { kind: "current", latest } as const;
+      if (!dashboard && parsed.version === latest.version && canonical === latest.bundle_json) return { kind: "current", latest } as const;
       throw conflict("policy version must be higher than " + latest.version);
     }
     const roster = new Set(sql.exec<{ member_id: string }>("SELECT member_id FROM members").map((row) => row.member_id));

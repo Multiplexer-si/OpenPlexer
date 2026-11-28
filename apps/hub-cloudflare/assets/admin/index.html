@@ -1,0 +1,170 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Team administration · OpenPlexer</title>
+  <link rel="stylesheet" href="/admin/dashboard.css">
+  <script type="module" src="/admin/dashboard.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span>OpenPlexer</div>
+      <div id="identity" hidden>
+        <span id="signed-in-member"></span>
+        <button id="sign-out" type="button" class="quiet">Sign out</button>
+      </div>
+    </div>
+  </header>
+
+  <main class="layout">
+    <section id="sign-in-panel" class="sign-in" aria-labelledby="sign-in-title" hidden>
+      <h1 id="sign-in-title">Team administration</h1>
+      <p>Sign in with a team lead token.</p>
+      <form id="sign-in-form" method="post" autocomplete="off">
+        <label for="lead-token">Lead token</label>
+        <input id="lead-token" type="password" required autocomplete="off" spellcheck="false">
+        <button type="submit" class="primary">Sign in</button>
+      </form>
+    </section>
+    <noscript>Enable JavaScript to use the dashboard.</noscript>
+
+    <div id="workspace" hidden>
+      <aside class="sidebar">
+        <nav id="sections" aria-label="Dashboard sections">
+          <button type="button" data-view="projects" aria-controls="projects" aria-pressed="true">Projects</button>
+          <button type="button" data-view="members" aria-controls="members" aria-pressed="false">Members</button>
+          <button type="button" data-view="invites" aria-controls="invites" aria-pressed="false">Invites</button>
+          <button type="button" data-view="policy" aria-controls="policy" aria-pressed="false">Policy</button>
+          <button type="button" data-view="room" aria-controls="room" aria-pressed="false">Room</button>
+          <button type="button" data-view="audit" aria-controls="audit" aria-pressed="false">Audit</button>
+        </nav>
+        <label for="active-project">Active project</label>
+        <select id="active-project"></select>
+      </aside>
+
+      <div class="content">
+        <section id="projects" aria-labelledby="projects-title">
+          <h1 id="projects-title">Projects</h1>
+          <form id="project-form" class="inline-form">
+            <label>Project ID<input id="project-id" required maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{0,127}" spellcheck="false"></label>
+            <label>Repository<input id="project-repo" required maxlength="1024" spellcheck="false"></label>
+            <button type="submit" class="primary">Add project</button>
+          </form>
+          <div class="toolbar"><button id="projects-refresh" type="button">Refresh projects</button><button id="projects-next" type="button" hidden>Next projects</button></div>
+          <div class="table-wrap"><table>
+            <caption class="visually-hidden">Projects</caption>
+            <thead><tr><th scope="col">Project</th><th scope="col">Repository</th><th scope="col">Actions</th></tr></thead>
+            <tbody id="project-rows"></tbody>
+          </table></div>
+        </section>
+
+        <section id="members" aria-labelledby="members-title" hidden>
+          <h1 id="members-title">Members</h1>
+          <p>These observations show when the hub served policy or accepted a live Room connection.</p>
+          <div class="toolbar">
+            <label class="check"><input id="filter-members" type="checkbox"> Filter to active project</label>
+            <button id="members-refresh" type="button">Refresh members</button>
+            <button id="members-next" type="button" hidden>Next members</button>
+          </div>
+          <div class="table-wrap"><table>
+            <caption class="visually-hidden">Member sync observations</caption>
+            <thead><tr><th scope="col">Member</th><th scope="col">Hub role</th><th scope="col">Project</th>
+              <th scope="col">Policy version served</th><th scope="col">Last policy fetch</th>
+              <th scope="col">Last Room connection</th><th scope="col">Actions</th></tr></thead>
+            <tbody id="member-rows"></tbody>
+          </table></div>
+        </section>
+
+        <section id="invites" aria-labelledby="invites-title" hidden>
+          <h1 id="invites-title">Invites</h1>
+          <form id="invite-form" class="inline-form">
+            <p id="invite-project"></p>
+            <label>Member ID<input id="invite-member" required maxlength="128" pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{0,127}" spellcheck="false"></label>
+            <label>Hub role<select id="invite-role"><option value="member">Member</option><option value="lead">Lead</option></select></label>
+            <label>Expires in minutes<input id="invite-expiry" type="number" min="1" max="10080" step="1" value="2880" required></label>
+            <label class="check"><input id="invite-approval" type="checkbox"> Require approval</label>
+            <button type="submit" class="primary">Create invite</button>
+          </form>
+          <div class="notice" id="copy-invite-panel" hidden>
+            <p id="copy-invite-help">Copy the join link once. Share it privately with the recipient for use in the CLI.</p>
+            <button id="copy-invite" type="button" class="primary" aria-describedby="copy-invite-help">Copy join link</button>
+          </div>
+          <div class="toolbar"><button id="invites-refresh" type="button">Refresh invites</button><button id="invites-next" type="button" hidden>Next invites</button></div>
+          <div class="table-wrap"><table>
+            <caption class="visually-hidden">Invites</caption>
+            <thead><tr><th scope="col">Member</th><th scope="col">Project</th><th scope="col">Hub role</th>
+              <th scope="col">Public invite ID</th><th scope="col">State</th><th scope="col">Expires</th><th scope="col">Actions</th></tr></thead>
+            <tbody id="invite-rows"></tbody>
+          </table></div>
+        </section>
+
+        <section id="policy" aria-labelledby="policy-title" hidden>
+          <h1 id="policy-title">Policy</h1>
+          <p id="policy-version"></p>
+          <div id="policy-project-content" hidden>
+            <form id="policy-form">
+              <label for="policy-json">Policy JSON</label>
+              <textarea id="policy-json" rows="17" spellcheck="false" required></textarea>
+              <div class="toolbar">
+                <button id="next-version" type="button">Prepare next version</button>
+                <button id="preview-policy" type="button">Validate and preview</button>
+                <button type="submit" class="primary">Publish policy</button>
+                <button id="reload-policy" type="button">Reload published policy</button>
+              </div>
+            </form>
+            <section id="role-preview" class="notice" aria-labelledby="role-preview-title" hidden>
+              <h2 id="role-preview-title">Write grants by role</h2>
+              <p>The preview lists declared grants. The laptop evaluates actual paths, area precedence, and temporary grants.</p>
+              <div id="role-rows"></div>
+            </section>
+            <details id="policy-signature-panel" hidden>
+              <summary>Current signature</summary>
+              <pre id="policy-signature"></pre>
+            </details>
+            <div class="section-title">
+              <h2>Publication history</h2>
+              <button id="policy-history-next" type="button" hidden>Older policy versions</button>
+            </div>
+            <div class="table-wrap"><table>
+              <caption class="visually-hidden">Policy publication history</caption>
+              <thead><tr><th scope="col">Version</th><th scope="col">Published</th><th scope="col">Lead</th></tr></thead>
+              <tbody id="policy-history"></tbody>
+            </table></div>
+          </div>
+        </section>
+
+        <section id="room" aria-labelledby="room-title" hidden>
+          <h1 id="room-title">Room</h1>
+          <p id="room-project"></p>
+          <div class="toolbar">
+            <button id="room-refresh" type="button">Replay from beginning</button>
+            <button id="room-next" type="button" hidden>Next Room events</button>
+            <button id="room-live" type="button" aria-pressed="false">Follow live</button>
+          </div>
+          <p id="room-empty" hidden>No events on this page.</p>
+          <div class="records" id="room-records"></div>
+        </section>
+
+        <section id="audit" aria-labelledby="audit-title" hidden>
+          <h1 id="audit-title">Audit</h1>
+          <div class="toolbar">
+            <button id="export-audit" type="button" class="primary">Prepare signed audit export</button>
+            <a href="/.well-known/audit-jwks.json" download="jwks.json">Download audit keys</a>
+            <button id="audit-refresh" type="button">Refresh audit</button>
+            <button id="audit-next" type="button" hidden>Older audit records</button>
+          </div>
+          <div id="audit-downloads" class="notice download-list" hidden>
+            <a id="download-export" download="export.json">Download export.json</a>
+            <a id="download-checkpoint" download="checkpoint.jws">Download checkpoint.jws</a>
+          </div>
+          <p id="audit-empty" hidden>No records on this page.</p>
+          <div class="records" id="audit-records"></div>
+        </section>
+      </div>
+    </div>
+    <p id="status" class="status" role="status" aria-live="polite"></p>
+  </main>
+</body>
+</html>

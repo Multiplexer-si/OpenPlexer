@@ -177,6 +177,20 @@ export const schemaMigrations: readonly Migration[] = [
       ) STRICT;
     `,
   },
+  {
+    version: 5,
+    sql: `
+      CREATE TABLE IF NOT EXISTS admin_sessions (
+        session_digest BLOB PRIMARY KEY NOT NULL CHECK (length(session_digest) = 32),
+        member_id TEXT NOT NULL,
+        enrollment_id TEXT NOT NULL,
+        csrf_secret TEXT NOT NULL,
+        expires_at_ms INTEGER NOT NULL
+      ) STRICT;
+      CREATE INDEX IF NOT EXISTS admin_sessions_expiry ON admin_sessions (expires_at_ms);
+      CREATE INDEX IF NOT EXISTS audit_policy_history ON audit_records (target, seq) WHERE action = 'policy.updated';
+    `,
+  },
 ];
 
 export function migrate(storage: HubStorage, migrations = schemaMigrations): number {

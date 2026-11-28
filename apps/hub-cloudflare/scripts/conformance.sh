@@ -18,7 +18,7 @@ cleanup() {
     wait "$wrangler_pid" 2>/dev/null || true
   fi
   if [[ $status -ne 0 && -f "$state/wrangler.log" ]]; then
-    cat "$state/wrangler.log" >&2
+    tail -n 40 "$state/wrangler.log" >&2
   fi
   rm -rf "$state"
 }
@@ -41,12 +41,18 @@ cd "$worker_dir/../.."
 mkdir "$state/bin"
 go build -o "$state/bin/" ./apps/openplexer ./apps/openplexer-hub ./apps/openplexer-verify
 
-health_status=$(curl -fsS -o "$state/health.json" -w '%{http_code}' --max-time 2 \
-  --retry-connrefused --retry 15 --retry-delay 1 "$origin/healthz")
+health_deadline=$((SECONDS + 60))
+until health_status=$(curl -fs -o "$state/health.json" -w '%{http_code}' --max-time 2 "$origin/healthz") &&
+  [[ $health_status == 200 ]]; do
+  if (( SECONDS >= health_deadline )) || ! kill -0 "$wrangler_pid" 2>/dev/null; then
+    echo "Wrangler did not become ready at /healthz" >&2
+    exit 1
+  fi
+  sleep 1
+done
 kill -0 "$wrangler_pid"
-test "$health_status" = 200
 health_body=$(cat "$state/health.json")
-test "$health_body" = '{"ok":true,"schema":4}'
+test "$health_body" = '{"ok":true,"schema":5}'
 foreign_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 -H 'Host: foreign.example' "$origin/healthz")
 test "$foreign_status" = 404
 grep -Fq 'env.BOOTSTRAP_TOKEN' "$state/wrangler.log"

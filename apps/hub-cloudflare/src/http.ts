@@ -28,6 +28,10 @@ export const notFound = () => new HubError(404, "not found");
 export const invalid = (detail: string) => new HubError(400, "invalid input: " + detail);
 export const conflict = (detail: string) => new HubError(409, "already exists or conflicts with current state: " + detail);
 
+export function allow(method: string, allowed: string[]): void {
+  if (!allowed.includes(method)) throw new HubError(405, "method not allowed", { Allow: allowed.join(", ") });
+}
+
 export function tokenHash(token: string): ArrayBuffer {
   return Uint8Array.from(createHash("sha256").update(token).digest()).buffer;
 }

@@ -1,4 +1,4 @@
-import { hasTrailingText, isJsonObject, LoneSurrogateError, parseJSON } from "./canonical.ts";
+import { hasDuplicateMembers, hasTrailingText, isJsonObject, LoneSurrogateError, parseJSON } from "./canonical.ts";
 import type { JsonObject, JsonValue } from "./canonical.ts";
 import { JWSError, verifyJWS } from "./jws.ts";
 
@@ -21,11 +21,12 @@ function compareMemberNames(left: string, right: string): number {
   return left.length - right.length;
 }
 
-export function parsePolicyBundle(input: string | Uint8Array): PolicyBundle {
+export function parsePolicyBundle(input: string | Uint8Array, { strict = false } = {}): PolicyBundle {
+  const duplicates = strict ? new WeakSet<JsonObject>() : undefined;
   const text = typeof input === "string" ? input : decoder.decode(input);
   let document: JsonValue;
   try {
-    document = parseJSON(text, { loneSurrogates: "reject" });
+    document = parseJSON(text, { loneSurrogates: "reject", duplicates });
   } catch (error) {
     if (error instanceof LoneSurrogateError) {
       throw new SyntaxError("holds an escape of a lone surrogate, such as \\ud800, which is not a character");
@@ -33,6 +34,8 @@ export function parsePolicyBundle(input: string | Uint8Array): PolicyBundle {
     throw new SyntaxError(hasTrailingText(text) ? "has text after the JSON value" : "is not valid JSON");
   }
   if (!isJsonObject(document)) throw new SyntaxError("must be an object");
+
+  if (duplicates && hasDuplicateMembers(document, duplicates)) throw new SyntaxError("has a duplicate field");
 
   const issues: string[] = [];
   const fail = (path: string, reason: string) => issues.push(path + " " + reason);
@@ -79,6 +82,7 @@ export function parsePolicyBundle(input: string | Uint8Array): PolicyBundle {
     if (value !== first && value !== second) fail(path, `must be one of "${first}", "${second}"`);
   }
 
+  // The v1 schema allows extension fields on bundles, areas, and roles.
   const strings = list(string);
   const version = field(document, "", "version", (path, value) => {
     if (typeof value === "number" && Number.isSafeInteger(value)) return value;

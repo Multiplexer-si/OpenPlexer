@@ -2,7 +2,7 @@
 
 This Worker routes requests for one team to one SQLite-backed Durable Object.
 On startup, the object applies any pending schema migrations.
-`GET /healthz` returns `ok` set to `true` and the current version in `schema`. The schema version is 4 at the time of writing.
+`GET /healthz` returns `ok` set to `true` and the current version in `schema`. The schema version is 5 at the time of writing.
 The Worker serves team setup, member and project administration, signed policies, Room events, claims, and signed audit exports.
 
 Both hubs require roster bearers to use 43 characters from `A-Z`, `a-z`, `0-9`, `-`, and `_`. The Worker returns 401 for a malformed bearer header before reading the body. On capped Go policy and Room routes, a single Bearer header with a 43-byte token reaches the body cap before the alphabet check. Go invite and roster routes check the bearer format before reading the body. The JWKS routes are public.

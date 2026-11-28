@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { validID } from "./admin";
-import { bearer, cappedBody, invalid, json, notFound } from "./http";
-import { authenticate } from "./state";
+import { cappedBody, invalid, json, notFound } from "./http";
+import { bearerLead } from "./state";
 import type { Role } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
 
@@ -130,11 +130,10 @@ export function membersPage(sql: TransactionSQL, query: MembersQuery, now: numbe
   };
 }
 
-export async function readMembers(request: Request, storage: HubStorage) {
-  const hash = bearer(request);
+export async function readMembers(request: Request, storage: HubStorage, authorize = bearerLead(request)) {
   const body = await cappedBody(request, bodyLimit);
   return storage.transaction((sql) => {
-    authenticate(sql, hash, true);
+    authorize(sql);
     if (body.length) throw invalid("unexpected request body");
     const query = parseMembersQuery(new URL(request.url).search);
     return json(membersPage(sql, query, Date.now()));

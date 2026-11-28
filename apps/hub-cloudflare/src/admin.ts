@@ -4,7 +4,7 @@ import type { JsonObject } from "./canonical";
 import type { Env } from "./index";
 import { bearer, cappedBody, conflict, invalid, notFound, tokenHash, unauthorized } from "./http";
 import type { SigningPurpose } from "./jws";
-import { activeSigningKey, activeTeam, appendAudit, authenticate, insertMember, insertSigningKey, memberReserved, newSigningKey, newToken, team, wrappingKey } from "./state";
+import { activeSigningKey, activeTeam, appendAudit, authenticate, bearerLead, insertMember, insertSigningKey, memberReserved, newSigningKey, newToken, team, wrappingKey } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
 
 const adminLimit = 64 << 10;
@@ -101,11 +101,10 @@ export async function addMember(request: Request, storage: HubStorage) {
   });
 }
 
-export async function removeMember(request: Request, storage: HubStorage, id: string) {
-  const hash = bearer(request);
+export async function removeMember(request: Request, storage: HubStorage, id: string, authorize = bearerLead(request)) {
   const body = await cappedBody(request, adminLimit);
   return storage.transaction((sql) => {
-    const actor = authenticate(sql, hash, true);
+    const actor = authorize(sql);
     if (body.length) throw invalid("member deletion does not accept a body");
     const [member] = sql.exec<{ role: string }>("SELECT role FROM members WHERE member_id = ?", id);
     if (!member) throw notFound();
@@ -119,12 +118,14 @@ export async function removeMember(request: Request, storage: HubStorage, id: st
   });
 }
 
-export async function addProject(request: Request, storage: HubStorage) {
-  const hash = bearer(request);
+export async function addProject(request: Request, storage: HubStorage, dashboard?: {
+  authorize: ReturnType<typeof bearerLead>;
+}) {
+  const authorize = dashboard?.authorize ?? bearerLead(request);
   const body = await cappedBody(request, adminLimit);
   return storage.transaction((sql) => {
-    const actor = authenticate(sql, hash, true);
-    const { id, repo } = adminJSON(body);
+    const actor = authorize(sql);
+    const { id, repo } = dashboard ? strictAdminJSON(body, ["id", "repo"], projectInput) : adminJSON(body);
     if (!validID(id) || !validRepo(repo)) throw invalid(projectInput);
     if (sql.exec("SELECT 1 FROM projects WHERE project_id = ?", id).length) {
       throw conflict("project " + JSON.stringify(id));

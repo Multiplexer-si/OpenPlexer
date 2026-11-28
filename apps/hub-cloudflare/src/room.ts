@@ -158,8 +158,8 @@ export function replayEvents(request: Request, storage: HubStorage, room: string
   });
 }
 
-export function eventPage(sql: TransactionSQL, room: string, after: number) {
+export function eventPage(sql: TransactionSQL, room: string, after: number, limit = replayPage) {
   const rows = sql.exec<EventRow & { seq: number }>("SELECT seq, event_json FROM room_events WHERE room_id = ? AND seq > ?" +
-    " ORDER BY seq LIMIT ?", room, after, replayPage);
+    " ORDER BY seq LIMIT ?", room, after, limit);
   return rows.map((row) => ({ seq: row.seq, line: storedEnvelope(row) }));
 }

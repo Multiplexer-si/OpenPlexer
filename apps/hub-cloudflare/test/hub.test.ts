@@ -114,15 +114,15 @@ test("applying the same migration twice preserves the schema and rows", async ()
     `).toArray();
     const before = schema();
     expect(before.map((entry) => entry.name)).toEqual([
-      "audit_records", "claims", "claims_expiry", "claims_room", "invites", "invites_live_member",
-      "invites_retention", "member_observations", "members", "policies", "projects",
+      "admin_sessions", "admin_sessions_expiry", "audit_policy_history", "audit_records", "claims", "claims_expiry",
+      "claims_room", "invites", "invites_live_member", "invites_retention", "member_observations", "members", "policies", "projects",
       "projects_repo", "room_events", "room_events_idempotency", "schema_migrations", "signing_keys", "team",
     ]);
     expect(migrate(storage)).toBe(currentSchema);
     expect(migrate(storage)).toBe(currentSchema);
     expect(schema()).toEqual(before);
     expect(sql.exec("SELECT version FROM schema_migrations ORDER BY version").toArray()).toEqual([
-      { version: 1 }, { version: 2 }, { version: 3 }, { version: 4 },
+      { version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 },
     ]);
     expect(sql.exec("SELECT workspace_id, audit_seq, audit_tip FROM team").one()).toEqual({
       workspace_id: "workspace",

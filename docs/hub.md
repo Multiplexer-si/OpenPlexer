@@ -180,6 +180,35 @@ Upgrade each hub to a version that serves the GET stream before upgrading its da
 | `409` | The proposed policy version conflicts with the current version. |
 | `413` | The body exceeds 1 MiB for policies or 64 KiB for Room operations. |
 
+## Worker dashboard
+
+The Worker serves the dashboard at `/admin/` on the configured HTTPS origin. The Go hub uses the CLI and bearer API. Dashboard responses use `Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
+
+Send one lead bearer to sign in. Use `Origin` set to the hub's exact origin, `Content-Type: application/json`, and an empty JSON object. Sign-in creates an eight-hour session and returns `member_id`, `expires_at`, and `csrf`. The response sets the session cookie, which works only on the dashboard. Every session-authenticated write, including sign-out, requires the hub's exact origin and the session's CSRF value in `X-CSRF-Token`. Read routes also accept HEAD.
+
+| Method and path | Result |
+|---|---|
+| `POST /admin/api/sign-in` | Start a lead session. |
+| `GET /admin/api/session` | Get the current session and its CSRF value. |
+| `POST /admin/api/sign-out` | End the session. Send an empty body. Returns `204`. |
+| `GET /admin/api/projects` | List projects with `after` and `limit`. |
+| `POST /admin/api/projects` | Add a project from `{id, repo}`. |
+| `GET /admin/api/members` | List member sync observations using the shared member query parameters. |
+| `DELETE /admin/api/members/{member}` | Revoke a member. Send an empty body. |
+| `GET /admin/api/invites` | List invites with `after` and `limit`. |
+| `POST /admin/api/invites` | Create an invite with the shared invite fields. Returns `201` with the public `invite` and a one-time `link`. |
+| `POST /admin/api/invites/{id}/approve` | Approve a bound claim. Send an empty body. |
+| `DELETE /admin/api/invites/{id}` | Revoke an invite. Send an empty body. |
+| `GET /admin/api/projects/{project}/policy` | Get the current signed bundle and version. |
+| `POST /admin/api/projects/{project}/policy/preview` | Validate a draft and list its declared write grants by role. |
+| `PUT /admin/api/projects/{project}/policy` | Publish a higher version and return the signed bundle. |
+| `GET /admin/api/projects/{project}/policy/history` | List published versions, times, and actors with `before` and `limit`. |
+| `GET /admin/api/rooms/{project}/events` | Read Room envelopes after `last_seq` with `limit`. Poll with the returned `last_seq` to follow live events. |
+| `GET /admin/api/audit` | Read audit entries with `before` and `limit`, newest first. |
+| `GET /admin/api/audit/export` | Download the full signed audit export. The matching signature is in `OpenPlexer-Audit-Checkpoint`. |
+
+Project, policy history, Room, and audit pages default to 25 items and allow up to 100. For replay, start at `last_seq=0`. For the next page, pass `next_cursor` as the route's cursor parameter. A null cursor marks the end. Dashboard policy and Room reads leave member sync observations unchanged.
+
 ## Export the audit log
 
 The hub writes one chain for the team. It writes each audit record in the same state update as its action. The log covers `member.added`, `member.removed`, `project.added`, `policy.updated`, and `event.policy-denied`. The log also covers invite creation, requests, approval, redemption, and revocation. A denial record links to its Room event and includes the member's claimed decision time in `meta.decided_at` when available.
