@@ -88,7 +88,7 @@ Check the deployment.
 curl -fsS "$hub/healthz"
 ```
 
-The health check prints JSON with `ok` set to `true` and the current version in `schema`. The schema version is 4 at the time of writing. If DNS or TLS is still provisioning, wait for Cloudflare to show the hostname as active and retry the health check.
+The health check prints JSON with `ok` set to `true` and the current version in `schema`. The schema version is 5 at the time of writing. If DNS or TLS is still provisioning, wait for Cloudflare to show the hostname as active and retry the health check.
 
 Store a protected copy of `wrap-key-v1` separately from your audit exports. Wrapping-key rotation is unsupported. Never change or delete `WRAP_KEY_V1` on a live team. The hub would lose the ability to unwrap its signing keys.
 
@@ -151,6 +151,16 @@ curl -fsS "$hub/.well-known/jwks.json" -o "$credentials/keys.json"
 ```
 
 Send each developer the hub origin, project ID, their member ID, and `keys.json` through a trusted channel. Send only that member's token through a private channel. They will pin the keys you send and check policy signatures against that pin.
+
+### Manage the team in a browser
+
+After you bootstrap the Worker, open `/admin/` on the hub's HTTPS origin. Paste a lead token to sign in. The session expires after eight hours. Bootstrap, signing key changes, and operator recovery still use the CLI.
+
+Select a project, then open **Invites** to create an invite with an expiry. Copy the join link once and send it through a trusted private channel. The recipient uses the link in the CLI. For an invite that requires approval, confirm the public invite ID with the recipient before approving it.
+
+Use **Policy** to edit and validate a draft, review its write grants by role, and publish a higher version. The preview shows the grants in the draft. The laptop evaluates exact paths. Use **Members** and **Refresh members** to see which policy version the hub last served for each member ID.
+
+Use **Room** to replay events or follow live updates, including denials. Use **Audit** to download `export.json` and its matching `checkpoint.jws`. Verify them with trusted audit keys. [Audit verification](audit.md#verify-offline) · [Dashboard routes](hub.md#worker-dashboard)
 
 ## 6. Connect each developer and their agent
 
