@@ -3,6 +3,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
@@ -10,6 +11,51 @@ import (
 	"strings"
 	"testing"
 )
+
+func TestPortableReinstallPreservesProjectHome(t *testing.T) {
+	for _, agent := range []string{"claude-code", "codex"} {
+		t.Run(agent, func(t *testing.T) {
+			c := newCLI(t)
+			t.Setenv("HOME", t.TempDir())
+			root := project(t)
+			c.must(exitOK, "configure", "--member", "mem-dev")
+			c.must(exitOK, "install", agent, "--project", root, "--portable")
+			path := filepath.Join(root, portableSettings(agent))
+			var before struct {
+				Hooks map[string]json.RawMessage `json:"hooks"`
+			}
+			readJSON(t, path, &before)
+			delete(before.Hooks, "SessionStart")
+			old, err := json.Marshal(before)
+			if err != nil {
+				t.Fatal(err)
+			}
+			writeFile(t, path, string(old))
+
+			c.must(exitOK, "install", agent, "--project", root)
+			_, got := installedCommand(t, root, agent)
+			for _, stage := range []string{"pre-tool", "session-start"} {
+				if want := "openplexer hook " + agent + " " + stage + ` --project-home"`; strings.Count(got, `"`+want) != 1 {
+					t.Errorf("upgrade did not install one portable %s handler: %s", stage, got)
+				}
+			}
+			c.must(exitOK, "install", agent, "--project", root)
+			if _, repeated := installedCommand(t, root, agent); repeated != got {
+				t.Error("reinstall changed the upgraded settings")
+			}
+			c.must(exitOK, "uninstall", agent, "--project", root)
+			if _, err := os.Stat(path); !errors.Is(err, fs.ErrNotExist) {
+				t.Errorf("uninstall left the upgraded hook file: %v", err)
+			}
+			c.must(exitOK, "install", agent, "--project", root, "--portable")
+			c.must(exitOK, "install", agent, "--project", root, "--portable=false")
+			command, converted := installedCommand(t, root, agent)
+			if !filepath.IsAbs(command) || strings.Contains(converted, "--project-home") {
+				t.Errorf("explicit conversion did not install local handlers: %s", converted)
+			}
+		})
+	}
+}
 
 func TestPortableInstallLeavesRegistryAndMalformedSettingsUnchanged(t *testing.T) {
 	for _, name := range []string{"missing registry", "existing registry"} {

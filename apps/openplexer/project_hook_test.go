@@ -209,7 +209,7 @@ func TestPortableHooks(t *testing.T) {
 			check("missing selected home", writeCall(agent, inner, "src/a"), "configure --project-root")
 			check("missing shell home takes precedence over option refusal", shell(inner, recursiveCopy), "configure --project-root")
 
-			c.cli(t, user, outer, exitOK, "install", agent, "--project", ".")
+			c.cli(t, user, outer, exitOK, "install", agent, "--project", ".", "--portable=false")
 			legacyCommand, _ := installedCommand(t, outer, agent)
 			if legacyCommand != c.bin+" hook "+agent+" pre-tool" {
 				t.Fatalf("unexpected legacy command: %s", legacyCommand)

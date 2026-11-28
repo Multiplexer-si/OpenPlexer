@@ -276,6 +276,24 @@ func canonical(command string, h Handler) bool {
 	return isOpenplexer(w[0]) && w[1] == "hook" && w[2] == h.Agent && w[3] == stage
 }
 
+func hasPortablePreTool(text []byte, agent string) (bool, error) {
+	if isBlank(text) {
+		return false, nil
+	}
+	l, err := inspect(text, agent, preToolUse)
+	if err != nil {
+		return false, err
+	}
+	want := []string{"openplexer", "hook", agent, PreTool, "--project-home"}
+	for _, o := range l.ours {
+		segments := Segments(o.commandText)
+		if o.eventIdx == l.eventIdx && len(segments) == 1 && slices.Equal(segments[0], want) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (l *layout) repoint(text []byte, h Handler) ([]byte, Change, error) {
 	var edits []jsonedit.Edit
 	for _, o := range l.ours {
