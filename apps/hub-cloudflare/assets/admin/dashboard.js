@@ -465,11 +465,21 @@ action("next-version", () => {
 
 editor.addEventListener("input", () => { element("role-preview").hidden = true; });
 
+function compactPolicyDraft(draft) {
+  try {
+    JSON.parse(draft);
+  } catch {
+    return draft;
+  }
+  // Preserve JSON tokens, including duplicate keys, for the hub's validation.
+  return draft.replace(/("(?:[^"\\]|\\.)*")|[ \t\r\n]+/g, "$1");
+}
+
 action("preview-policy", async () => {
   const path = projectPath();
   const draft = editor.value;
   const signal = pageRequest.signal;
-  const preview = await request(path + "/preview", { method: "POST", body: draft, signal });
+  const preview = await request(path + "/preview", { method: "POST", body: compactPolicyDraft(draft), signal });
   if (signal.aborted || editor.value !== draft) return;
   previewRoles(preview);
   status("Policy draft is valid.");
@@ -478,10 +488,11 @@ action("preview-policy", async () => {
 form("policy-form", async () => {
   const path = projectPath();
   const draft = editor.value;
+  const body = compactPolicyDraft(draft);
   const current = session;
-  const preview = await request(path + "/preview", { method: "POST", body: draft });
+  const preview = await request(path + "/preview", { method: "POST", body });
   if (session !== current) return;
-  const signed = await request(path, { method: "PUT", body: draft });
+  const signed = await request(path, { method: "PUT", body });
   status("Published policy version " + signed.version + " for " + signed.bundle.project_id + ".");
   if (session === current && loadedPolicy === signed.bundle.project_id) {
     if (picker.value === signed.bundle.project_id) showPolicyVersion(signed);
