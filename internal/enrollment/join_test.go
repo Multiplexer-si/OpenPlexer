@@ -498,3 +498,157 @@ func TestJoinDiscardPreservesAnUnrelatedHome(t *testing.T) {
 		t.Fatal("discard left private staging data")
 	}
 }
+
+func TestJoinRejectsStagingHomesBeforeContactingHub(t *testing.T) {
+	for _, name := range []string{"stage", "inside-stage", "contains-pending-stage", "joins", "inside-joins", "contains-joins"} {
+		t.Run(name, func(t *testing.T) {
+			f := newJoinFixture(t)
+			f.invite("new-member", false)
+			root, err := projects.CanonicalPath(f.req.Root)
+			if err != nil {
+				t.Fatal(err)
+			}
+			parent := filepath.Join(f.req.UserHome, "selected")
+			joins := filepath.Join(f.req.UserHome, ".openplexer", "joins")
+			stage := (projects.PendingJoin{Root: root, Home: filepath.Join(parent, "home")}).Stage()
+			switch name {
+			case "stage":
+				f.req.Home = stage
+			case "inside-stage":
+				f.req.Home = filepath.Join(stage, "child")
+			case "contains-pending-stage":
+				f.req.Home = filepath.Join(parent, "home")
+				interrupted := errors.New("test interruption")
+				if _, err := f.join(func(string) error { return interrupted }); !errors.Is(err, interrupted) {
+					t.Fatalf("could not reserve a staged home: %v", err)
+				}
+				f.req.Root, f.req.Home = t.TempDir(), parent
+			case "joins":
+				f.req.Home = joins
+			case "inside-joins":
+				f.req.Home = filepath.Join(joins, "child")
+			case "contains-joins":
+				f.req.Home = filepath.Dir(joins)
+			}
+			f.before = func(*http.Request) { t.Fatal("join contacted the hub for a home overlapping join state") }
+			if _, err := f.join(nil); err == nil {
+				t.Fatal("join accepted a home overlapping join state")
+			}
+		})
+	}
+}
+
+func TestJoinRejectsControlHomesBeforeContactingHub(t *testing.T) {
+	for _, name := range []string{"registry", "inside-registry", "registry-case-alias", "checkout-control-file", "contains-checkout-control-files", "checkout-control-referent"} {
+		t.Run(name, func(t *testing.T) {
+			f := newJoinFixture(t)
+			f.invite("new-member", false)
+			registryDir := filepath.Join(f.req.UserHome, ".openplexer")
+			switch name {
+			case "registry":
+				f.req.Home = filepath.Join(registryDir, "projects.json")
+			case "inside-registry":
+				f.req.Home = filepath.Join(registryDir, "projects.json", "child")
+			case "registry-case-alias":
+				if err := os.Mkdir(registryDir, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				if _, err := os.Stat(filepath.Join(f.req.UserHome, ".OPENPLEXER")); os.IsNotExist(err) {
+					t.Skip("case-sensitive filesystem")
+				} else if err != nil {
+					t.Fatal(err)
+				}
+				f.req.Home = filepath.Join(registryDir, "PROJECTS.JSON")
+			default:
+				registered, home := t.TempDir(), t.TempDir()
+				if err := projects.Register(f.req.UserHome, registered, home, nil); err != nil {
+					t.Fatal(err)
+				}
+				settings := filepath.Join(registered, ".codex")
+				f.req.Home = settings
+				switch name {
+				case "checkout-control-file":
+					f.req.Home = filepath.Join(settings, "config.toml")
+				case "checkout-control-referent":
+					if err := os.Mkdir(settings, 0o700); err != nil {
+						t.Fatal(err)
+					}
+					f.req.Home = filepath.Join(registered, "destination")
+					if err := os.Symlink(f.req.Home, filepath.Join(settings, "hooks.json")); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			f.before = func(*http.Request) { t.Fatal("join contacted the hub for a home overlapping a control path") }
+			if _, err := f.join(nil); err == nil {
+				t.Fatal("join accepted a home overlapping a control path")
+			}
+		})
+	}
+}
+
+func TestJoinResolvesSymlinkBeforeDotDotInNewHome(t *testing.T) {
+	f := newJoinFixture(t)
+	f.invite("new-member", false)
+	parent, err := projects.CanonicalPath(f.req.UserHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	real := filepath.Join(parent, "real")
+	sub := filepath.Join(real, "sub")
+	if err := os.MkdirAll(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(sub, filepath.Join(parent, "alias")); err != nil {
+		t.Fatal(err)
+	}
+	f.req.Home = parent + "/alias/../chosen/nested/"
+	want := filepath.Join(real, "chosen", "nested")
+	result, err := f.join(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Home != want {
+		t.Fatalf("join published the home at %q, want %q", result.Home, want)
+	}
+}
+
+func TestJoinPreservesAnUnrelatedStage(t *testing.T) {
+	f := newJoinFixture(t)
+	f.invite("new-member", false)
+	parent, err := projects.CanonicalPath(f.req.UserHome)
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := projects.CanonicalPath(f.req.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.req.Home = filepath.Join(parent, "selected")
+	stage := (projects.PendingJoin{Root: root, Home: f.req.Home}).Stage()
+	interrupted := errors.New("test interruption")
+	if _, err := f.join(func(step string) error {
+		if step == "configured" {
+			return interrupted
+		}
+		return nil
+	}); !errors.Is(err, interrupted) {
+		t.Fatal("join did not stop after configuring the stage")
+	}
+	if err := os.Rename(stage, filepath.Join(parent, "original-stage")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(stage, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sentinel := filepath.Join(stage, "keep")
+	if err := os.WriteFile(sentinel, []byte("unrelated directory"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Discard(f.req.UserHome, f.req.Root, ""); err == nil {
+		t.Error("discard accepted an unrelated staging directory")
+	}
+	if _, err := os.Stat(sentinel); err != nil {
+		t.Fatal("discard removed an unrelated staging directory")
+	}
+}

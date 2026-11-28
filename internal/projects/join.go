@@ -21,8 +21,31 @@ type PendingJoin struct {
 	Data jsontext.Value `json:"enrollment"`
 }
 
+const (
+	stagePrefix = ".openplexer-join-"
+	stageMarker = ".join-stage"
+)
+
 func (p PendingJoin) Stage() string {
-	return filepath.Join(filepath.Dir(p.Home), ".openplexer-join-"+pathDigest(p.Root))
+	return filepath.Join(filepath.Dir(p.Home), stagePrefix+pathDigest(p.Root))
+}
+
+func (p PendingJoin) stageIdentity() string {
+	return pathDigest(p.Root + "\x00" + p.Home + "\x00" + string(p.Data))
+}
+
+func (p PendingJoin) checkStage(matchesLegacy func(PendingJoin) bool) (legacy bool, err error) {
+	if err := privateDirectory(p.Stage()); err != nil {
+		return false, err
+	}
+	marker, err := ReadJoinFile(filepath.Join(p.Stage(), stageMarker))
+	if err == nil && string(marker) == p.stageIdentity() {
+		return false, nil
+	}
+	if errors.Is(err, fs.ErrNotExist) && matchesLegacy != nil && matchesLegacy(p) {
+		return true, nil
+	}
+	return false, errors.New("the staging directory does not belong to the pending join")
 }
 
 // JoinLock serializes enrollment and discard for one canonical checkout.
@@ -31,9 +54,10 @@ func (p PendingJoin) Stage() string {
 type JoinLock struct {
 	User, Root, dir string
 	rootInfo        fs.FileInfo
+	projectControls func(string) []string
 }
 
-func WithJoin(user, root string, apply func(JoinLock) error) error {
+func WithJoin(user, root string, projectControls func(string) []string, apply func(JoinLock) error) error {
 	root, rootInfo, err := Directory(root)
 	if err != nil {
 		return err
@@ -54,7 +78,7 @@ func WithJoin(user, root string, apply func(JoinLock) error) error {
 		return err
 	}
 	defer unlock()
-	join := JoinLock{User: user, Root: root, dir: joins, rootInfo: rootInfo}
+	join := JoinLock{User: user, Root: root, dir: joins, rootInfo: rootInfo, projectControls: projectControls}
 	if err := removeInterruptedWrite(join.pendingPath()); err != nil {
 		return err
 	}
@@ -100,8 +124,18 @@ func (j JoinLock) HomePath(home string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if overlaps(planned, j.dir) {
+	if overlapsControl(planned, j.dir) {
 		return "", errors.New("the join home overlaps the private join directory")
+	}
+	if overlapsControl(planned, filepath.Join(filepath.Dir(j.dir), "projects.json")) {
+		return "", errors.New("the join home overlaps the project registry")
+	}
+	for name := range strings.SplitSeq(planned, string(filepath.Separator)) {
+		if hash, ok := strings.CutPrefix(strings.ToLower(name), stagePrefix); ok && len(hash) == sha256.Size*2 {
+			if _, err := hex.DecodeString(hash); err == nil {
+				return "", errors.New("the join home overlaps a staging directory")
+			}
+		}
 	}
 	return planned, nil
 }
@@ -117,14 +151,16 @@ func plannedPath(path string) (string, error) {
 	if canonical, _, err := Directory(path); err == nil || !errors.Is(err, fs.ErrNotExist) {
 		return canonical, err
 	}
+	path = strings.TrimRightFunc(path, func(r rune) bool { return r < 256 && os.IsPathSeparator(uint8(r)) })
 	if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
 		return "", errors.New("the home path contains an unresolved directory entry")
 	}
-	name := filepath.Base(path)
+	// Split preserves the filesystem meaning of a symlink followed by "..".
+	parent, name := filepath.Split(path)
 	if name == "." || name == ".." {
 		return "", errors.New("the home path cannot be resolved")
 	}
-	dir, err := plannedPath(filepath.Dir(path))
+	dir, err := plannedPath(parent)
 	if err != nil {
 		return "", err
 	}
@@ -247,11 +283,20 @@ func (j JoinLock) check(dir string, r Registry, home string) error {
 		return errors.New("the checkout directory changed during join")
 	}
 	planned, err := j.HomePath(home)
-	if err != nil || planned != home {
+	if err != nil {
+		return err
+	}
+	if planned != home {
 		return errors.New("the home path changed during join")
 	}
 	stage := (PendingJoin{Root: j.Root, Home: home}).Stage()
+	if j.overlapsProjectControls(j.Root, home, stage) {
+		return errors.New("the join home or stage overlaps checkout control files")
+	}
 	for _, c := range r.claims {
+		if c.Root != j.Root && j.overlapsProjectControls(c.Root, home, stage) {
+			return errors.New("the join home or stage overlaps registered checkout control files")
+		}
 		if c.Root == j.Root || c.info != nil && os.SameFile(j.rootInfo, c.info) {
 			if c.Home != home {
 				return errors.New("the checkout is already registered with another home")
@@ -261,6 +306,17 @@ func (j JoinLock) check(dir string, r Registry, home string) error {
 		}
 	}
 	return checkJoinReservations(dir, j.Root, j.rootInfo, home, true)
+}
+
+func (j JoinLock) overlapsProjectControls(root string, paths ...string) bool {
+	for _, control := range j.projectControls(root) {
+		for _, path := range paths {
+			if overlapsControl(path, control) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func checkJoinReservations(dir, root string, rootInfo fs.FileInfo, home string, joining bool) error {
@@ -287,8 +343,8 @@ func checkJoinReservations(dir, root string, rootInfo fs.FileInfo, home string, 
 			continue
 		}
 		if p.Root == root || sameDirectory(p.Root, rootInfo) ||
-			overlaps(p.Home, home) || overlaps(p.Stage(), home) ||
-			joining && (overlaps(p.Home, stage) || overlaps(p.Stage(), stage)) {
+			overlaps(p.Home, home) || overlapsControl(p.Stage(), home) ||
+			joining && (overlapsControl(p.Home, stage) || overlapsControl(p.Stage(), stage)) {
 			return errors.New("a pending join reserves this checkout or home; resume it or use openplexer join --discard-pending")
 		}
 	}
@@ -301,6 +357,11 @@ func overlaps(a, b string) bool {
 		return err == nil && path != ".." && !strings.HasPrefix(path, ".."+string(filepath.Separator))
 	}
 	return within(a, b) || within(b, a)
+}
+
+// Reserve control names across case variants, even before an entry exists.
+func overlapsControl(a, b string) bool {
+	return overlaps(strings.ToLower(a), strings.ToLower(b))
 }
 
 func (j JoinLock) Reserve(p PendingJoin) error {
@@ -323,7 +384,7 @@ func (j JoinLock) Reserve(p PendingJoin) error {
 
 // Stage opens the private staged home, creating it beside the final home
 // so that publication is a rename even for a custom destination.
-func (j JoinLock) Stage(p PendingJoin) (string, error) {
+func (j JoinLock) Stage(p PendingJoin, matchesLegacy func(PendingJoin) bool) (string, error) {
 	if !sameDirectory(j.Root, j.rootInfo) {
 		return "", errors.New("the checkout directory changed during join")
 	}
@@ -333,11 +394,31 @@ func (j JoinLock) Stage(p PendingJoin) (string, error) {
 	if parent, _, err := Directory(filepath.Dir(p.Home)); err != nil || parent != filepath.Dir(p.Home) {
 		return "", errors.New("the staged home's parent changed during join")
 	}
-	path := p.Stage()
-	if err := os.Mkdir(path, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+	stage := p.Stage()
+	switch legacy, err := p.checkStage(matchesLegacy); {
+	case err == nil:
+		if legacy {
+			return stage, WriteJoinFile(filepath.Join(stage, stageMarker), []byte(p.stageIdentity()))
+		}
+		return stage, nil
+	case !errors.Is(err, fs.ErrNotExist):
 		return "", err
 	}
-	return path, privateDirectory(path)
+
+	// Publish the marker and directory together so an interrupted creation
+	// never leaves an unmarked stage at its reserved pathname.
+	tmp, err := os.MkdirTemp(filepath.Dir(stage), stagePrefix+"new-")
+	if err != nil {
+		return "", err
+	}
+	defer os.RemoveAll(tmp)
+	if err := WriteJoinFile(filepath.Join(tmp, stageMarker), []byte(p.stageIdentity())); err != nil {
+		return "", err
+	}
+	if _, err := os.Lstat(stage); !errors.Is(err, fs.ErrNotExist) {
+		return "", errors.New("another staging directory appeared during join")
+	}
+	return stage, os.Rename(tmp, stage)
 }
 
 func (j JoinLock) Publish(p PendingJoin, rename bool, afterRename func() error) error {
@@ -346,7 +427,7 @@ func (j JoinLock) Publish(p PendingJoin, rename bool, afterRename func() error) 
 			return err
 		}
 		if rename {
-			if err := privateDirectory(p.Stage()); err != nil {
+			if _, err := p.checkStage(nil); err != nil {
 				return err
 			}
 			if _, err := os.Lstat(p.Home); !errors.Is(err, fs.ErrNotExist) {
@@ -370,7 +451,7 @@ func (j JoinLock) Publish(p PendingJoin, rename bool, afterRename func() error) 
 
 // Release removes the reservation and stage. A matching renamed home still
 // needs its reservation if the registry does not yet point to it.
-func (j JoinLock) Release(p PendingJoin, matchesRenamed func() (bool, error)) error {
+func (j JoinLock) Release(p PendingJoin, matchesRenamed func() (bool, error), matchesLegacy func(PendingJoin) bool) error {
 	return withRegistryLock(j.User, func(_ string, _ fs.FileInfo, r Registry) error {
 		home, err := plannedPath(p.Home)
 		if err != nil || home != p.Home || !sameDirectory(j.Root, j.rootInfo) {
@@ -390,8 +471,17 @@ func (j JoinLock) Release(p PendingJoin, matchesRenamed func() (bool, error)) er
 		} else if !errors.Is(err, fs.ErrNotExist) {
 			return err
 		}
-		if err := privateDirectory(p.Stage()); err == nil {
-			if err := os.RemoveAll(p.Stage()); err != nil {
+		stage := p.Stage()
+		if _, err := p.checkStage(matchesLegacy); err == nil {
+			if overlapsControl(stage, p.Home) {
+				return errors.New("the staging directory overlaps the join home")
+			}
+			for _, c := range r.claims {
+				if overlapsControl(stage, c.Home) || j.overlapsProjectControls(c.Root, stage) {
+					return errors.New("the staging directory overlaps registered checkout files")
+				}
+			}
+			if err := os.RemoveAll(stage); err != nil {
 				return err
 			}
 		} else if !errors.Is(err, fs.ErrNotExist) {

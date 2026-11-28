@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/multiplexer-si/openplexer/internal/adapter"
+	"github.com/multiplexer-si/openplexer/internal/adapter/hook"
 	"github.com/multiplexer-si/openplexer/internal/daemon"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 	"github.com/multiplexer-si/openplexer/internal/projects"
@@ -70,7 +72,7 @@ func runJoin(ctx context.Context, req Request, checkpoint func(string) error) (R
 		req.Now = time.Now
 	}
 	var result Result
-	err := projects.WithJoin(req.UserHome, req.Root, func(j projects.JoinLock) error {
+	err := projects.WithJoin(req.UserHome, req.Root, projectControls, func(j projects.JoinLock) error {
 		p, home, err := joinHome(j, req.Home)
 		if err != nil {
 			return err
@@ -81,6 +83,16 @@ func runJoin(ctx context.Context, req Request, checkpoint func(string) error) (R
 		})
 	})
 	return result, err
+}
+
+func projectControls(root string) []string {
+	var paths []string
+	for _, agent := range adapter.Agents {
+		for _, name := range agent.GuardedFiles {
+			paths = append(paths, hook.ResolveGuardPaths(filepath.Join(root, agent.ConfigDir, name))...)
+		}
+	}
+	return paths
 }
 
 func joinHome(j projects.JoinLock, explicit string) (*projects.PendingJoin, string, error) {
@@ -200,7 +212,7 @@ func joinLocked(ctx context.Context, j projects.JoinLock, home string, p *projec
 		return Result{}, errors.New("the hub returned an invalid invite receipt")
 	}
 
-	stage, err := j.Stage(*p)
+	stage, err := j.Stage(*p, matchesLegacyStage)
 	if err != nil {
 		return Result{}, err
 	}
@@ -307,13 +319,19 @@ func releasePending(j projects.JoinLock, p projects.PendingJoin) error {
 		}
 		return saved.Root == p.Root && saved.Home == p.Home && saved.Origin == claim.Origin &&
 			saved.CodeHash == claim.CodeHash && saved.TokenHash == digest(claim.Bearer), nil
-	})
+	}, matchesLegacyStage)
+}
+
+func matchesLegacyStage(p projects.PendingJoin) bool {
+	var claim pending
+	return jsonv2.Unmarshal(p.Data, &claim, jsonv2.RejectUnknownMembers(true)) == nil && validCode(claim.Bearer) &&
+		daemon.MatchesPendingEnrollment(p.Stage(), claim.Origin, digest(claim.Bearer))
 }
 
 // Discard releases private pending state. It never contacts the hub.
 func Discard(user, root, explicitHome string) (bool, error) {
 	var discarded bool
-	err := projects.WithJoin(user, root, func(j projects.JoinLock) error {
+	err := projects.WithJoin(user, root, projectControls, func(j projects.JoinLock) error {
 		p, home, err := joinHome(j, explicitHome)
 		if err != nil || p == nil {
 			return err

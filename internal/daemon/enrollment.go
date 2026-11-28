@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	jsonv2 "encoding/json/v2"
 	"errors"
+	"path/filepath"
 	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/policy"
+	"github.com/multiplexer-si/openplexer/internal/projects"
 )
 
 // EnrollmentKeys checks the public policy pins before a join sends any secrets.
@@ -42,9 +45,22 @@ func checkFingerprint(body []byte, fingerprint string) ([]byte, error) {
 
 // MatchesEnrollment checks a saved receipt against the current private config.
 func (g *Gate) MatchesEnrollment(origin, project, member, tokenHash string) bool {
-	hash := sha256.Sum256([]byte(g.config.Token))
-	return g.config.HubURL == origin && g.config.ProjectID == project &&
-		g.config.MemberID == member && g.config.checkHub() == nil && hex.EncodeToString(hash[:]) == tokenHash
+	return g.config.ProjectID == project && g.config.MemberID == member && g.config.matchesEnrollment(origin, tokenHash)
+}
+
+// MatchesPendingEnrollment identifies a stage created before stage markers.
+func MatchesPendingEnrollment(home, origin, tokenHash string) bool {
+	data, err := projects.ReadJoinFile(filepath.Join(home, configFile))
+	if err != nil {
+		return false
+	}
+	var c config
+	return jsonv2.Unmarshal(data, &c, jsonv2.RejectUnknownMembers(true)) == nil && c.matchesEnrollment(origin, tokenHash)
+}
+
+func (c config) matchesEnrollment(origin, tokenHash string) bool {
+	hash := sha256.Sum256([]byte(c.Token))
+	return c.HubURL == origin && c.checkHub() == nil && hex.EncodeToString(hash[:]) == tokenHash
 }
 
 // EnrollmentGrants returns the assigned role grants and current temporary grants.
