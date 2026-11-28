@@ -148,7 +148,7 @@ func (g *Gate) load(ctx context.Context, source Source, stored storedPolicy, req
 	g.config = current
 	inForce, readErr := g.read()
 	if requireCachedPolicy {
-		if err := g.requireHubPolicy(readErr); err != nil {
+		if err := g.requireHubPolicy(readErr, true); err != nil {
 			return g.reject(err)
 		}
 	}
@@ -321,7 +321,7 @@ func (g *Gate) decideAt(ctx context.Context, agent string, status Status, now ti
 	verdict := Verdict{Policy: status, Query: first}
 	if verdict.Policy.MaxPolicyAge != 0 && verdict.Policy.State == Stale {
 		verdict.Query.Member, verdict.Query.Now, verdict.Query.Overrides = g.config.MemberID, policy.TimestampOf(now), nil
-		if first.Action == policy.Read || first.Action == policy.Write {
+		if g.bundle != nil && (first.Action == policy.Read || first.Action == policy.Write) {
 			verdict.Query.Repo = g.bundle.Repos[0]
 		}
 		verdict.decided = true

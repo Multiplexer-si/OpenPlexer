@@ -140,10 +140,11 @@ func (c command) hookPolicyError(err error) error {
 }
 
 func (c command) judge(ctx context.Context, agent string, decision daemon.HookDecision, deny func(policy.Query, policy.Result) hook.Verdict, queries []policy.Query) hook.Verdict {
-	if len(queries) == 0 && !decision.RefreshBlocked() {
+	status := decision.Status()
+	if status.Enforced() && !decision.RefreshBlocked() && len(queries) == 0 {
 		return hook.Verdict{}
 	}
-	verdict := daemon.Verdict{Policy: decision.Status()}
+	verdict := daemon.Verdict{Policy: status}
 	var err error
 	if len(queries) > 0 {
 		verdict, err = decision.DecideContext(ctx, agent, queries[0], queries[1:]...)

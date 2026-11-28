@@ -41,6 +41,17 @@ func (s Status) hubNeedsRefresh() bool {
 	return s.MaxPolicyAge != 0 && (s.State == Rejected || s.State == Stale)
 }
 
+func (g *Gate) hookStatusAt(now time.Time) Status {
+	status := g.statusAt(now).localStatusAt(now)
+	if status.MaxPolicyAge != 0 && status.State == Absent {
+		// A hook treats a missing initial confirmation as stale. The stored
+		// policy state remains absent for status and admission.
+		status.State = Stale
+		status.Detail += ", " + StalePolicyReason
+	}
+	return status
+}
+
 // HookDecision is the policy, configuration and refresh result for one home
 // in one hook call. The decision uses the opened state and its captured time.
 type HookDecision struct {
@@ -64,7 +75,7 @@ func OpenForHook(ctx context.Context, home string, now func() time.Time) (HookDe
 
 func (g *Gate) prepareHook(ctx context.Context) HookDecision {
 	at, started := g.now(), time.Now()
-	d := HookDecision{gate: *g, at: at, status: g.statusAt(at).localStatusAt(at)}
+	d := HookDecision{gate: *g, at: at, status: g.hookStatusAt(at)}
 	// Anchor fetch, reopen and audit timestamps to one wall-clock reading.
 	// Monotonic elapsed time lets a newly confirmed policy be used after
 	// waiting for a peer or doing our own fetch.
@@ -109,15 +120,19 @@ func (d *HookDecision) refresh(ctx context.Context) error {
 		return err
 	}
 	defer unlock()
-	if err := g.reopenHub(); err != nil {
+	// Once this call has seen a policy, losing it during refresh blocks
+	// admission. An empty home can fetch and admit its first bundle.
+	requireCachedPolicy := g.status.State != Absent
+	if err := g.reopenHub(requireCachedPolicy); err != nil {
 		return err
 	}
+	requireCachedPolicy = requireCachedPolicy || g.status.State != Absent
 	// An unchanged confirmation cannot become fresh while this call waits.
 	at := d.at
 	if !g.status.HubConfirmedAt.Equal(d.status.HubConfirmedAt) {
 		at = g.now()
 	}
-	d.status = g.statusAt(at)
+	d.status = g.hookStatusAt(at)
 	if d.status.freshHubPolicy() {
 		return nil
 	}
@@ -129,13 +144,13 @@ func (d *HookDecision) refresh(ctx context.Context) error {
 	if ctx.Err() != nil || !failedAt.IsZero() && !now.Before(failedAt) && now.Sub(failedAt) < automaticBackoff {
 		return nil
 	}
-	syncErr := g.sync(ctx, true)
-	reopenErr := g.reopenHub()
+	syncErr := g.sync(ctx, requireCachedPolicy)
+	reopenErr := g.reopenHub(requireCachedPolicy || syncErr == nil)
 	if reopenErr == nil {
 		if syncErr == nil || !g.status.HubConfirmedAt.Equal(d.status.HubConfirmedAt) {
 			at = g.now()
 		}
-		d.status = g.statusAt(at)
+		d.status = g.hookStatusAt(at)
 	}
 	if syncErr != nil || reopenErr != nil || !d.status.freshHubPolicy() {
 		_ = writeJSON(g.home, automaticFailFile, map[string]time.Time{"failed_at": g.now().UTC()})
@@ -151,24 +166,24 @@ func (d *HookDecision) refresh(ctx context.Context) error {
 	return nil
 }
 
-func (g *Gate) reopenHub() error {
+func (g *Gate) reopenHub(requireCachedPolicy bool) error {
 	cfg, err := readConfig(g.home)
 	if err != nil {
 		return err
 	}
 	g.config = cfg
 	_, readErr := g.readPolicy()
-	return g.requireHubPolicy(readErr)
+	return g.requireHubPolicy(readErr, requireCachedPolicy)
 }
 
-func (g *Gate) requireHubPolicy(readErr error) error {
+func (g *Gate) requireHubPolicy(readErr error, requireCachedPolicy bool) error {
 	if !g.config.hasHubSettings() {
 		return errors.New("config.json no longer contains hub settings")
 	}
 	if readErr != nil {
 		return readErr
 	}
-	if g.status.State == Absent {
+	if requireCachedPolicy && g.status.State == Absent {
 		return errors.New("policy.json is missing")
 	}
 	return nil

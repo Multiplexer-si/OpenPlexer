@@ -188,6 +188,98 @@ func ageWrite(project string) string {
 	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":%q,"session_id":"s1","tool_input":{"file_path":"src/app.ts"}}`, project)
 }
 
+func TestHookRequiresPolicyForZeroQueryShell(t *testing.T) {
+	for _, agent := range []string{"claude-code", "codex"} {
+		for _, portable := range []bool{false, true} {
+			for _, mode := range []string{"local", "hub-offline", "hub-online"} {
+				t.Run(fmt.Sprintf("%s/portable=%t/%s", agent, portable, mode), func(t *testing.T) {
+					c := newCLI(t)
+					c.bin = ""
+					userHome := t.TempDir()
+					t.Setenv("HOME", userHome)
+					project := filepath.Join(userHome, "project")
+					if err := os.MkdirAll(filepath.Join(project, ".git"), 0o700); err != nil {
+						t.Fatal(err)
+					}
+					home := os.Getenv("OPENPLEXER_HOME")
+					fetches := 0
+					var message string
+					if mode == "local" {
+						keys, signed := signedPolicy(t, testBundle)
+						message = signed
+						c.must(exitOK, "configure", "--keys", keys, "--member", "mem-dev")
+					} else {
+						fixture := newAgeHub(t, home, "https://age.invalid")
+						fixture.publish(1, true)
+						testAgeTransport(t, func(r *http.Request) (*http.Response, error) {
+							if strings.HasSuffix(r.URL.Path, "policy.bundle") {
+								fetches++
+								if mode == "hub-offline" {
+									w := httptest.NewRecorder()
+									w.WriteHeader(http.StatusServiceUnavailable)
+									return w.Result(), nil
+								}
+							}
+							return ageResponse(fixture.store.Handler(), r)
+						})
+					}
+					c.must(exitOK, "configure", "--project-root", project)
+					args := []string{"hook", agent, "pre-tool"}
+					if portable {
+						args = append(args, "--project-home")
+					}
+					if out := c.must(exitUnenforced, "policy", "status"); !strings.Contains(out, "policy: absent") {
+						t.Fatal("the test must start without a stored policy")
+					}
+					c.stdin = callJSON("Bash", project, map[string]string{"command": "tee"})
+					// The hook adds elapsed time to its captured clock. Advance
+					// past that window while staying within refresh backoff.
+					afterHook := c.now.Add(hookBudget)
+					switch mode {
+					case "local":
+						if out := c.must(exitOK, args...); !strings.Contains(out, `"permissionDecision":"deny"`) || !strings.Contains(out, "no policy loaded") {
+							t.Errorf("absent local policy returned %q, want a denial naming the absent policy", out)
+						}
+						c.must(exitOK, "policy", "load", message)
+					case "hub-offline":
+						if out := c.must(exitOK, args...); !strings.Contains(out, `"permissionDecision":"deny"`) || !strings.Contains(out, daemon.StalePolicyReason) {
+							t.Errorf("absent hub policy returned %q, want a freshness denial", out)
+						}
+						audit, err := os.ReadFile(filepath.Join(home, "audit.jsonl"))
+						if err != nil || !bytes.Contains(audit, []byte(`"action":"policy.denied"`)) || !bytes.Contains(audit, []byte(daemon.StalePolicyReason)) {
+							t.Errorf("absent hub policy must audit the freshness denial, read error %v", err)
+						}
+						c.now = afterHook
+						c.stdin = writeCall(agent, project, "src/app.ts")
+						if out := c.must(exitOK, args...); !strings.Contains(out, `"permissionDecision":"deny"`) || !strings.Contains(out, daemon.StalePolicyReason) {
+							t.Errorf("write during initial refresh backoff returned %q, want a freshness denial", out)
+						}
+						if fetches != 1 {
+							t.Errorf("absent hub policy fetched %d bundles, want one attempt", fetches)
+						}
+						return
+					case "hub-online":
+						if out := c.must(exitOK, args...); out != "" {
+							t.Errorf("shell after initial sync returned %q, want an empty allow", out)
+						}
+						if fetches != 1 {
+							t.Errorf("absent hub policy fetched %d bundles, want one attempt", fetches)
+						}
+						c.now = afterHook
+						c.must(exitOK, "policy", "status")
+					}
+					if out := c.must(exitOK, args...); out != "" {
+						t.Errorf("shell with verified policy returned %q, want an empty allow", out)
+					}
+					if mode == "hub-online" && fetches != 1 {
+						t.Errorf("fresh hub policy fetched again, total attempts %d", fetches)
+					}
+				})
+			}
+		}
+	}
+}
+
 func TestHookBlocksOnRefreshReopenError(t *testing.T) {
 	for _, agent := range []string{"claude-code", "codex"} {
 		for _, portable := range []bool{false, true} {
