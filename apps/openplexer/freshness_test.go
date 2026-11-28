@@ -359,6 +359,7 @@ type hookRefreshCase struct {
 	unreadable         bool
 	duringFetch        bool
 	rejected           bool
+	blockBackoffWrite  bool
 	fetches            int
 }
 
@@ -366,6 +367,7 @@ func TestHookBindsRequiredRefresh(t *testing.T) {
 	for _, scenario := range []hookRefreshCase{
 		{name: "failed-fetch", reason: daemon.StalePolicyReason, fetches: 1},
 		{name: "rejected-bundle", reason: daemon.StalePolicyReason, rejected: true, fetches: 1},
+		{name: "backoff-write-error", reason: "policy-refresh-failure.json", blockBackoffWrite: true, fetches: 1},
 		{name: "missing-config", file: "config.json", reason: "config.json"},
 		{name: "missing-policy", file: "policy.json", reason: "policy.json"},
 		{name: "unreadable-config", file: "config.json", reason: "config.json", unreadable: true},
@@ -415,6 +417,11 @@ func testHookRequiredRefresh(t *testing.T, agent string, portable bool, tool str
 			if scenario.duringFetch {
 				removeFile()
 				return ageResponse(fixture.store.Handler(), r)
+			}
+			if scenario.blockBackoffWrite {
+				if err := os.Mkdir(filepath.Join(home, "policy-refresh-failure.json"), 0o700); err != nil {
+					t.Fatal(err)
+				}
 			}
 			w := httptest.NewRecorder()
 			if scenario.rejected {

@@ -170,7 +170,7 @@ The gate measures hub policy age on the local wall clock. A successful authentic
 
 A missing or future confirmation is stale. A policy becomes stale as soon as its age reaches the limit. Moving the clock back within the confirmation window reduces the measured age. After an upgrade, sync once to confirm a policy cached by an older build.
 
-A covered hook call makes one automatic sync attempt per home with stale or rejected hub policy. The attempts share two seconds. A failed attempt pauses automatic attempts for that home for five seconds. If the policy stays stale or rejected, the hook denies the covered action. `policy check` also denies an action under a stale hub policy. Run `openplexer policy sync` to retry immediately. Use `policy status` to inspect local state without contacting the hub.
+A covered hook call makes one automatic sync attempt per home with stale or rejected hub policy. The hook treats an absent hub policy as stale. The attempts share two seconds. A recorded failure pauses automatic attempts for that home for five seconds. If the hook cannot record the failure, it blocks the call and reports the write error. If the policy stays stale or rejected, the hook denies the covered action. `policy check` also denies an action under a stale hub policy. Run `openplexer policy sync` to retry immediately. Use `policy status` to inspect local state without contacting the hub.
 
 For a local-only home, `stale_after_days` is an advisory after a successful file load. It defaults to 14 days. The policy keeps deciding actions. The local confirmation times are recorded by this machine.
 

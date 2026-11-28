@@ -152,18 +152,19 @@ func (d *HookDecision) refresh(ctx context.Context) error {
 		}
 		d.status = g.hookStatusAt(at)
 	}
+	var backoffErr error
 	if syncErr != nil || reopenErr != nil || !d.status.freshHubPolicy() {
-		_ = writeJSON(g.home, automaticFailFile, map[string]time.Time{"failed_at": g.now().UTC()})
+		backoffErr = writeJSON(g.home, automaticFailFile, map[string]time.Time{"failed_at": g.now().UTC()})
 	}
 	if reopenErr != nil {
-		return reopenErr
+		return errors.Join(reopenErr, backoffErr)
 	}
 	if d.status.freshHubPolicy() {
 		// A sync can fail after publishing a fresh policy. Its error still
 		// blocks this call. Stale and rejected states have their own denials.
-		return syncErr
+		return errors.Join(syncErr, backoffErr)
 	}
-	return nil
+	return backoffErr
 }
 
 func (g *Gate) reopenHub(requireCachedPolicy bool) error {
