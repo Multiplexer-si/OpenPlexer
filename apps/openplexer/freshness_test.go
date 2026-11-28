@@ -187,6 +187,80 @@ func ageWrite(project string) string {
 	return fmt.Sprintf(`{"hook_event_name":"PreToolUse","tool_name":"Write","cwd":%q,"session_id":"s1","tool_input":{"file_path":"src/app.ts"}}`, project)
 }
 
+func TestHookBlocksOnRefreshReopenError(t *testing.T) {
+	for _, agent := range []string{"claude-code", "codex"} {
+		for _, portable := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/portable=%t", agent, portable), func(t *testing.T) {
+				c := newCLI(t)
+				c.bin = ""
+				userHome := t.TempDir()
+				t.Setenv("HOME", userHome)
+				t.Setenv("CLAUDE_CONFIG_DIR", "")
+				t.Setenv("CODEX_HOME", "")
+				home, project := os.Getenv("OPENPLEXER_HOME"), filepath.Join(userHome, "project")
+				if err := os.MkdirAll(filepath.Join(project, ".git"), 0o700); err != nil {
+					t.Fatal(err)
+				}
+				fixture := newAgeHub(t, home, "https://age.invalid")
+				fixture.publish(1, true)
+				testAgeTransport(t, func(r *http.Request) (*http.Response, error) {
+					return ageResponse(fixture.store.Handler(), r)
+				})
+				args := []string{"hook", agent, "pre-tool"}
+				if portable {
+					c.must(exitOK, "configure", "--project-root", project)
+					args = append(args, "--project-home")
+				}
+				c.must(exitOK, "policy", "sync")
+				shell := callJSON("Bash", project, map[string]string{"command": "tee"})
+				write := ageWrite(project)
+				if agent == "codex" {
+					write = callJSON("apply_patch", project, map[string]string{"command": "*** Begin Patch\n*** Add File: src/app.ts\n+new\n*** End Patch\n"})
+				}
+				for _, call := range []struct{ name, input string }{{"shell", shell}, {"write", write}} {
+					t.Run(call.name, func(t *testing.T) {
+						c := c
+						c.t, c.stdin = t, call.input
+						if out := c.must(exitOK, args...); out != "" {
+							t.Fatalf("fresh call returned %q, want allow", out)
+						}
+						path := filepath.Join(home, "config.json")
+						var stdout, stderr strings.Builder
+						injected := false
+						code := run(args, strings.NewReader(call.input), &stdout, &stderr, func() time.Time {
+							// Open has read the config when it first asks for the clock.
+							// Make the next read fail under the refresh lock.
+							if !injected {
+								if err := os.Rename(path, path+".saved"); err != nil {
+									t.Fatal(err)
+								}
+								if err := os.Mkdir(path, 0o700); err != nil {
+									t.Fatal(err)
+								}
+								t.Cleanup(func() {
+									if err := os.Remove(path); err != nil {
+										t.Error(err)
+									}
+									if err := os.Rename(path+".saved", path); err != nil {
+										t.Error(err)
+									}
+								})
+								injected = true
+							}
+							return c.now.Add(5 * time.Minute)
+						})
+						out := stdout.String()
+						if !injected || code != exitOK || !strings.Contains(out, `"permissionDecision":"deny"`) ||
+							!strings.Contains(out, "cannot read its configuration") || !strings.Contains(out, "config.json") {
+							t.Errorf("reopen error: exit %d, stdout %q, stderr %q, want a denial identifying config.json", code, out, stderr.String())
+						}
+					})
+				}
+			})
+		}
+	}
+}
+
 func TestRejectedHubHookRefreshesAndDenies(t *testing.T) {
 	for _, binding := range []string{"project", "pin"} {
 		for _, portable := range []bool{false, true} {

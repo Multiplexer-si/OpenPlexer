@@ -39,7 +39,8 @@ type Env struct {
 	ExecGated bool
 	// Prepare opens the policy after guards pass and before shell queries use
 	// the policy's exec grants. Stale or rejected hub policy gates a matched shell.
-	Prepare func() (execGated, hubNeedsRefresh bool)
+	// An error denies the call before it can reach the judge.
+	Prepare func() (execGated, hubNeedsRefresh bool, err error)
 }
 
 // ExecGated reports whether the role of member in bundle lists commands.
@@ -286,8 +287,12 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 	}
 	var needsRefresh bool
 	if env.Prepare != nil && (call.Tool == "Bash" || slices.ContainsFunc(targets, func(t target) bool { return t.judged })) {
-		env.ExecGated, needsRefresh = env.Prepare()
-		env.ExecGated = env.ExecGated || needsRefresh
+		execGated, refresh, err := env.Prepare()
+		if err != nil {
+			return Verdict{Deny, err.Error()}
+		}
+		needsRefresh = refresh
+		env.ExecGated = execGated || needsRefresh
 		if needsRefresh && call.Tool == "Bash" && len(effect.Commands) == 0 {
 			command, _ := call.Text("command")
 			effect.Commands = []string{command}

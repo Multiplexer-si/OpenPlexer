@@ -77,22 +77,22 @@ func (c command) hook(agent hook.Agent, event string, portable bool) int {
 		}))
 	}
 	var gate *daemon.Gate
-	var openErr error
 	env := hook.Env{
 		Root:   c.projectRoot(agent.Name, userHome),
 		Guards: c.guards(userHome),
 		Home:   userHome,
-		Prepare: func() (bool, bool) {
-			gate, openErr = c.openForHook(refreshCtx)
-			if openErr != nil {
-				return true, false
+		Prepare: func() (bool, bool, error) {
+			var err error
+			gate, err = c.openForHook(refreshCtx)
+			if err != nil {
+				return false, false, c.hookPolicyError(err)
 			}
 			status := gate.Status()
-			return !status.Enforced() || gate.ExecGated(), status.HubNeedsRefresh()
+			return !status.Enforced() || gate.ExecGated(), status.HubNeedsRefresh(), nil
 		},
 	}
 	return c.emit(agent.Handle(input, env, func(first policy.Query, rest ...policy.Query) hook.Verdict {
-		return c.judge(decisionCtx, agent.Name, gate, openErr, hook.Denied)(first, rest...)
+		return c.judge(decisionCtx, agent.Name, gate, hook.Denied)(first, rest...)
 	}))
 }
 
@@ -136,11 +136,12 @@ func agentGuards(userHome string) []hook.Guard {
 	return guards
 }
 
-func (c command) judge(ctx context.Context, agent string, gate *daemon.Gate, openErr error, deny func(policy.Query, policy.Result) hook.Verdict) hook.Judge {
+func (c command) hookPolicyError(err error) error {
+	return fmt.Errorf("OpenPlexer blocked this call because it cannot read its configuration or refresh its policy in %s. %w. Run `openplexer policy status` to inspect the home.", c.home, err)
+}
+
+func (c command) judge(ctx context.Context, agent string, gate *daemon.Gate, deny func(policy.Query, policy.Result) hook.Verdict) hook.Judge {
 	return func(first policy.Query, rest ...policy.Query) hook.Verdict {
-		if openErr != nil {
-			return blocked("OpenPlexer cannot read its configuration in %s, so it blocks this call: %v. Run `openplexer policy status` to see the problem.", c.home, openErr)
-		}
 		verdict, err := gate.DecideContext(ctx, agent, first, rest...)
 		result, decided := verdict.Result()
 		switch {

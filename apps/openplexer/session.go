@@ -28,7 +28,10 @@ func (c command) openForHook(ctx context.Context) (*daemon.Gate, error) {
 	if err != nil {
 		return nil, err
 	}
-	return gate, gate.RefreshForHook(ctx)
+	if err := gate.RefreshForHook(ctx); err != nil {
+		return nil, err
+	}
+	return gate, nil
 }
 
 func (c command) sessionStart(portable bool, userHome string, input []byte, ctx context.Context) int {
