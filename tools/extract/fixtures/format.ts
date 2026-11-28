@@ -147,6 +147,12 @@ const OPERATIONS: Record<string, Operation> = {
     expected: { $ref: schemaId("audit", "verify-result") },
     informational: strict({ hash_inputs: { type: "array", items: { type: "string" } } }),
   },
+  "fingerprint-jwks": {
+    contract: ["policy"],
+    description: "Validate and fingerprint the policy key set in input.jwks.",
+    input: strict({ jwks: { type: "string" } }),
+    expected: strict({ fingerprint: { oneOf: [hex64, { type: "null" }] } }),
+  },
   "verify-checkpoints": {
     contract: ["audit"],
     description: "Verify the export in `input.export` using `input.checkpoints` and the checkpoint key set in `shared.jwks`. A case can override that key set with the JSON text in `input.jwks_json`. The export and JWKS text can be malformed on purpose.",
@@ -246,7 +252,7 @@ export function fixtureFileSchema(): Json {
     allOf: [
       ...Object.entries(OPERATIONS).map(([name, op]) => rule(name, op)),
       {
-        if: { properties: { operation: { enum: ["verify-checkpoints", "validate-denial-time"] } } },
+        if: { properties: { operation: { enum: ["verify-checkpoints", "validate-denial-time", "fingerprint-jwks"] } } },
         then: { properties: { reference: false } },
         else: { required: ["reference"] },
       },

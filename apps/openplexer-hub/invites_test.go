@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/multiplexer-si/openplexer/internal/enrollment"
 	"github.com/multiplexer-si/openplexer/internal/hub"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
@@ -68,6 +69,10 @@ func TestInviteLocalAndRemoteParity(t *testing.T) {
 				flags = append(flags, "--origin", origin)
 			}
 			link, details := run([]string{"invite", "create"}, flags...)
+			parsed, err := enrollment.ParseLink(strings.TrimSuffix(link, "\n"))
+			if err != nil || parsed.Origin != origin || parsed.Fingerprint != fp {
+				t.Fatal("join could not parse the lead's pinned link")
+			}
 			u, err := url.Parse(strings.TrimSpace(link))
 			if err != nil || u.Scheme+"://"+u.Host != origin || u.Fragment != "fp="+fp ||
 				!strings.HasPrefix(u.Path, "/join/") || strings.Count(link, "\n") != 1 {

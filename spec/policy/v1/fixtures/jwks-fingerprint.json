@@ -1,0 +1,168 @@
+{
+  "cases": [
+    {
+      "expected": {
+        "fingerprint": "cd191e54acb73b80da31a8917f2573cd151e70feff39b94459eca38561e6618f"
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"～\", \"x\": \"fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg\", \"y\": \"B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E\"}, {\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}]}"
+      },
+      "name": "ordered",
+      "why": "Hash the normalized set in UTF-8 key ID order."
+    },
+    {
+      "expected": {
+        "fingerprint": "cd191e54acb73b80da31a8917f2573cd151e70feff39b94459eca38561e6618f"
+      },
+      "input": {
+        "jwks": "{\n  \"keys\": [\n    {\n      \"kty\": \"EC\",\n      \"crv\": \"P-256\",\n      \"kid\": \"😀\",\n      \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\",\n      \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\",\n      \"alg\": \"ES256\",\n      \"use\": \"sig\",\n      \"key_ops\": [\n        \"verify\"\n      ]\n    },\n    {\n      \"kty\": \"EC\",\n      \"crv\": \"P-256\",\n      \"kid\": \"～\",\n      \"x\": \"fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg\",\n      \"y\": \"B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E\"\n    }\n  ]\n}"
+      },
+      "name": "reordered and pretty",
+      "why": "Order, whitespace, and optional verification metadata do not change the pin."
+    },
+    {
+      "expected": {
+        "fingerprint": "46eafb1b0a4507a095c1acb4c1918578f472cdd8cc73645de72c39ba6aa5fc44"
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg\", \"y\": \"B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E\"}, {\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"～\", \"x\": \"fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg\", \"y\": \"B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E\"}]}"
+      },
+      "name": "changed key",
+      "why": "A different public point changes the pin."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}, {\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"～\", \"x\": \"fPJ7GI0DT36KUjgDBLUaw8CJaeJ38hs1pgtI_EdmmXg\", \"y\": \"B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E\", \"d\": \"private\"}]}"
+      },
+      "name": "private material",
+      "why": "A public key set cannot carry private material."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}]}"
+      },
+      "name": "repeated object name",
+      "why": "JSON member names must be unique."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}, {\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}]}"
+      },
+      "name": "duplicate kid",
+      "why": "Signing key IDs must be unique."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"B3dVENuO0EApPZrGn3Qw27p9reY86YIpngS3nSJ4c9E\"}]}"
+      },
+      "name": "bad point",
+      "why": "Both coordinates must belong to the same P-256 point."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\", \"unexpected\": true}]}"
+      },
+      "name": "unrecognized key field",
+      "why": "The JWK must use the allowed fields."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"other\": [], \"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}]}"
+      },
+      "name": "unrecognized set field",
+      "why": "The set accepts only the keys member."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"Keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}]}"
+      },
+      "name": "case sensitive",
+      "why": "Field names use their exact spelling."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": []}"
+      },
+      "name": "empty",
+      "why": "At least one key is required."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\", \"key_ops\": [\"verify\", \"sign\"]}]}"
+      },
+      "name": "invalid operation",
+      "why": "The only allowed operation is verify."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\", \"use\": \"enc\"}]}"
+      },
+      "name": "invalid use",
+      "why": "The optional use must be sig."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\", \"alg\": \"ES384\"}]}"
+      },
+      "name": "invalid algorithm",
+      "why": "The optional algorithm must be ES256."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY=\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}]}"
+      },
+      "name": "noncanonical coordinate",
+      "why": "Coordinates use unpadded base64url."
+    },
+    {
+      "expected": {
+        "fingerprint": null
+      },
+      "input": {
+        "jwks": "{\"keys\": [{\"kty\": \"EC\", \"crv\": \"P-256\", \"kid\": \"😀\", \"x\": \"axfR8uEsQkf4vOblY6RA8ncDfYEt6zOg9KE5RdiYwpY\\n\", \"y\": \"T-NC4v4af5uO5-tKfA-eFivOM1drMV7Oy7ZAaDe_UfU\"}]}"
+      },
+      "name": "coordinate whitespace",
+      "why": "Coordinates cannot contain embedded line breaks."
+    }
+  ],
+  "contract": "policy",
+  "description": "Policy JWKS text and its invite fingerprint. A null fingerprint means the key set must be rejected.",
+  "operation": "fingerprint-jwks",
+  "version": 1
+}

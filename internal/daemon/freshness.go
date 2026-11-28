@@ -8,6 +8,8 @@ import (
 	"github.com/multiplexer-si/openplexer/internal/policy"
 )
 
+const DefaultMaxPolicyAgeSeconds = 300
+
 const (
 	RefreshBudget     = 2 * time.Second
 	automaticBackoff  = 5 * time.Second
@@ -23,7 +25,7 @@ func (c config) maxPolicyAge() time.Duration {
 		return 0
 	}
 	if c.MaxPolicyAgeSeconds == 0 {
-		return 5 * time.Minute
+		return DefaultMaxPolicyAgeSeconds * time.Second
 	}
 	return time.Duration(c.MaxPolicyAgeSeconds) * time.Second
 }
@@ -144,7 +146,7 @@ func (d *HookDecision) refresh(ctx context.Context) error {
 	if ctx.Err() != nil || !failedAt.IsZero() && !now.Before(failedAt) && now.Sub(failedAt) < automaticBackoff {
 		return nil
 	}
-	syncErr := g.sync(ctx, requireCachedPolicy)
+	syncErr := g.sync(ctx, requireCachedPolicy, "", "")
 	reopenErr := g.reopenHub(requireCachedPolicy || syncErr == nil)
 	if reopenErr == nil {
 		if syncErr == nil || !g.status.HubConfirmedAt.Equal(d.status.HubConfirmedAt) {

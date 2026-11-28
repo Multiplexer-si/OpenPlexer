@@ -844,6 +844,70 @@
       "if": {
         "properties": {
           "operation": {
+            "const": "fingerprint-jwks"
+          }
+        },
+        "required": [
+          "operation"
+        ]
+      },
+      "then": {
+        "description": "Validate and fingerprint the policy key set in input.jwks.",
+        "properties": {
+          "cases": {
+            "items": {
+              "properties": {
+                "expected": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "fingerprint": {
+                      "oneOf": [
+                        {
+                          "pattern": "^[0-9a-f]{64}$",
+                          "type": "string"
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": [
+                    "fingerprint"
+                  ],
+                  "type": "object"
+                },
+                "informational": false,
+                "input": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "jwks": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "jwks"
+                  ],
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "contract": {
+            "enum": [
+              "policy"
+            ]
+          },
+          "schema": false,
+          "shared": false
+        },
+        "required": []
+      }
+    },
+    {
+      "if": {
+        "properties": {
+          "operation": {
             "const": "verify-checkpoints"
           }
         },
@@ -1308,7 +1372,8 @@
           "operation": {
             "enum": [
               "verify-checkpoints",
-              "validate-denial-time"
+              "validate-denial-time",
+              "fingerprint-jwks"
             ]
           }
         }
@@ -1356,6 +1421,7 @@
         "close-code",
         "canonicalize",
         "verify-chain",
+        "fingerprint-jwks",
         "verify-checkpoints",
         "bash-targets",
         "exec-segments",

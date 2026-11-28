@@ -81,6 +81,8 @@ func TestFixtures(t *testing.T) {
 					t.Fatalf("shared bundle: %v", err)
 				}
 				run = func(t *testing.T, c fixtureCase) { runEvaluate(t, bundle, c) }
+			case "fingerprint-jwks":
+				run = runFingerprint
 			case "verify-signed-bundle":
 				keys, err := ParseKeySet(file.Shared.JWKS)
 				if err != nil {

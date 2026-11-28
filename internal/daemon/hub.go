@@ -131,12 +131,18 @@ func readResponse(response *http.Response, limit int64) ([]byte, error) {
 // Gate.Load also verifies it with the locally pinned keys before storing it.
 type hubSource struct {
 	hubClient
-	verifier policy.BundleVerifier
+	verifier          policy.BundleVerifier
+	fingerprint, repo string
 }
 
 func (h hubSource) Fetch(ctx context.Context) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
+	if h.fingerprint != "" {
+		if _, err := h.enrollmentKeys(ctx, h.fingerprint); err != nil {
+			return "", err
+		}
+	}
 	response, err := h.request(ctx, http.MethodGet, "/api/v1/projects/"+h.project+"/policy.bundle", nil, "", "")
 	if err != nil {
 		return "", err
@@ -157,20 +163,26 @@ func (h hubSource) Fetch(ctx context.Context) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("bundle does not verify with the advertised key set: %w", err)
 	}
-	response, err = h.request(ctx, http.MethodGet, "/.well-known/jwks.json", nil, "", "")
+	body, err = h.policyKeys(ctx)
 	if err != nil {
 		return "", err
 	}
-	body, err = readResponse(response, 64<<10)
-	if err != nil {
-		return "", err
+	if h.fingerprint != "" {
+		body, err = checkFingerprint(body, h.fingerprint)
+		if err != nil {
+			return "", err
+		}
 	}
 	keys, err := policy.ParseKeySet(body)
 	if err != nil {
 		return "", err
 	}
-	if _, err := h.verifier.Verify(signed, keys); err != nil {
+	verified, err := h.verifier.Verify(signed, keys)
+	if err != nil {
 		return "", fmt.Errorf("bundle does not verify with the advertised key set: %w", err)
+	}
+	if h.repo != "" && (len(verified.Bundle.Repos) != 1 || verified.Bundle.Repos[0] != h.repo) {
+		return "", errors.New("the signed policy names a different repository from the invite receipt")
 	}
 	return token, nil
 }
@@ -198,11 +210,18 @@ func (c config) hubSnapshot(home string) (hubClient, string, error) {
 
 // Sync fetches and admits the latest policy from the configured hub.
 func (g *Gate) Sync(ctx context.Context) (Status, error) {
-	err := g.sync(ctx, false)
+	err := g.sync(ctx, false, "", "")
 	return g.Status(), err
 }
 
-func (g *Gate) sync(ctx context.Context, requireCachedPolicy bool) error {
+// SyncEnrollment uses normal hub sync and checks the advertised key set and
+// receipt repository before writing the bundle or version floor.
+func (g *Gate) SyncEnrollment(ctx context.Context, fingerprint, repo string) (Status, error) {
+	err := g.sync(ctx, false, fingerprint, repo)
+	return g.Status(), err
+}
+
+func (g *Gate) sync(ctx context.Context, requireCachedPolicy bool, fingerprint, repo string) error {
 	unlock, err := lockHomeFile(ctx, g.home, lockFile)
 	if err != nil {
 		return err
@@ -221,5 +240,17 @@ func (g *Gate) sync(ctx context.Context, requireCachedPolicy bool) error {
 		return err
 	}
 	confirmation := storedPolicy{HubConfirmedAt: g.now().UTC(), HubBinding: binding}
-	return g.load(ctx, hubSource{hubClient: client, verifier: g.verifier}, confirmation, requireCachedPolicy)
+	source := hubSource{
+		hubClient: client, verifier: g.verifier,
+		fingerprint: fingerprint, repo: repo,
+	}
+	return g.load(ctx, source, confirmation, requireCachedPolicy)
+}
+
+func (h hubClient) policyKeys(ctx context.Context) ([]byte, error) {
+	response, err := h.request(ctx, http.MethodGet, "/.well-known/jwks.json", nil, "", "")
+	if err != nil {
+		return nil, err
+	}
+	return readResponse(response, policy.MaxKeySetBytes)
 }
