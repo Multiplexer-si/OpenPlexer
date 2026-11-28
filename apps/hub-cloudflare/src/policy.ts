@@ -1,4 +1,3 @@
-import schema from "../../../spec/policy/v1/bundle.schema.json";
 import { hasDuplicateMembers, hasTrailingText, isJsonObject, LoneSurrogateError, parseJSON } from "./canonical.ts";
 import type { JsonObject, JsonValue } from "./canonical.ts";
 import { JWSError, verifyJWS } from "./jws.ts";
@@ -40,11 +39,6 @@ export function parsePolicyBundle(input: string | Uint8Array, { strict = false }
 
   const issues: string[] = [];
   const fail = (path: string, reason: string) => issues.push(path + " " + reason);
-  function knownFields(value: JsonObject, properties: object, path: string) {
-    if (strict && Object.keys(value).some((name) => !Object.hasOwn(properties, name))) {
-      fail(path, "has an unknown field");
-    }
-  }
   type Read<T> = (path: string, value: JsonValue) => T;
   function field<T>(object: JsonObject, path: string, name: string, read: Read<T>, required = true): T | undefined {
     const fieldPath = path ? path + "." + name : name;
@@ -88,7 +82,7 @@ export function parsePolicyBundle(input: string | Uint8Array, { strict = false }
     if (value !== first && value !== second) fail(path, `must be one of "${first}", "${second}"`);
   }
 
-  knownFields(document, schema.properties, "bundle");
+  // The v1 schema allows extension fields on bundles, areas, and roles.
   const strings = list(string);
   const version = field(document, "", "version", (path, value) => {
     if (typeof value === "number" && Number.isSafeInteger(value)) return value;
@@ -100,7 +94,6 @@ export function parsePolicyBundle(input: string | Uint8Array, { strict = false }
   field(document, "", "areas", list((path, value) => {
     const area = object(path, value);
     if (!area) return;
-    knownFields(area, schema.properties.areas.items.properties, path);
     field(area, path, "name", string);
     field(area, path, "patterns", strings);
     for (const name of ["private", "system", "generated"]) field(area, path, name, flag, false);
@@ -109,7 +102,6 @@ export function parsePolicyBundle(input: string | Uint8Array, { strict = false }
   field(document, "", "roles", dictionary((path, value) => {
     const role = object(path, value);
     if (!role) return;
-    knownFields(role, schema.properties.roles.additionalProperties.properties, path);
     for (const name of ["read", "write", "exec"]) field(role, path, name, strings);
     field(role, path, "push", strings, false);
   }));

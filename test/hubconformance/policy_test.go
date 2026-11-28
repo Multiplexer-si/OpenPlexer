@@ -185,7 +185,10 @@ func (f *fixture) projectsAndPolicy(t *testing.T) {
 		f.call(t, get, projectPath(*secondProject)+"/policy.bundle", f.member, "", http.StatusNotFound)
 	})
 	t.Run("publish-and-version-floor", func(t *testing.T) {
-		text := bundleJSON(id, repo, 2, `,"label":"updated"`)
+		text := fmt.Sprintf(`{"project_id":%s,"repos":[%s],"version":2,"label":"updated",
+			"areas":[{"name":"app","patterns":[],"label":"App"}],
+			"roles":{"dev":{"read":[],"write":["app"],"exec":[],"label":"Developer"}},"members":{}}`,
+			jsonString(id), jsonString(repo))
 		published := verifyBundle(t, f.call(t, put, path+"/policy", f.lead, text, http.StatusOK), keys, id, repo, 2)
 		canonical, err := audit.Canonical([]byte(text))
 		if err != nil || !bytes.Equal(canonical, mustCanonical(t, published.Bundle)) {
@@ -210,6 +213,8 @@ func (f *fixture) projectsAndPolicy(t *testing.T) {
 		t.Run("invalid-bundle", func(t *testing.T) {
 			f.call(t, put, path+"/policy", f.lead, "{}", http.StatusBadRequest)
 			f.call(t, put, path+"/policy", f.lead, bundleJSON(f.missing, repo, 3, ""), http.StatusBadRequest)
+			f.call(t, put, path+"/policy", f.lead, bundleJSON(id, repo, 3, `,"temporary_grants":[{
+				"member_id":"member","area":"app","actions":["write"],"scope":"mission","mission_id":"demo","label":"invalid"}]`), http.StatusBadRequest)
 		})
 		current := verifyBundle(t, f.call(t, get, path+"/policy.bundle", f.member, "", http.StatusOK), keys, id, repo, 2)
 		if current.Signature != published.Signature {

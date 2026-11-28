@@ -4,6 +4,7 @@ import { env, exports } from "cloudflare:workers";
 import { beforeEach, expect, test, vi } from "vitest";
 import { verifyChain, verifyCheckpoint } from "../src/audit";
 import { tokenHash } from "../src/http";
+import { verifyPolicyBundle } from "../src/policy";
 import { newToken } from "../src/state";
 
 beforeEach(reset);
@@ -216,9 +217,6 @@ test("runs onboarding writes with the lead actor, then shows the laptop's policy
   const policy = { project_id: "demo", repos: ["team/demo"], version: 1,
     areas: [{ name: "app", patterns: ["src/**"] }], roles: { dev: { read: [], write: ["app"], exec: [] } }, members: {} };
   const policyPath = "/projects/demo/policy";
-  const draft = JSON.stringify({ ...policy, extra: true });
-  expect((await write(policyPath, "PUT", draft)).status).toBe(400);
-  expect((await write(policyPath + "/preview", "POST", draft)).status).toBe(400);
   const preview = await write(policyPath + "/preview", "POST", JSON.stringify(policy));
   expect(preview.status).toBe(200);
   expect(await preview.json()).toMatchObject({ version: 1, roles: [{ role: "dev", write: ["app"] }] });
@@ -254,6 +252,47 @@ test("runs onboarding writes with the lead actor, then shows the laptop's policy
   expect(data.entries.filter((entry) => ["project.added", "invite.created", "invite.approved", "invite.revoked", "policy.updated",
     "member.removed"].includes(String(entry.action))).every((entry) => entry.actor_member_id === "lee")).toBe(true);
   expect(JSON.stringify(data).includes(code)).toBe(false);
+});
+
+test("previews and signs the next version of a bearer-published policy with extensions", async () => {
+  const lead = await setup();
+  const { headers, write } = await signInAs(lead);
+  expect((await write("/projects", "POST", '{"id":"demo","repo":"demo"}')).status).toBe(200);
+  const path = "/projects/demo/policy";
+  const policy = {
+    project_id: "demo", repos: ["demo"], version: 1, note: { source: "team" },
+    areas: [{ name: "app", patterns: ["src/**"], label: "App" }],
+    roles: { dev: { read: [], write: ["app"], exec: [], label: "Developer" } }, members: {},
+  };
+  const seeded = await call("/api/v1" + path, { method: "PUT", headers: authorization(lead), body: JSON.stringify(policy) });
+  expect(seeded.status).toBe(200);
+  const current = await call(api + path, { headers });
+  expect(current.status).toBe(200);
+  const { bundle }: { bundle: typeof policy } = await current.json();
+  const draft = JSON.stringify({ ...bundle, version: 2 });
+  const preview = await write(path + "/preview", "POST", draft);
+  const published = await write(path, "PUT", draft);
+  expect([preview.status, published.status]).toEqual([200, 200]);
+  expect(await preview.json()).toMatchObject({ version: 2, roles: [{ role: "dev", write: ["app"] }] });
+  const { signature }: { signature: string } = await published.json();
+  const jwks = await call("/.well-known/jwks.json");
+  const verified = await verifyPolicyBundle(signature, await jwks.text());
+  expect(verified.bundle).toEqual({ ...policy, version: 2 });
+
+  const next = { ...bundle, version: 3 };
+  for (const invalid of [
+    JSON.stringify({ ...next, roles: { dev: { read: [], write: "app", exec: [] } } }),
+    JSON.stringify({ ...next, temporary_grants: [{
+      member_id: "lee", area: "app", actions: ["write"], scope: "mission", mission_id: "demo", label: "invalid",
+    }] }),
+    JSON.stringify(next).replace('"version":3', '"version":3,"version":4'),
+  ]) {
+    expect((await write(path + "/preview", "POST", invalid)).status).toBe(400);
+    expect((await write(path, "PUT", invalid)).status).toBe(400);
+  }
+  expect(await (await call(api + path + "/history", { headers })).json()).toMatchObject({
+    versions: [{ version: 2, actor_member_id: "lee" }, { version: 1, actor_member_id: "lee" }],
+  });
 });
 
 test("GET and HEAD never change roster, audit, observations, invites or sessions", async () => {

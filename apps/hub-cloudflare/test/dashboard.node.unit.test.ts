@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite";
 import { expect, test, vi } from "vitest";
 import { dashboardResponse } from "../src/dashboard-http";
 import { parsePolicyBundle } from "../src/policy";
+import { parsePublication } from "../src/publication";
 import { schemaMigrations } from "../src/storage";
 
 test("the dashboard sign-in form sends the page origin under no-referrer", async () => {
@@ -67,12 +68,19 @@ test("dashboard schema installs a session digest table and expiry index at migra
 const policy = '{"version":1,"project_id":"demo","repos":["demo"],"areas":[],"roles":{},"members":{}}';
 
 test.each([
+  ["bundle", policy.replace('"version":1', '"version":1,"Version":2')],
+  ["area", policy.replace('"areas":[]', '"areas":[{"name":"app","patterns":[],"System":true}]')],
+  ["role", policy.replace('"roles":{}', '"roles":{"dev":{"read":[],"write":[],"exec":[],"Write":[]}}')],
+])("dashboard publication accepts and preserves %s extensions", (_location, draft) => {
+  const body = new TextEncoder().encode(draft);
+  expect(parsePublication(body, true)).toEqual(parsePublication(body));
+});
+
+test.each([
   policy.replace('"version":1', '"version":1,"version":2'),
-  policy.replace('"version":1', '"version":1,"Version":2'),
-  policy.replace('"areas":[]', '"areas":[{"name":"app","patterns":[],"System":true}]'),
-  policy.replace('"roles":{}', '"roles":{"dev":{"read":[],"write":[],"exec":[],"Write":[]}}'),
   policy.replace('"members":{}', '"members":{"ana":"dev","ana":"owner"}'),
-])("dashboard policy validation rejects duplicate or unknown fields", (draft) => {
+  policy.replace('"version":1', '"version":1,"note":{"tag":1,"tag":2}'),
+])("dashboard policy validation rejects duplicate fields, including inside extensions", (draft) => {
   expect(() => parsePolicyBundle(draft, { strict: true })).toThrow(SyntaxError);
   expect(parsePolicyBundle(draft).project).toBe("demo");
 });
