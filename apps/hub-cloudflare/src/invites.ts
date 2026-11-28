@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { strictAdminJSON, validID } from "./admin";
-import { bearer, cappedBody, HubError, invalid, json, notFound, tokenHash } from "./http";
-import { activeTeam, appendAudit, authenticate, insertMember, memberReserved, newToken } from "./state";
+import { cappedBody, HubError, invalid, json, notFound, tokenHash } from "./http";
+import { activeTeam, appendAudit, bearerLead, insertMember, memberReserved, newToken } from "./state";
 import type { Role } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
 
@@ -39,24 +39,31 @@ type InviteRoute = { kind: "collection" | "redeem" } | { kind: "approve" | "revo
 const inviteConflict = () => new HubError(409, "already exists or conflicts with current state");
 const badInvite = () => invalid(inviteInput);
 
-export async function handleInvite(request: Request, storage: HubStorage, route: InviteRoute, clock = Date.now): Promise<Response> {
+type DashboardInvite = { authorize: ReturnType<typeof bearerLead>; joinLink?: (sql: TransactionSQL, code: string) => string };
+
+export async function handleInvite(request: Request, storage: HubStorage, route: InviteRoute, clock = Date.now,
+  dashboard?: DashboardInvite,
+): Promise<Response> {
   const methods = route.kind === "collection" ? ["GET", "HEAD", "POST"] : [route.kind === "revoke" ? "DELETE" : "POST"];
   if (!methods.includes(request.method)) throw new HubError(405, "method not allowed", { Allow: methods.join(", ") });
-  const hash = route.kind === "redeem" ? undefined : bearer(request);
+  const authorize = route.kind === "redeem" ? undefined : dashboard?.authorize ?? bearerLead(request);
   const body = await cappedBody(request, inviteLimit);
   return storage.transaction((sql) => {
     const now = clock();
-    if (hash === undefined) {
+    if (authorize === undefined) {
       activeTeam(sql);
       const result = redeemInvite(sql, body, now);
       return result instanceof HubError ? limitRedeemFailure(sql, now, result) : result;
     }
-    const actor = authenticate(sql, hash, true);
+    const actor = authorize(sql);
     if (route.kind === "collection" && request.method === "POST") {
-      return createInvite(sql, body, now, actor);
+      return createInvite(sql, body, now, actor, dashboard?.joinLink);
     }
     if (body.length) throw badInvite();
-    if (route.kind === "collection") return listInvites(sql, request.url, now);
+    if (route.kind === "collection") {
+      if (!dashboard) purgeInvites(sql, now);
+      return listInvites(sql, request.url, now);
+    }
     if (route.kind === "approve" || route.kind === "revoke") return changeInvite(sql, route, now, actor);
     throw new Error("Invalid invite route");
   });
@@ -77,11 +84,11 @@ function auditInvite(sql: TransactionSQL, row: InviteRow, action: string, actor:
     meta: { project_id, member_id, hub_role } }, new Date(now).toISOString());
 }
 
-function purgeInvites(sql: TransactionSQL, now: number) {
+export function purgeInvites(sql: TransactionSQL, now: number) {
   sql.exec("DELETE FROM invites WHERE COALESCE(ended_at_ms, expires_at_ms) <= ?", now - retention);
 }
 
-function createInvite(sql: TransactionSQL, body: Uint8Array, now: number, actor: string) {
+function createInvite(sql: TransactionSQL, body: Uint8Array, now: number, actor: string, joinLink?: (sql: TransactionSQL, code: string) => string) {
   const { project_id, member_id, hub_role = "member", expires_in_seconds = 172800, require_approval = false } =
     strictAdminJSON(body, ["project_id", "member_id", "hub_role", "expires_in_seconds", "require_approval"], inviteInput);
   if (!validID(project_id) || !validID(member_id) || (hub_role !== "member" && hub_role !== "lead") ||
@@ -105,7 +112,8 @@ function createInvite(sql: TransactionSQL, body: Uint8Array, now: number, actor:
     VALUES (?, ?, ?, ?, ?, 'issued', ?, ?, ?)`,
   id, project_id, member_id, hub_role, row.require_approval, now, row.expires_at_ms, tokenHash(code));
   auditInvite(sql, row, "invite.created", actor, now);
-  return json({ invite: present(row, now), code }, 201);
+  const invite = present(row, now);
+  return json(joinLink ? { invite, link: joinLink(sql, code) } : { invite, code }, 201);
 }
 
 function pageQuery(url: string) {
@@ -133,9 +141,8 @@ function pageQuery(url: string) {
 
 function listInvites(sql: TransactionSQL, url: string, now: number) {
   const { after, limit } = pageQuery(url);
-  purgeInvites(sql, now);
   const rows = sql.exec<InviteRow>(`SELECT id, project_id, member_id, hub_role, require_approval, state, created_at_ms, expires_at_ms
-    FROM invites WHERE id > ? ORDER BY id LIMIT ?`, after, limit + 1);
+    FROM invites WHERE id > ? AND COALESCE(ended_at_ms, expires_at_ms) > ? ORDER BY id LIMIT ?`, after, now - retention, limit + 1);
   return json({ invites: rows.slice(0, limit).map((row) => present(row, now)),
     next_cursor: rows.length > limit ? rows[limit - 1].id : null });
 }

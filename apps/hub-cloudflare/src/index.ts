@@ -1,9 +1,12 @@
 import { DurableObject } from "cloudflare:workers";
 import { activateKey, addMember, addProject, initialize, removeMember, stageKey } from "./admin";
 import { handleClaim } from "./claims";
+import { dashboardAPI } from "./dashboard";
+import { dashboardOrigin, dashboardResponse, isDashboard } from "./dashboard-http";
+import { pruneSessions } from "./dashboard-session";
 import { exportAudit } from "./export";
-import { handleInvite } from "./invites";
-import { bearer, HubError, invalid, json, notFound, unauthorized } from "./http";
+import { handleInvite, purgeInvites } from "./invites";
+import { allow, bearer, HubError, invalid, json, notFound, unauthorized } from "./http";
 import { memberMaintenanceIntervalMs, observeMember, pruneMemberObservations, readMembers } from "./members";
 import { publishPolicy, readPolicy, readProject } from "./publication";
 import { eventPage, postEvent, replayCursor, replayEvents } from "./room";
@@ -16,12 +19,13 @@ export interface Env {
   HUB_HOSTNAME: string;
   TEAM_ID: string;
   DEV_MODE?: string;
+  DASHBOARD_ASSETS?: Fetcher;
   TEAM_HUB: DurableObjectNamespace<TeamHub>;
   BOOTSTRAP_TOKEN?: string;
   WRAP_KEY_V1?: string;
 }
 
-type RoutingEnv = Pick<Env, "HUB_HOSTNAME" | "TEAM_ID" | "DEV_MODE"> & {
+type RoutingEnv = Pick<Env, "HUB_HOSTNAME" | "TEAM_ID" | "DEV_MODE" | "DASHBOARD_ASSETS"> & {
   TEAM_HUB: {
     idFromName(name: string): DurableObjectId;
     get(id: DurableObjectId): Pick<TeamHub, "fetch" | "readRoomPage">;
@@ -37,14 +41,18 @@ export async function fetchHub(
 ): Promise<Response> {
   const deadline = now() + limits.durationMs;
   const { hostname } = new URL(request.url);
-  const local = env.DEV_MODE === "1" && (hostname === "localhost" || hostname === "127.0.0.1");
-  if (hostname !== env.HUB_HOSTNAME.toLowerCase() && !local) {
-    return notFound().response();
-  }
-
   // Check the original path before forwarding can normalize dot segments.
-  const segments = pathSegments(request.url);
-  if (segments instanceof HubError) return headResponse(request, segments.response());
+  const path = rawPath(request.url);
+  const dashboard = dashboardPrefix(path);
+  const local = env.DEV_MODE === "1" && (hostname === "localhost" || hostname === "127.0.0.1");
+  const segments = hostname !== env.HUB_HOSTNAME.toLowerCase() && !local ? notFound() : pathSegments(path);
+  if (segments instanceof HubError) {
+    const response = segments.response();
+    return dashboard ? dashboardResponse(request, response) : headResponse(request, response);
+  }
+  if (dashboard) {
+    return dashboardResponse(request, await fetchDashboard(request, env, segments));
+  }
 
   const id = env.TEAM_HUB.idFromName(`team:${env.TEAM_ID}`);
   const stub = env.TEAM_HUB.get(id);
@@ -70,6 +78,21 @@ export async function fetchHub(
   } catch (error) {
     const failure = error instanceof HubError ? error : new HubError(500, "hub state unavailable");
     return headResponse(request, failure.response());
+  }
+}
+
+async function fetchDashboard(request: Request, env: RoutingEnv, segments: string[]): Promise<Response> {
+  try {
+    const origin = dashboardOrigin(request, env.HUB_HOSTNAME, env.DEV_MODE);
+    const [, , section, ...rest] = segments;
+    if (section === "api") return await env.TEAM_HUB.get(env.TEAM_HUB.idFromName(`team:${env.TEAM_ID}`)).fetch(request);
+    const asset = section || "index.html";
+    if (rest.length || !["index.html", "dashboard.css", "dashboard.js", "records.js"].includes(asset)) throw notFound();
+    allow(request.method, ["GET", "HEAD"]);
+    if (!env.DASHBOARD_ASSETS) throw new Error("missing asset binding");
+    return await env.DASHBOARD_ASSETS.fetch(new Request(origin + "/admin/" + asset, { method: request.method }));
+  } catch (error) {
+    return (error instanceof HubError ? error : new HubError(500, "hub state unavailable")).response();
   }
 }
 
@@ -104,7 +127,12 @@ export class TeamHub extends DurableObject<Env> {
 
   async alarm(): Promise<void> {
     await this.schemaVersion;
-    this.storage.transaction((sql) => pruneMemberObservations(sql, Date.now()));
+    this.storage.transaction((sql) => {
+      const now = Date.now();
+      pruneMemberObservations(sql, now);
+      pruneSessions(sql, now);
+      purgeInvites(sql, now);
+    });
     await this.ctx.storage.setAlarm(Date.now() + memberMaintenanceIntervalMs);
   }
 
@@ -129,7 +157,7 @@ export class TeamHub extends DurableObject<Env> {
   async fetch(request: Request): Promise<Response> {
     let response: Response;
     try {
-      const segments = pathSegments(request.url);
+      const segments = pathSegments(rawPath(request.url));
       if (segments instanceof HubError) throw segments;
       await this.schemaVersion;
       response = await this.route(request, segments);
@@ -140,6 +168,9 @@ export class TeamHub extends DurableObject<Env> {
   }
 
   private async route(request: Request, segments: string[]): Promise<Response> {
+    if (isDashboard(segments) && segments[2] === "api") {
+      return dashboardAPI(request, this.storage, this.env, segments.slice(3));
+    }
     const { method } = request;
     const [, first, second, collection, target, suffix, ...extra] = segments;
     if (first === "healthz" && second === undefined) {
@@ -232,8 +263,19 @@ export class TeamHub extends DurableObject<Env> {
   }
 }
 
-function pathSegments(url: string): string[] | HubError {
-  const path = url.replace(/^https?:\/\/[^/?#]*/i, "").split(/[?#]/, 1)[0];
+function rawPath(url: string): string {
+  return url.replace(/^https?:\/\/[^/?#]*/i, "").split(/[?#]/, 1)[0];
+}
+
+function dashboardPrefix(path: string): boolean {
+  try {
+    return decodeURIComponent(path.split("/")[1] ?? "") === "admin";
+  } catch {
+    return false;
+  }
+}
+
+function pathSegments(path: string): string[] | HubError {
   let segments: string[];
   try {
     // Decode after splitting so an escaped slash stays inside its segment.
@@ -248,8 +290,4 @@ function pathSegments(url: string): string[] | HubError {
 function headResponse(request: Request, response: Response): Response {
   if (request.method === "HEAD") return new Response(null, response);
   return response;
-}
-
-function allow(method: string, allowed: string[]): void {
-  if (!allowed.includes(method)) throw new HubError(405, "method not allowed", { Allow: allowed.join(", ") });
 }

@@ -1,4 +1,5 @@
-import { hasTrailingText, isJsonObject, LoneSurrogateError, parseJSON } from "./canonical.ts";
+import schema from "../../../spec/policy/v1/bundle.schema.json";
+import { hasDuplicateMembers, hasTrailingText, isJsonObject, LoneSurrogateError, parseJSON } from "./canonical.ts";
 import type { JsonObject, JsonValue } from "./canonical.ts";
 import { JWSError, verifyJWS } from "./jws.ts";
 
@@ -21,11 +22,12 @@ function compareMemberNames(left: string, right: string): number {
   return left.length - right.length;
 }
 
-export function parsePolicyBundle(input: string | Uint8Array): PolicyBundle {
+export function parsePolicyBundle(input: string | Uint8Array, { strict = false } = {}): PolicyBundle {
+  const duplicates = strict ? new WeakSet<JsonObject>() : undefined;
   const text = typeof input === "string" ? input : decoder.decode(input);
   let document: JsonValue;
   try {
-    document = parseJSON(text, { loneSurrogates: "reject" });
+    document = parseJSON(text, { loneSurrogates: "reject", duplicates });
   } catch (error) {
     if (error instanceof LoneSurrogateError) {
       throw new SyntaxError("holds an escape of a lone surrogate, such as \\ud800, which is not a character");
@@ -34,8 +36,15 @@ export function parsePolicyBundle(input: string | Uint8Array): PolicyBundle {
   }
   if (!isJsonObject(document)) throw new SyntaxError("must be an object");
 
+  if (duplicates && hasDuplicateMembers(document, duplicates)) throw new SyntaxError("has a duplicate field");
+
   const issues: string[] = [];
   const fail = (path: string, reason: string) => issues.push(path + " " + reason);
+  function knownFields(value: JsonObject, properties: object, path: string) {
+    if (strict && Object.keys(value).some((name) => !Object.hasOwn(properties, name))) {
+      fail(path, "has an unknown field");
+    }
+  }
   type Read<T> = (path: string, value: JsonValue) => T;
   function field<T>(object: JsonObject, path: string, name: string, read: Read<T>, required = true): T | undefined {
     const fieldPath = path ? path + "." + name : name;
@@ -79,6 +88,7 @@ export function parsePolicyBundle(input: string | Uint8Array): PolicyBundle {
     if (value !== first && value !== second) fail(path, `must be one of "${first}", "${second}"`);
   }
 
+  knownFields(document, schema.properties, "bundle");
   const strings = list(string);
   const version = field(document, "", "version", (path, value) => {
     if (typeof value === "number" && Number.isSafeInteger(value)) return value;
@@ -90,6 +100,7 @@ export function parsePolicyBundle(input: string | Uint8Array): PolicyBundle {
   field(document, "", "areas", list((path, value) => {
     const area = object(path, value);
     if (!area) return;
+    knownFields(area, schema.properties.areas.items.properties, path);
     field(area, path, "name", string);
     field(area, path, "patterns", strings);
     for (const name of ["private", "system", "generated"]) field(area, path, name, flag, false);
@@ -98,6 +109,7 @@ export function parsePolicyBundle(input: string | Uint8Array): PolicyBundle {
   field(document, "", "roles", dictionary((path, value) => {
     const role = object(path, value);
     if (!role) return;
+    knownFields(role, schema.properties.roles.additionalProperties.properties, path);
     for (const name of ["read", "write", "exec"]) field(role, path, name, strings);
     field(role, path, "push", strings, false);
   }));
