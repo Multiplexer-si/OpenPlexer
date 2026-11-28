@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { seal } from "./audit";
 import type { UnsealedRecord } from "./audit";
-import { forbidden, unauthorized } from "./http";
+import { bearer, forbidden, unauthorized } from "./http";
 import {
   exportPKCS8, exportPublicJWK, generateSigningKey, importPKCS8,
 } from "./jws";
@@ -29,17 +29,33 @@ export function activeTeam(sql: TransactionSQL): Team {
 }
 
 export type Role = "lead" | "member";
-type Member = { member_id: string; role: Role; token_hash: ArrayBuffer };
+type Enrollment = { member_id: string; role: Role; enrollment_id: string };
+type Member = Enrollment & { token_hash: ArrayBuffer };
 
-export function authenticate(sql: TransactionSQL, hash: ArrayBuffer, leadOnly = false): string {
+export function requireLead(role: Role): void {
+  if (role !== "lead") throw forbidden();
+}
+
+export function authenticateEnrollment(sql: TransactionSQL, hash: ArrayBuffer, leadOnly: boolean): Enrollment {
   activeTeam(sql);
-  for (const member of sql.exec<Member>("SELECT member_id, role, token_hash FROM members")) {
+  for (const member of sql.exec<Member>("SELECT member_id, role, enrollment_id, token_hash FROM members")) {
     if (crypto.subtle.timingSafeEqual(hash, member.token_hash)) {
-      if (leadOnly && member.role !== "lead") throw forbidden();
-      return member.member_id;
+      if (leadOnly) requireLead(member.role);
+      return { member_id: member.member_id, role: member.role, enrollment_id: member.enrollment_id };
     }
   }
   throw unauthorized();
+}
+
+export function authenticate(sql: TransactionSQL, hash: ArrayBuffer, leadOnly = false): string {
+  return authenticateEnrollment(sql, hash, leadOnly).member_id;
+}
+
+export type LeadAuthorization = (sql: TransactionSQL) => string;
+
+export function bearerLead(request: Request): LeadAuthorization {
+  const hash = bearer(request);
+  return (sql) => authenticate(sql, hash, true);
 }
 
 export function appendAudit(sql: TransactionSQL, action: Pick<UnsealedRecord, "action" | "target" | "actor_member_id">
