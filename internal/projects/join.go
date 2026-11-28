@@ -141,30 +141,41 @@ func (j JoinLock) HomePath(home string) (string, error) {
 }
 
 func plannedPath(path string) (string, error) {
+	plan, err := planPath(path)
+	return plan.path, err
+}
+
+type pathPlan struct {
+	path, ancestor string
+	info           fs.FileInfo
+}
+
+func planPath(path string) (pathPlan, error) {
 	if !filepath.IsAbs(path) {
 		cwd, err := os.Getwd()
 		if err != nil {
-			return "", err
+			return pathPlan{}, err
 		}
 		path = cwd + string(filepath.Separator) + path
 	}
-	if canonical, _, err := Directory(path); err == nil || !errors.Is(err, fs.ErrNotExist) {
-		return canonical, err
+	if canonical, info, err := Directory(path); err == nil || !errors.Is(err, fs.ErrNotExist) {
+		return pathPlan{canonical, canonical, info}, err
 	}
 	path = strings.TrimRightFunc(path, func(r rune) bool { return r < 256 && os.IsPathSeparator(uint8(r)) })
 	if _, err := os.Lstat(path); !errors.Is(err, fs.ErrNotExist) {
-		return "", errors.New("the home path contains an unresolved directory entry")
+		return pathPlan{}, errors.New("the home path contains an unresolved directory entry")
 	}
 	// Split preserves the filesystem meaning of a symlink followed by "..".
 	parent, name := filepath.Split(path)
 	if name == "." || name == ".." {
-		return "", errors.New("the home path cannot be resolved")
+		return pathPlan{}, errors.New("the home path cannot be resolved")
 	}
-	dir, err := plannedPath(parent)
+	plan, err := planPath(parent)
 	if err != nil {
-		return "", err
+		return pathPlan{}, err
 	}
-	return filepath.Join(dir, name), nil
+	plan.path = filepath.Join(plan.path, name)
+	return plan, nil
 }
 
 func pathDigest(path string) string {
@@ -301,8 +312,16 @@ func (j JoinLock) check(dir string, r Registry, home string) error {
 			if c.Home != home {
 				return errors.New("the checkout is already registered with another home")
 			}
-		} else if overlaps(c.Home, home) || overlaps(c.Home, stage) {
-			return errors.New("the home conflicts with another registered checkout")
+			continue
+		}
+		for _, path := range []string{home, stage} {
+			conflict, err := overlapsJoinHome(c.Home, path)
+			if err != nil {
+				return err
+			}
+			if conflict {
+				return errors.New("the home conflicts with another registered checkout")
+			}
 		}
 	}
 	return checkJoinReservations(dir, j.Root, j.rootInfo, home, true)
@@ -342,8 +361,12 @@ func checkJoinReservations(dir, root string, rootInfo fs.FileInfo, home string, 
 		if joining && p.Root == root && p.Home == home {
 			continue
 		}
+		conflict, err := overlapsJoinHome(p.Home, home)
+		if err != nil {
+			return err
+		}
 		if p.Root == root || sameDirectory(p.Root, rootInfo) ||
-			overlaps(p.Home, home) || overlapsControl(p.Stage(), home) ||
+			conflict || overlapsControl(p.Stage(), home) ||
 			joining && (overlapsControl(p.Home, stage) || overlapsControl(p.Stage(), stage)) {
 			return errors.New("a pending join reserves this checkout or home; resume it or use openplexer join --discard-pending")
 		}
@@ -357,6 +380,59 @@ func overlaps(a, b string) bool {
 		return err == nil && path != ".." && !strings.HasPrefix(path, ".."+string(filepath.Separator))
 	}
 	return within(a, b) || within(b, a)
+}
+
+func overlapsJoinHome(a, b string) (bool, error) {
+	if overlaps(a, b) {
+		return true, nil
+	}
+	left, err := planPath(a)
+	if err != nil {
+		return false, err
+	}
+	right, err := planPath(b)
+	if err != nil {
+		return false, err
+	}
+	if overlaps(left.path, right.path) {
+		return true, nil
+	}
+	if !os.SameFile(left.info, right.info) {
+		return false, nil
+	}
+	// Rel is safe because each ancestor is a prefix of its planned path.
+	leftTail, _ := filepath.Rel(left.ancestor, left.path)
+	rightTail, _ := filepath.Rel(right.ancestor, right.path)
+	if overlaps(leftTail, rightTail) {
+		return true, nil
+	}
+	leftNames := strings.Split(leftTail, string(filepath.Separator))
+	rightNames := strings.Split(rightTail, string(filepath.Separator))
+	for i := range min(len(leftNames), len(rightNames)) {
+		if !strings.EqualFold(leftNames[i], rightNames[i]) {
+			return false, nil
+		}
+	}
+	return joinDirectoryIgnoresCase(left.ancestor)
+}
+
+func joinDirectoryIgnoresCase(dir string) (_ bool, err error) {
+	// Probe only a potential case collision. The directory may be empty or
+	// on a different volume than the registry.
+	probe, err := os.MkdirTemp(dir, ".openplexer-case-")
+	if err != nil {
+		return false, err
+	}
+	defer func() { err = errors.Join(err, os.Remove(probe)) }()
+	info, err := os.Lstat(probe)
+	if err != nil {
+		return false, err
+	}
+	alias, err := os.Lstat(filepath.Join(dir, strings.ToUpper(filepath.Base(probe))))
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	return err == nil && os.SameFile(info, alias), err
 }
 
 // Reserve control names across case variants, even before an entry exists.

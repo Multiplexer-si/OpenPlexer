@@ -587,6 +587,67 @@ func TestJoinRejectsControlHomesBeforeContactingHub(t *testing.T) {
 	}
 }
 
+func TestJoinChecksPendingHomeCaseBeforeContactingHub(t *testing.T) {
+	f := newJoinFixture(t)
+	parent, insensitive := joinCaseFixture(t)
+	f.req.Home = filepath.Join(parent, "Selected")
+	invite := f.invite("first-member", true)
+	if result, err := f.join(nil); err != nil || result.PendingID != invite.ID {
+		t.Fatal("could not reserve the first home pending approval")
+	}
+	f.req.Root, f.req.Home = t.TempDir(), filepath.Join(parent, "SELECTED")
+	f.hash = ""
+	f.invite("second-member", false)
+	checkJoinHomeCase(t, f, insensitive, "a pending join reserves this checkout or home")
+}
+
+func TestJoinChecksMissingRegisteredHomeCaseBeforeContactingHub(t *testing.T) {
+	f := newJoinFixture(t)
+	parent, insensitive := joinCaseFixture(t)
+	original := filepath.Join(parent, "Selected")
+	home := filepath.Join(original, "Home")
+	if err := os.MkdirAll(home, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := projects.Register(f.req.UserHome, t.TempDir(), home, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(original, filepath.Join(parent, "moved")); err != nil {
+		t.Fatal(err)
+	}
+	f.req.Home = filepath.Join(parent, "SELECTED", "HOME", "child")
+	f.invite("new-member", false)
+	checkJoinHomeCase(t, f, insensitive, "the home conflicts with another registered checkout")
+}
+
+func joinCaseFixture(t *testing.T) (parent string, insensitive bool) {
+	t.Helper()
+	base := t.TempDir()
+	parent = filepath.Join(base, "Parent")
+	if err := os.Mkdir(parent, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_, err := os.Stat(filepath.Join(base, "PARENT"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	return parent, err == nil
+}
+
+func checkJoinHomeCase(t *testing.T, f *joinFixture, insensitive bool, conflict string) {
+	t.Helper()
+	if insensitive {
+		f.before = func(*http.Request) { t.Fatal("join contacted the hub for a case alias of a claimed home") }
+		if _, err := f.join(nil); err == nil || !strings.Contains(err.Error(), conflict) {
+			t.Fatal("join did not reject the case alias with the expected conflict")
+		}
+		return
+	}
+	if result, err := f.join(nil); err != nil || result.Home == "" {
+		t.Fatal("join did not register a distinct home on a case-sensitive filesystem")
+	}
+}
+
 func TestJoinResolvesSymlinkBeforeDotDotInNewHome(t *testing.T) {
 	f := newJoinFixture(t)
 	f.invite("new-member", false)
