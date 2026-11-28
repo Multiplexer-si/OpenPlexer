@@ -170,11 +170,20 @@ func sameRepository(repo, remote string) bool {
 		return project.scheme == origin.scheme && strings.EqualFold(project.host, origin.host) &&
 			project.port == origin.port && project.path == origin.path
 	}
-	if project.path == origin.path {
+	// A project recorded as a repository slug has no transport path.
+	projectSlug, originSlug := repositorySlug(project.path), repositorySlug(origin.path)
+	if projectSlug == "" || originSlug == "" {
+		return false
+	}
+	if projectSlug == originSlug {
 		return true
 	}
-	prefix, path, qualified := strings.Cut(project.path, "/")
-	return qualified && path == origin.path && strings.EqualFold(prefix, origin.host)
+	prefix, path, qualified := strings.Cut(projectSlug, "/")
+	return qualified && path == originSlug && strings.EqualFold(prefix, origin.host)
+}
+
+func repositorySlug(path string) string {
+	return strings.TrimSuffix(strings.TrimPrefix(path, "/"), ".git")
 }
 
 type repositoryLocation struct {
@@ -190,6 +199,9 @@ func repositoryParts(name string) repositoryLocation {
 			return repositoryLocation{}
 		}
 		location = repositoryLocation{u.Scheme, u.Hostname(), u.Port(), u.EscapedPath()}
+		if location.scheme == "ssh" || location.scheme == "git" {
+			location.path = u.Path
+		}
 		if location.port == defaultGitPort(location.scheme) {
 			location.port = ""
 		}
@@ -205,7 +217,9 @@ func repositoryParts(name string) repositoryLocation {
 	default:
 		location.path = name
 	}
-	location.path = strings.TrimSuffix(strings.TrimPrefix(location.path, "/"), ".git")
+	if (location.scheme == "ssh" || location.scheme == "git") && strings.HasPrefix(location.path, "/~") {
+		location.path = location.path[1:]
+	}
 	return location
 }
 

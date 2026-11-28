@@ -186,14 +186,19 @@ func TestJoinRepositoryMatch(t *testing.T) {
 		{"team/demo", "git@host:team/demo.git", true},
 		{"team/demo", "https://host/team/demo", true},
 		{"host/team/demo", "ssh://git@host/team/demo.git", true},
-		{"ssh://host/team/demo", "git@host:team/demo.git", true},
+		{"ssh://user@host/team/demo.git", "user@host:team/demo.git", false},
+		{"ssh://user@host/team/demo.git", "user@host:/team/demo.git", true},
+		{"ssh://user@host/%74eam/demo.git", "user@host:/team/demo.git", true},
+		{"ssh://user@host/~user/team/demo.git", "user@host:~user/team/demo.git", true},
+		{"ssh://user@host/team/demo", "user@host:/team/demo.git", false},
 		{"https://host/team/demo", "git@host:team/demo.git", false},
 		{"ssh://host:2222/team/demo", "git@host:team/demo.git", false},
 		{"https://host/team/demo", "http://host/team/demo", false},
 		{"https://host:8443/team/demo", "https://host:9443/team/demo", false},
 		{"https://host:8443/team/demo", "https://host/team/demo", false},
-		{"https://host/team/demo", "https://HOST:443/team/demo.git", true},
-		{"https://host:8443/team/demo", "https://host:8443/team/demo.git", true},
+		{"https://host/team/demo.git", "https://HOST:443/team/demo.git", true},
+		{"https://host:8443/team/demo.git", "https://host:8443/team/demo.git", true},
+		{"https://host/team/demo", "https://host/team/demo.git", false},
 		{"https://host/team/demo", "https://host/team/Demo", false},
 		{"https://other/team/demo", "git@host:team/demo.git", false},
 		{"team/demo", "git@host:team/another.git", false},
@@ -207,13 +212,23 @@ func TestJoinRepositoryMatch(t *testing.T) {
 
 func TestJoinSkipsPortableHooksForDifferentOriginPort(t *testing.T) {
 	c, _, root, code := joinCLIWithRepo(t, "https://git.example.test:8443/team/demo", "https://git.example.test:9443/team/demo")
+	checkJoinSkipsPortableHooks(t, c, root, code)
+}
+
+func TestJoinSkipsPortableHooksForDifferentSSHPaths(t *testing.T) {
+	c, _, root, code := joinCLIWithRepo(t, "ssh://user@host/team/demo.git", "user@host:team/demo.git")
+	checkJoinSkipsPortableHooks(t, c, root, code)
+}
+
+func checkJoinSkipsPortableHooks(t *testing.T, c cli, root, code string) {
+	t.Helper()
 	status, out, stderr := c.run("join", "--link-stdin", "--install-hook")
 	if status != exitOK || !strings.Contains(out, "policy: verified") || strings.Contains(out+stderr, code) {
 		t.Fatalf("join did not finish safely (exit %d)", status)
 	}
 	for _, path := range []string{".claude/settings.json", ".codex/hooks.json"} {
 		if _, err := os.Lstat(filepath.Join(root, path)); !os.IsNotExist(err) {
-			t.Errorf("join wrote %s for a checkout on a different origin port", path)
+			t.Errorf("join wrote %s for a checkout with a different origin", path)
 		}
 	}
 	if !strings.Contains(out, "Git origin does not match the project repository") {
