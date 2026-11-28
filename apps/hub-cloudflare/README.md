@@ -45,6 +45,8 @@ npx wrangler dev --local --var DEV_MODE:1
 In another terminal, run `curl -i http://127.0.0.1:8787/healthz`.
 Local development uses `.wrangler/state` for SQLite data. Keep that directory to reuse the database after a restart.
 
+To try wrapping key rotation locally, set `WRAP_KEY_V1`, `WRAP_KEY_V2`, and `WRAP_ROTATION_TOKEN` in the same `.dev.vars` file. Generate a separate value for each with `openssl rand -hex 32`. Initialize the team with both wrapping bindings present. Use the [operator requests](../../docs/cloudflare.md#rotate-the-wrapping-key) with the local origin and omit the HTTPS-only curl option. Once the status shows only `v2`, stop Wrangler, remove the `WRAP_KEY_V1` line, and restart with the same SQLite state. The conformance script runs this sequence with disposable files.
+
 ## Test
 
 ```sh
@@ -64,7 +66,8 @@ Testing and building the bundle require no Cloudflare account.
 Run `./scripts/conformance.sh` from this directory with Go, Node, curl, and OpenSSL installed.
 The script starts Wrangler on port 8787 with fresh SQLite state and disposable credentials.
 It seeds the hub with remote admin commands and checks auth, methods, both JWKS endpoints, projects and policies, audit export, Room events, claims, concurrent writes, and live streams.
-It verifies the export with `openplexer-verify`, checks for Room denials and claim records, and confirms that changing a record fails with rule A3.
+It rotates the wrapping key and restarts Wrangler with only the new binding. New policies and checkpoints verify against pins fetched before rotation.
+It verifies the export with `openplexer-verify`, checks for the rotation, Room denials, and claim records, and confirms that changing a record fails with rule A3.
 It also runs `openplexer policy sync`.
 The run ends with `policy: verified`.
 

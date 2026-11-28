@@ -256,4 +256,5 @@ func TestHub(t *testing.T) {
 	t.Run("invites", f.invites)
 	t.Run("member-sync", f.memberSync)
 	t.Run("hook-policy-age", f.hookPolicyAge)
+	t.Run("signing-continuity", f.signingContinuity)
 }

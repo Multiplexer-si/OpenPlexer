@@ -38,6 +38,8 @@ If the fixture uses other project IDs, pass `-project` and `-second-project` aft
 When testing against `wrangler dev`, pass `-hub-url` and `-wrangler-dev` after `-args`. The suite rejects `-wrangler-dev` without `-hub-url` before it starts a hub.
 The race checks the audit chain and its earlier checkpoint on both the Go hub and Wrangler. The Worker's `scripts/conformance.sh` then runs `openplexer-verify` on an export that includes Room denials and claim records.
 
+The signing continuity case checks a fresh policy and checkpoint against pinned signing keys on both hubs. Wrangler passes `-signing-pins` with the public keys captured before wrapping key rotation and removal of the old secret.
+
 For a deployed Cloudflare Worker, add `-cloudflare-edge` after `-args` with `-hub-url`. The Worker's `scripts/remote-check.sh` sets the flag. Use one of `-cloudflare-edge` or `-wrangler-dev` per run.
 
 ## Checks by target
