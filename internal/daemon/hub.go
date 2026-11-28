@@ -210,11 +210,18 @@ func (c config) hubSnapshot(home string) (hubClient, string, error) {
 
 // Sync fetches and admits the latest policy from the configured hub.
 func (g *Gate) Sync(ctx context.Context) (Status, error) {
-	err := g.sync(ctx, false)
+	err := g.sync(ctx, false, "", "")
 	return g.Status(), err
 }
 
-func (g *Gate) sync(ctx context.Context, requireCachedPolicy bool) error {
+// SyncEnrollment uses normal hub sync and checks the advertised key set and
+// receipt repository before writing the bundle or version floor.
+func (g *Gate) SyncEnrollment(ctx context.Context, fingerprint, repo string) (Status, error) {
+	err := g.sync(ctx, false, fingerprint, repo)
+	return g.Status(), err
+}
+
+func (g *Gate) sync(ctx context.Context, requireCachedPolicy bool, fingerprint, repo string) error {
 	unlock, err := lockHomeFile(ctx, g.home, lockFile)
 	if err != nil {
 		return err
@@ -233,17 +240,11 @@ func (g *Gate) sync(ctx context.Context, requireCachedPolicy bool) error {
 		return err
 	}
 	confirmation := storedPolicy{HubConfirmedAt: g.now().UTC(), HubBinding: binding}
-	return g.load(ctx, hubSource{hubClient: client, verifier: g.verifier}, confirmation, requireCachedPolicy)
-}
-
-// SyncEnrollment uses normal policy admission and also checks the advertised
-// key set and receipt repository before writing the bundle or version floor.
-func (g *Gate) SyncEnrollment(ctx context.Context, fingerprint, repo string) (Status, error) {
-	client, err := g.config.client()
-	if err != nil {
-		return g.status, err
+	source := hubSource{
+		hubClient: client, verifier: g.verifier,
+		fingerprint: fingerprint, repo: repo,
 	}
-	return g.Load(ctx, hubSource{hubClient: client, verifier: g.verifier, fingerprint: fingerprint, repo: repo})
+	return g.load(ctx, source, confirmation, requireCachedPolicy)
 }
 
 func (h hubClient) policyKeys(ctx context.Context) ([]byte, error) {

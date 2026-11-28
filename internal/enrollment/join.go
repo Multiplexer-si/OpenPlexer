@@ -218,7 +218,7 @@ func joinLocked(ctx context.Context, j projects.JoinLock, home string, p *projec
 	}
 	settings := daemon.Settings{
 		HubURL: link.Origin, ProjectID: receipt.ProjectID, MemberID: receipt.MemberID,
-		Token: claim.Bearer, KeySet: keys,
+		Token: claim.Bearer, KeySet: keys, MaxPolicyAgeSeconds: daemon.DefaultMaxPolicyAgeSeconds,
 	}
 	if err := daemon.Configure(stage, settings); err != nil {
 		return Result{}, err

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"runtime"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/multiplexer-si/openplexer/internal/hub"
 	"github.com/multiplexer-si/openplexer/internal/policy"
@@ -130,6 +132,49 @@ func TestJoinCommandViaStdin(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(user, "config")); !os.IsNotExist(err) {
 		t.Fatal("join touched the login service without consent")
+	}
+}
+
+func TestJoinConfirmsPolicyForImmediateHook(t *testing.T) {
+	c, user, root, _ := joinCLI(t)
+	home := filepath.Join(user, "joined")
+	if code, _, stderr := c.run("join", "--link-stdin", "--home", home); code != exitOK {
+		if strings.Contains(stderr, "the joined home has no verified policy for its enrollment") {
+			t.Fatal("join did not establish a verified policy for the joined identity")
+		}
+		t.Fatalf("join exited %d, want %d", code, exitOK)
+	}
+	var cfg struct {
+		MaxPolicyAgeSeconds int `json:"max_policy_age_seconds"`
+	}
+	readJSON(t, filepath.Join(home, "config.json"), &cfg)
+	if cfg.MaxPolicyAgeSeconds != 300 {
+		t.Errorf("stored maximum policy age = %d seconds, want 300", cfg.MaxPolicyAgeSeconds)
+	}
+
+	requests := 0
+	testAgeTransport(t, func(*http.Request) (*http.Response, error) {
+		requests++
+		return nil, errors.New("hub unavailable after join")
+	})
+	t.Setenv("OPENPLEXER_HOME", "")
+	confirmed := c.now.UTC().Format(time.RFC3339Nano)
+	c.now = c.now.Add(time.Second)
+	c.stdin = ""
+	code, out, _ := c.run("policy", "status")
+	if code != exitOK || !strings.Contains(out, "policy: verified\n") ||
+		!strings.Contains(out, "hub confirmed at: "+confirmed+"\n") ||
+		!strings.Contains(out, "maximum policy age: 5m0s\n") {
+		t.Error("policy status did not show the fresh join confirmation and age limit")
+	}
+	c.stdin = ageWrite(root)
+	code, out, _ = c.run("hook", "claude-code", "pre-tool", "--project-home")
+	if code != exitOK || !strings.Contains(out, `"permissionDecision":"deny"`) ||
+		!strings.Contains(out, "path is in no area, and a write is denied by default") {
+		t.Error("the hook did not decide under the policy confirmed by join")
+	}
+	if requests != 0 {
+		t.Errorf("status and hook made %d hub requests after join, want none", requests)
 	}
 }
 
