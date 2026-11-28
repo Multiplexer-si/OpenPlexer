@@ -2,6 +2,7 @@ package hook
 
 import (
 	"encoding/json"
+	"encoding/json/jsontext"
 	"errors"
 	"fmt"
 	"path/filepath"
@@ -91,9 +92,11 @@ func ParseCall(stdin []byte) (Call, error) {
 		{"cwd", &call.Cwd}, {"session_id", &call.Session},
 	} {
 		if value, ok := raw[field.name]; ok {
-			if err := json.Unmarshal(value, field.dest); err != nil {
-				return Call{}, fmt.Errorf("invalid %s: %w", field.name, err)
+			text, ok := hookString(value)
+			if !ok {
+				return Call{}, fmt.Errorf("invalid %s: expected a string", field.name)
 			}
+			*field.dest = text
 		}
 	}
 	if input, ok := raw["tool_input"]; ok {
@@ -106,11 +109,19 @@ func ParseCall(stdin []byte) (Call, error) {
 
 // Text returns the string field of the tool input.
 func (c Call) Text(field string) (string, error) {
-	var text string
-	if err := json.Unmarshal(c.Input[field], &text); err != nil {
+	text, ok := hookString(c.Input[field])
+	if !ok {
 		return "", fmt.Errorf("%s of a %s call has no string value", field, c.Tool)
 	}
 	return text, nil
+}
+
+func hookString(raw json.RawMessage) (string, bool) {
+	var text *string
+	if err := json.Unmarshal(raw, &text); err != nil || text == nil {
+		return "", false
+	}
+	return *text, true
 }
 
 type Effect struct {
@@ -325,12 +336,24 @@ func Decide(stdin []byte, env Env, judge Judge, tools Tools) Verdict {
 }
 
 func coveredCall(stdin []byte, tools Tools) (Call, Translate, error) {
+	if !jsontext.Value(stdin).IsValid() {
+		return Call{}, nil, errors.New("the hook input is invalid JSON or has a duplicate member")
+	}
 	call, err := ParseCall(stdin)
 	if err != nil {
 		return Call{}, nil, err
 	}
+	if call.Event == "" {
+		return call, nil, errors.New("the hook input has no hook_event_name")
+	}
+	if call.Event != "PreToolUse" {
+		return call, nil, nil
+	}
+	if call.Tool == "" {
+		return call, nil, errors.New("the hook input has no tool_name")
+	}
 	translate, gated := tools[call.Tool]
-	if call.Event != "PreToolUse" || !gated {
+	if !gated {
 		return call, nil, nil
 	}
 	if call.Cwd == "" {
