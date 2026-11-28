@@ -3,7 +3,7 @@ import { seal } from "./audit";
 import type { UnsealedRecord } from "./audit";
 import { bearer, forbidden, HubError, unauthorized } from "./http";
 import {
-  exportPKCS8, exportPublicJWK, generateSigningKey, importPKCS8,
+  exportPKCS8, exportPublicJWK, generateSigningKey, importPKCS8, parseStoredPublicJWK,
 } from "./jws";
 import type { SigningPurpose } from "./jws";
 import type { TransactionSQL } from "./storage";
@@ -109,9 +109,10 @@ export function insertSigningKey(sql: TransactionSQL, row: Awaited<ReturnType<ty
 
 export function publicKeys(sql: TransactionSQL, purpose: SigningPurpose) {
   activeTeam(sql);
-  const keys = sql.exec<{ public_jwk: string }>("SELECT public_jwk FROM signing_keys WHERE purpose = ? ORDER BY kid", purpose);
+  const keys = sql.exec<{ kid: string; public_jwk: string }>(
+    "SELECT kid, public_jwk FROM signing_keys WHERE purpose = ? ORDER BY kid", purpose);
   if (!keys.length) throw new Error("Missing signing keys");
-  return { keys: keys.map((row) => JSON.parse(row.public_jwk)) };
+  return { keys: keys.map((row) => parseStoredPublicJWK(row.public_jwk, row.kid, purpose)) };
 }
 
 export type SigningKeyRow = {

@@ -7,6 +7,7 @@ import { pruneSessions } from "./dashboard-session";
 import { exportAudit } from "./export";
 import { handleInvite, purgeInvites } from "./invites";
 import { allow, bearer, HubError, invalid, json, notFound, unauthorized } from "./http";
+import { importPublicJWK } from "./jws";
 import { memberMaintenanceIntervalMs, observeMember, pruneMemberObservations, readMembers } from "./members";
 import { publishPolicy, readPolicy, readProject } from "./publication";
 import { eventPage, postEvent, replayCursor, replayEvents } from "./room";
@@ -182,7 +183,9 @@ export class TeamHub extends DurableObject<Env> {
     }
     if (first === ".well-known" && (second === "jwks.json" || second === "audit-jwks.json") && collection === undefined) {
       allow(method, ["GET", "HEAD"]);
-      return json(this.storage.transaction((sql) => publicKeys(sql, second === "jwks.json" ? "policy" : "audit")));
+      const jwks = this.storage.transaction((sql) => publicKeys(sql, second === "jwks.json" ? "policy" : "audit"));
+      await Promise.all(jwks.keys.map((jwk) => importPublicJWK(jwk)));
+      return json(jwks);
     }
     if (first === "api" && second === "v1" && collection === "admin" && target === "keys") {
       if (suffix !== "policy" && suffix !== "audit") throw notFound();

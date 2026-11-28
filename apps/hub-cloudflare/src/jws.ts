@@ -95,7 +95,21 @@ function canVerify(key: JsonObject): boolean {
     && new Set(ops).size === ops.length;
 }
 
-export async function importPublicJWK(jwk: JsonObject, purpose: SigningPurpose): Promise<CryptoKey> {
+const storedJWKMembers = new Set(["kty", "crv", "x", "y", "kid", "use", "alg", "key_ops", "ext"]);
+
+export function parseStoredPublicJWK(text: string, kid: string, purpose: SigningPurpose): JsonObject {
+  const duplicates = new WeakSet<JsonObject>();
+  const jwk = parseJSON(text, { duplicates, loneSurrogates: "reject" });
+  if (!isJsonObject(jwk) || hasDuplicateMembers(jwk, duplicates) || !kid || jwk.kid !== kid
+      || (purpose === "audit" && !kid.startsWith("audit-"))
+      || Object.keys(jwk).some((name) => !storedJWKMembers.has(name))
+      || (Object.hasOwn(jwk, "ext") && typeof jwk.ext !== "boolean")) {
+    throw new Error("Invalid stored public JWK");
+  }
+  return jwk;
+}
+
+export async function importPublicJWK(jwk: JsonObject, purpose?: SigningPurpose): Promise<CryptoKey> {
   if (!canVerify(jwk) || Object.hasOwn(jwk, "d") || (Array.isArray(jwk.key_ops) && jwk.key_ops.length !== 1)) {
     throw new Error("Expected a public P-256 verification key");
   }
@@ -103,12 +117,20 @@ export async function importPublicJWK(jwk: JsonObject, purpose: SigningPurpose):
   point[0] = 4;
   for (const [coordinate, offset] of [[jwk.x, 1], [jwk.y, 33]] satisfies [JsonValue, number][]) {
     if (typeof coordinate !== "string") throw new Error("Missing P-256 coordinate");
-    const text = purpose === "audit" ? coordinate : coordinate.replace(/[\r\n]/g, "");
+    const text = purpose === "policy" ? coordinate.replace(/[\r\n]/g, "") : coordinate;
     const bytes = decodeBase64URL(text, true);
     if (bytes.length !== 32) throw new Error("Invalid P-256 coordinate length");
     point.set(bytes, offset);
   }
   return crypto.subtle.importKey("raw", point, algorithm, true, ["verify"]);
+}
+
+export async function verifySigningKeyPair(privateKey: CryptoKey, publicKey: CryptoKey): Promise<void> {
+  const proof = utf8.encode("OpenPlexer wrapping key rotation");
+  const signature = await crypto.subtle.sign(signatureAlgorithm, privateKey, proof);
+  if (signature.byteLength !== 64 || !await crypto.subtle.verify(signatureAlgorithm, publicKey, signature, proof)) {
+    throw new Error("Invalid ES256 signature");
+  }
 }
 
 export async function signJWS(payload: JsonValue, key: CryptoKey, kid: string, purpose: SigningPurpose): Promise<string> {

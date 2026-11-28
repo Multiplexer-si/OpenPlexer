@@ -37,6 +37,20 @@ test("rewrap verifies the public key and preserves signing with only the target 
     .rejects.toThrow("Unable to unwrap audit signing key with WRAP_KEY_V1");
 });
 
+test.each([
+  ["two JSON values", (jwk: string, other: string) => `${jwk},${other}`],
+  ["a duplicate member", (jwk: string) => jwk.replace("{", '{"kty":"EC",')],
+  ["an unknown member", (jwk: string) => jwk.replace("{", '{"KID":"other",')],
+])("rewrap rejects a stored policy JWK with %s", async (_label, damage) => {
+  const bindings = { WRAP_KEY_V1: "1".repeat(64), WRAP_KEY_V2: "2".repeat(64) };
+  const source = loadWrappingKey(bindings, "v1");
+  const original = await newSigningKey("demo", "policy", source);
+  const other = await newSigningKey("demo", "policy", source);
+  const row = { ...original, public_jwk: damage(original.public_jwk, other.public_jwk) };
+  const result = rewrapSigningKey(row, "demo", bindings, loadWrappingKey(bindings, "v2"));
+  await expect(result.then(() => "accepted malformed JWK")).rejects.toThrow("Unable to verify rewrapped policy signing key");
+});
+
 test("uses only the exact versioned binding recorded on a signing row", async () => {
   const { privateKey, publicKey } = await generateSigningKey();
   const { kid } = await exportPublicJWK(publicKey, "policy");

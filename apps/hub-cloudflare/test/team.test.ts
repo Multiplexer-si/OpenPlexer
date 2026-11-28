@@ -691,6 +691,25 @@ test.each(["tampered ciphertext", "wrong team", "mismatched public JWK"])("rejec
   });
 });
 
+test("rejects rotation when a stored public key cannot be published as one JWK", async () => {
+  const { lead } = await setup();
+  await check(await call(admin + "/keys/policy", "POST", lead), 200);
+  await runInDurableObject(stub(), async (hub, ctx) => {
+    const sql = ctx.storage.sql;
+    sql.exec(`UPDATE signing_keys SET public_jwk = public_jwk || ',' ||
+      (SELECT public_jwk FROM signing_keys WHERE purpose = 'policy' AND status = 'staged')
+      WHERE purpose = 'policy' AND status = 'active'`);
+    const rows = wrapRows(sql);
+    const tip = sql.exec("SELECT audit_seq, audit_tip FROM team").one();
+    const audit = sql.exec("SELECT seq, hash FROM audit_records ORDER BY seq").toArray();
+    await error(await hub.fetch(incoming(keys)), 500, "hub state unavailable");
+    await error(await hub.fetch(wrapRequest(lead, toV2)), 500, "Unable to verify rewrapped policy signing key");
+    expect(wrapRows(sql)).toEqual(rows);
+    expect(sql.exec("SELECT audit_seq, audit_tip FROM team").one()).toEqual(tip);
+    expect(sql.exec("SELECT seq, hash FROM audit_records ORDER BY seq").toArray()).toEqual(audit);
+  });
+});
+
 test("rolls back every ciphertext and its audit record if commit fails after the rewrap", async () => {
   const { lead } = await setup();
   await runInDurableObject(stub(), async (hub, ctx) => {

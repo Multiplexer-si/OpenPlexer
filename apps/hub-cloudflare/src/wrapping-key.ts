@@ -1,7 +1,7 @@
 import { Buffer } from "node:buffer";
 import { strictAdminJSON } from "./admin";
 import { cappedBody, conflict, HubError, invalid, tokenHash, unauthorized } from "./http";
-import { importPKCS8, signJWS, verifyJWS } from "./jws";
+import { importPKCS8, importPublicJWK, parseStoredPublicJWK, verifySigningKeyPair } from "./jws";
 import { appendAudit, bearerLead, unwrapSigningKey } from "./state";
 import type { SigningKeyRow } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
@@ -35,11 +35,11 @@ export async function rewrapSigningKey(row: SigningKeyRow & { public_jwk: string
   const identity = { team: teamID, purpose: row.purpose, kid: row.kid };
   const original = await unwrapSigningKey(row, teamID, bindings);
   try {
+    const publicKey = await importPublicJWK(parseStoredPublicJWK(row.public_jwk, row.kid, row.purpose));
     const wrapped = row.wrap_key_id === target.id ? undefined : await wrapPKCS8(original, target.bytes, identity);
     const verified = wrapped ? await unwrapPKCS8(wrapped, target.bytes, identity) : original;
     const signer = await importPKCS8(verified);
-    const proof = await signJWS(null, signer, row.kid, row.purpose);
-    await verifyJWS(proof, '{"keys":[' + row.public_jwk + ']}', row.purpose);
+    await verifySigningKeyPair(signer, publicKey);
     return {
       wrapped_pkcs8: wrapped?.ciphertext ?? row.wrapped_pkcs8, nonce: wrapped?.nonce.buffer ?? row.nonce,
       wrap_key_id: target.id,
