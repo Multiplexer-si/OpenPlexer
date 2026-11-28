@@ -10,9 +10,11 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
+	"github.com/multiplexer-si/openplexer/internal/daemon"
 	"github.com/multiplexer-si/openplexer/internal/hub"
 	"github.com/multiplexer-si/openplexer/internal/policy"
 	"github.com/multiplexer-si/openplexer/internal/projects"
@@ -198,13 +200,29 @@ func TestJoinCommandOptionalInstalls(t *testing.T) {
 	t.Setenv("JOIN_TEST_HOME", home)
 	shims := t.TempDir()
 	t.Setenv("PATH", shims+string(os.PathListSeparator)+os.Getenv("PATH"))
+	// The fake manager links this locked inode into the joined home when it starts.
+	heartbeat, err := os.OpenFile(filepath.Join(shims, "heartbeat"), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer heartbeat.Close()
+	if err := syscall.Flock(int(heartbeat.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	if err := json.NewEncoder(heartbeat).Encode(daemon.DaemonActivity{
+		PID: 35353, StartedAt: now, HeartbeatAt: now, Mode: "service",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("JOIN_TEST_HEARTBEAT", heartbeat.Name())
 	manager, show, start, missing, running := "systemctl", "show", "enable", "LoadState=not-found", "LoadState=loaded\nActiveState=active\nUnitFileState=enabled\nMainPID=35353"
 	if runtime.GOOS == "darwin" {
 		manager, show, start, missing, running = "launchctl", "print", "bootstrap", "Could not find service", "state = running\npid = 35353"
 	}
 	script := "#!/bin/sh\nif [ \"$1\" = --user ]; then shift; fi\n" +
 		"case \"$1\" in\n" + show + ")\nif [ -e \"$JOIN_TEST_HOME/daemon.pid\" ]; then\nprintf '%s\\n' '" + running + "'\nelse\nprintf '%s\\n' '" + missing + "'\nexit 1\nfi;;\n" +
-		start + ")\nstamp=$(/bin/date -u +%Y-%m-%dT%H:%M:%S)\nprintf '{\"pid\":35353,\"started_at\":\"%s.999999999Z\",\"heartbeat_at\":\"%sZ\"}\\n' \"$stamp\" \"$stamp\" > \"$JOIN_TEST_HOME/daemon.pid\";;\nesac\n"
+		start + ")\nln \"$JOIN_TEST_HEARTBEAT\" \"$JOIN_TEST_HOME/daemon.pid\";;\nesac\n"
 	if err := os.WriteFile(filepath.Join(shims, manager), []byte(script), 0700); err != nil {
 		t.Fatal(err)
 	}
