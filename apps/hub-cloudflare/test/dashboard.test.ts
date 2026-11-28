@@ -110,7 +110,7 @@ test("sign-in accepts only the configured origin and strict JSON from an active 
   expect(Number(rows[0].expires_at_ms)).toBeGreaterThan(Date.now() + 28_790_000);
 });
 
-test("requires exact origin and the session's CSRF on every write, including sign-out", async () => {
+test("requires exact origin and the session's CSRF on every session-authenticated write, including sign-out", async () => {
   const lead = await setup();
   const first = await signInAs(lead);
   const second = await signInAs(lead);

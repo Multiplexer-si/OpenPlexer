@@ -184,7 +184,7 @@ Upgrade each hub to a version that serves the GET stream before upgrading its da
 
 The Worker serves the dashboard at `/admin/` on the configured HTTPS origin. The Go hub uses the CLI and bearer API. Dashboard responses use `Cache-Control: no-store` and `Referrer-Policy: no-referrer`.
 
-Send one lead bearer to sign in. Use `Origin` set to the hub's exact origin, `Content-Type: application/json`, and an empty JSON object. The response sets an eight-hour session cookie. It returns `member_id`, `expires_at`, and `csrf`. The cookie works only on the dashboard. Every dashboard write, including sign-out, requires that origin and the session's CSRF value in `X-CSRF-Token`. Read routes also accept HEAD.
+Send one lead bearer to sign in. Use `Origin` set to the hub's exact origin, `Content-Type: application/json`, and an empty JSON object. Sign-in creates an eight-hour session and returns `member_id`, `expires_at`, and `csrf`. The response sets the session cookie, which works only on the dashboard. Every session-authenticated write, including sign-out, requires the hub's exact origin and the session's CSRF value in `X-CSRF-Token`. Read routes also accept HEAD.
 
 | Method and path | Result |
 |---|---|

@@ -1,4 +1,6 @@
+import { readFileSync } from "node:fs";
 import { DatabaseSync } from "node:sqlite";
+import { URL as FileURL } from "node:url";
 import { expect, test, vi } from "vitest";
 import { dashboardResponse } from "../src/dashboard-http";
 import { parsePolicyBundle } from "../src/policy";
@@ -50,6 +52,13 @@ test("the dashboard sign-in form sends the page origin under no-referrer", async
   } finally {
     vi.unstubAllGlobals();
   }
+});
+
+test("the dashboard route guide explains when the session CSRF value is issued and required", () => {
+  const guide = readFileSync(new FileURL("../../../docs/hub.md", import.meta.url), "utf8");
+  const dashboard = guide.split("\n## Worker dashboard\n")[1]?.split("\n## ")[0] ?? "";
+  expect(/^.*sign-in.*creates.*session.*returns.*`csrf`/im.test(dashboard)).toBe(true);
+  expect(/Every session-authenticated write, including sign-out, requires.*`X-CSRF-Token`/.test(dashboard)).toBe(true);
 });
 
 test("dashboard schema installs a session digest table and expiry index at migration 5", () => {
