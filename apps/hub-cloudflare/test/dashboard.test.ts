@@ -4,6 +4,7 @@ import { env, exports } from "cloudflare:workers";
 import { beforeEach, expect, test, vi } from "vitest";
 import { verifyChain, verifyCheckpoint } from "../src/audit";
 import { tokenHash } from "../src/http";
+import { fetchHub } from "../src/index";
 import { verifyPolicyBundle } from "../src/policy";
 import { newToken } from "../src/state";
 
@@ -11,7 +12,7 @@ beforeEach(reset);
 
 const origin = () => "https://" + env.HUB_HOSTNAME;
 const api = "/admin/api";
-const call = (path: string, init?: RequestInit) => exports.default.fetch(new Request(origin() + path, init));
+const call = (path: string, init?: RequestInit) => fetchHub(new Request(origin() + path, init), env);
 const authorization = (token: string) => ({ Authorization: "Bearer " + token });
 const hash = (token: string) => Buffer.from(tokenHash(token)).toString("hex");
 
@@ -66,15 +67,16 @@ async function expectPrivate(response: Response, lead: string) {
 
 test("serves a secure shell, static assets, and error and HEAD responses", async () => {
   const lead = await setup();
+  const callWorker = (path: string, init?: RequestInit) => exports.default.fetch(new Request(origin() + path, init));
   for (const [path, status] of [
     ["/admin/", 200], ["/admin/dashboard.js", 200], ["/admin/dashboard.css", 200],
     ["/admin/missing", 404], [api + "/session", 401], ["/admin/%bo", 400],
   ] as const) {
-    const response = await call(path);
+    const response = await callWorker(path);
     expect(response.status).toBe(status);
     await expectPrivate(response, lead);
   }
-  const head = await call("/admin/", { method: "HEAD" });
+  const head = await callWorker("/admin/", { method: "HEAD" });
   expect(head.status).toBe(200);
   expect(head.body).toBeNull();
   expectSecurity(head);

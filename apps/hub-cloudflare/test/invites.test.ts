@@ -1,10 +1,11 @@
 import { Buffer } from "node:buffer";
 import { reset, runInDurableObject } from "cloudflare:test";
-import { env, exports } from "cloudflare:workers";
+import { env } from "cloudflare:workers";
 import { beforeEach, expect, test } from "vitest";
 import { verifyChain, verifyCheckpoint } from "../src/audit";
 import { isJsonObject, parseJSON } from "../src/canonical";
 import { HubError, tokenHash } from "../src/http";
+import { fetchHub } from "../src/index";
 import { handleInvite } from "../src/invites";
 import { newToken } from "../src/state";
 import { HubStorage, migrate } from "../src/storage";
@@ -28,7 +29,7 @@ function incoming(path: string, method: string, token?: string, body?: string) {
 }
 
 function call(...args: Parameters<typeof incoming>) {
-  return exports.default.fetch(incoming(...args));
+  return fetchHub(incoming(...args), env);
 }
 
 async function setup() {
