@@ -229,7 +229,10 @@ func (s *Service) waitForStart() error {
 			failure = status.Failure
 		}
 		if status.State == "running" && activity.Mode == daemonManaged && activity.PID == status.PID {
-			return nil
+			if activity.heartbeatFresh() {
+				return nil
+			}
+			failure = "the managed daemon stopped reporting heartbeats"
 		}
 		select {
 		case <-poll.C:

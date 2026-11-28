@@ -12,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -471,6 +472,35 @@ func TestServiceReinstallRejectsForegroundWithReusedPID(t *testing.T) {
 			if err == nil || !strings.Contains(err.Error(), "stop the foreground openplexer daemon") {
 				t.Fatalf("reinstall missed the foreground Room lock: %v", err)
 			}
+		})
+	}
+}
+
+func TestServiceReinstallRejectsExpiredHeartbeatAtDecision(t *testing.T) {
+	for _, platform := range []string{"darwin", "linux"} {
+		t.Run(platform, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				checks := 0
+				s := reinstallService(t, platform, func() int {
+					checks++
+					if checks == 2 {
+						// The heartbeat expires while the manager confirms readiness.
+						time.Sleep(2 * time.Second)
+					}
+					return os.Getpid()
+				})
+				holdServiceTestRoom(t, s.Home, os.Getpid(), daemonManaged)
+				// A suspended daemon keeps both locks but publishes no updates.
+				time.Sleep(14 * time.Second)
+				err := s.Install("/opt/openplexer")
+				if err == nil {
+					t.Fatal("reinstall accepted a daemon whose heartbeat stopped")
+				}
+				if !strings.Contains(err.Error(), "the managed daemon stopped reporting heartbeats") ||
+					!strings.Contains(err.Error(), s.LogLocation()) {
+					t.Fatalf("reinstall did not report the stopped heartbeat and log location: %v", err)
+				}
+			})
 		})
 	}
 }
