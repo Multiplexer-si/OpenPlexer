@@ -1,9 +1,30 @@
+import { Buffer } from "node:buffer";
 import { canonicalJSON } from "./canonical.ts";
+import { HubError } from "./http";
 import type { SigningPurpose } from "./jws.ts";
 
 type KeyIdentity = { team: string; purpose: SigningPurpose; kid: string };
 type Bytes = ArrayBuffer | Uint8Array<ArrayBuffer>;
 type WrappedKey = { ciphertext: ArrayBuffer; nonce: Uint8Array<ArrayBuffer> };
+
+export interface WrapKeyBindings {
+  [binding: `WRAP_KEY_V${string}`]: unknown;
+}
+
+export function isWrapKeyID(id: unknown): id is string {
+  return typeof id === "string" && /^v[1-9][0-9]*$/.test(id);
+}
+
+export function loadWrappingKey(bindings: WrapKeyBindings, id: string) {
+  if (!isWrapKeyID(id)) throw new HubError(500, "Invalid wrapping key ID");
+  const binding: `WRAP_KEY_V${string}` = `WRAP_KEY_V${id.slice(1)}`;
+  const secret = bindings[binding];
+  if (secret === undefined) throw new HubError(503, `Missing ${binding}`);
+  if (typeof secret !== "string" || secret.length !== 64 || /[^0-9a-f]/i.test(secret)) {
+    throw new HubError(503, `Invalid ${binding}`);
+  }
+  return { id, binding, bytes: Buffer.from(secret, "hex") };
+}
 
 function importWrapKey(raw: Bytes, usage: "encrypt" | "decrypt"): Promise<CryptoKey> {
   if (raw.byteLength !== 32) throw new Error("Expected a 32-byte AES wrapping key");

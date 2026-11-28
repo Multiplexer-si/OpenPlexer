@@ -10,7 +10,8 @@ TEAM_ID = "default"
 # Set to "1" only for local development.
 DEV_MODE = ""
 
-# Set BOOTSTRAP_TOKEN and the versioned wrapping key WRAP_KEY_V1 with Wrangler secrets.
+# Set BOOTSTRAP_TOKEN and the initial WRAP_KEY_V1 with Wrangler secrets.
+# Add the next WRAP_KEY_V<n> and WRAP_ROTATION_TOKEN as secrets during rotation.
 [[durable_objects.bindings]]
 name = "TEAM_HUB"
 class_name = "TeamHub"

@@ -7,6 +7,7 @@ import { pruneSessions } from "./dashboard-session";
 import { exportAudit } from "./export";
 import { handleInvite, purgeInvites } from "./invites";
 import { allow, bearer, HubError, invalid, json, notFound, unauthorized } from "./http";
+import { importPublicJWK } from "./jws";
 import { memberMaintenanceIntervalMs, observeMember, pruneMemberObservations, readMembers } from "./members";
 import { publishPolicy, readPolicy, readProject } from "./publication";
 import { eventPage, postEvent, replayCursor, replayEvents } from "./room";
@@ -14,8 +15,10 @@ import { authenticate, publicKeys } from "./state";
 import { HubStorage, migrate } from "./storage";
 import { roomStream, streamHeaders, streamLimits } from "./stream";
 import type { RoomPage, RoomRead } from "./stream";
+import type { WrapKeyBindings } from "./wrap";
+import { manageWrappingKey } from "./wrapping-key";
 
-export interface Env {
+export interface Env extends WrapKeyBindings {
   HUB_HOSTNAME: string;
   TEAM_ID: string;
   DEV_MODE?: string;
@@ -23,6 +26,7 @@ export interface Env {
   TEAM_HUB: DurableObjectNamespace<TeamHub>;
   BOOTSTRAP_TOKEN?: string;
   WRAP_KEY_V1?: string;
+  WRAP_ROTATION_TOKEN?: string;
 }
 
 type RoutingEnv = Pick<Env, "HUB_HOSTNAME" | "TEAM_ID" | "DEV_MODE" | "DASHBOARD_ASSETS"> & {
@@ -179,7 +183,9 @@ export class TeamHub extends DurableObject<Env> {
     }
     if (first === ".well-known" && (second === "jwks.json" || second === "audit-jwks.json") && collection === undefined) {
       allow(method, ["GET", "HEAD"]);
-      return json(this.storage.transaction((sql) => publicKeys(sql, second === "jwks.json" ? "policy" : "audit")));
+      const jwks = this.storage.transaction((sql) => publicKeys(sql, second === "jwks.json" ? "policy" : "audit"));
+      await Promise.all(jwks.keys.map((jwk) => importPublicJWK(jwk)));
+      return json(jwks);
     }
     if (first === "api" && second === "v1" && collection === "admin" && target === "keys") {
       if (suffix !== "policy" && suffix !== "audit") throw notFound();
@@ -225,7 +231,7 @@ export class TeamHub extends DurableObject<Env> {
     if (collection === "projects" && target && target !== "/") {
       if (suffix === "policy") {
         allow(method, ["PUT"]);
-        return publishPolicy(request, this.storage, target, this.env.TEAM_ID, this.env.WRAP_KEY_V1);
+        return publishPolicy(request, this.storage, target, this.env.TEAM_ID, this.env);
       }
       if (suffix === undefined || suffix === "policy.bundle") {
         allow(method, ["GET", "HEAD"]);
@@ -239,6 +245,9 @@ export class TeamHub extends DurableObject<Env> {
     if (collection === "admin") {
       if (suffix === undefined) {
         switch (target) {
+          case "wrapping-key":
+            allow(method, ["GET", "HEAD", "PUT"]);
+            return json(await manageWrappingKey(request, this.storage, this.env));
           case "init":
             allow(method, ["POST"]);
             return json(await initialize(request, this.storage, this.env));
@@ -257,7 +266,7 @@ export class TeamHub extends DurableObject<Env> {
     }
     if (collection === "audit" && target === "export" && suffix === undefined) {
       allow(method, ["GET", "HEAD"]);
-      return exportAudit(request, this.storage, this.env.TEAM_ID, this.env.WRAP_KEY_V1);
+      return exportAudit(request, this.storage, this.env.TEAM_ID, this.env);
     }
     throw notFound();
   }

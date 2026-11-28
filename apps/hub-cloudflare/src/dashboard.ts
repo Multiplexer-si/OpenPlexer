@@ -13,6 +13,7 @@ import { parsePublication, publishPolicy, readPolicy, readProject } from "./publ
 import { eventPage } from "./room";
 import { publicKeys } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
+import type { WrapKeyBindings } from "./wrap";
 
 function pageQuery(url: URL, cursor: string) {
   if (/;|%(?![0-9a-f]{2})/i.test(url.search)) throw invalid("invalid query string");
@@ -84,7 +85,7 @@ function roomPage(sql: TransactionSQL, url: URL, project: string): Response {
   return jsonText(`{"events":[${events}],"next_cursor":${rows.length > limit ? last : "null"},"last_seq":${last}}\n`);
 }
 
-type DashboardEnv = Pick<Env, "HUB_HOSTNAME" | "DEV_MODE" | "TEAM_ID" | "WRAP_KEY_V1">;
+type DashboardEnv = Pick<Env, "HUB_HOSTNAME" | "DEV_MODE" | "TEAM_ID"> & WrapKeyBindings;
 
 export async function dashboardAPI(request: Request, storage: HubStorage, env: DashboardEnv, path: string[]): Promise<Response> {
   const origin = dashboardOrigin(request, env.HUB_HOSTNAME, env.DEV_MODE);
@@ -154,7 +155,7 @@ export async function dashboardAPI(request: Request, storage: HubStorage, env: D
     if (subaction === undefined) {
       allow(method, ["GET", "HEAD", "PUT"]);
       noQuery(url);
-      if (mutation) return publishPolicy(request, storage, id, env.TEAM_ID, env.WRAP_KEY_V1, dashboard);
+      if (mutation) return publishPolicy(request, storage, id, env.TEAM_ID, env, dashboard);
       return storage.transaction((sql) => readPolicy(sql, id));
     }
     if (subaction === "history") {
@@ -179,7 +180,7 @@ export async function dashboardAPI(request: Request, storage: HubStorage, env: D
     if (id === "export") {
       allow(method, ["GET", "HEAD"]);
       noQuery(url);
-      return exportAudit(request, storage, env.TEAM_ID, env.WRAP_KEY_V1, authorize);
+      return exportAudit(request, storage, env.TEAM_ID, env, authorize);
     }
     if (id === undefined) {
       allow(method, ["GET", "HEAD"]);

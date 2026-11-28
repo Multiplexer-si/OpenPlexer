@@ -90,7 +90,7 @@ curl -fsS "$hub/healthz"
 
 The health check prints JSON with `ok` set to `true` and the current version in `schema`. The schema version is 5 at the time of writing. If DNS or TLS is still provisioning, wait for Cloudflare to show the hostname as active and retry the health check.
 
-Store a protected copy of `wrap-key-v1` separately from your audit exports. Wrapping-key rotation is unsupported. Never change or delete `WRAP_KEY_V1` on a live team. The hub would lose the ability to unwrap its signing keys.
+Store a protected copy of `wrap-key-v1` separately from your audit exports. To retire a wrapping secret, follow the [wrapping key rotation steps](#rotate-the-wrapping-key).
 
 ## 4. Create the lead accounts and project
 
@@ -269,6 +269,50 @@ mv "$credentials/policy-next.json" "$credentials/policy.json"
 ```
 
 Developers can run `openplexer policy sync` and `openplexer policy status` to check the new version. Verify the next export with the new trusted audit JWKS. The hub keeps prior public keys for existing signatures.
+
+### Rotate the wrapping key
+
+1. Run a Worker build that supports wrapping key rotation. Keep `WRAP_KEY_V1` loaded. From the Worker directory, create and add a new wrapping secret and a separate operator token.
+
+   ```sh
+   (
+     umask 077
+     set -C
+     openssl rand -hex 32 > "$credentials/wrap-key-v2" &&
+     openssl rand -hex 32 > "$credentials/wrap-operator.token"
+   ) &&
+   npx wrangler secret put WRAP_KEY_V2 < "$credentials/wrap-key-v2" &&
+   npx wrangler secret put WRAP_ROTATION_TOKEN < "$credentials/wrap-operator.token"
+   ```
+
+   If a secret upload fails, retry the upload with the file you saved.
+
+2. Send the lead bearer and operator token over HTTPS. The Worker verifies and rewraps the active and staged signing keys for both purposes. If a signing key changes while the rotation runs, retry after the 409 response.
+
+   ```sh
+   wrap_headers=$(mktemp "$credentials/wrap.headers.XXXXXX")
+   printf 'Authorization: Bearer %s\nOpenPlexer-Operator-Token: %s\n' \
+     "$(cat "$lead_token")" "$(cat "$credentials/wrap-operator.token")" > "$wrap_headers"
+   wrap_url="$hub/api/v1/admin/wrapping-key"
+   curl --proto '=https' -fsS -H "@$wrap_headers" -X PUT \
+     -H 'Content-Type: application/json' --data '{"wrap_key_id":"v2"}' "$wrap_url"
+   ```
+
+3. Check that the status request returns HTTP 200 and lists only `v2` before deleting `WRAP_KEY_V1`. Keep any older wrapping secret needed to restore a protected backup.
+
+   ```sh
+   (
+     wrap_status=$(mktemp "$credentials/wrap.status.XXXXXX") || exit
+     trap 'rm -f "$wrap_status"' EXIT
+     wrap_http=$(curl --proto '=https' -fsS -H "@$wrap_headers" \
+       -o "$wrap_status" -w '%{http_code}' "$wrap_url") &&
+     [ "$wrap_http" = 200 ] &&
+     jq -es 'length == 1 and .[0].wrap_key_ids == ["v2"]' "$wrap_status" > /dev/null &&
+     npx wrangler secret delete WRAP_KEY_V1
+   )
+   ```
+
+4. Publish a higher policy version and export a fresh checkpoint. Verify the policy with `openplexer policy sync` and the checkpoint with `openplexer-verify`, using the existing pins. Delete `WRAP_ROTATION_TOKEN` with `npx wrangler secret delete WRAP_ROTATION_TOKEN`. Remove the temporary header and operator token files. For later rotations, use the next unused version and keep each loaded version's secret value fixed.
 
 ## 9. Revoke a member
 

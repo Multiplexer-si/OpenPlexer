@@ -37,6 +37,7 @@ var (
 	project          = flag.String("project", "conformance", "project ID with an initial policy")
 	policyAudit      = flag.Bool("policy-audit", true, "check the audit export around rejected policy writes")
 	secondProject    = flag.String("second-project", "conformance-other", "second project ID with the same repo")
+	signingPins      = flag.String("signing-pins", "", "directory with policy.jwks.json and audit.jwks.json pinned before an operator change")
 )
 
 const (

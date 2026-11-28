@@ -11,12 +11,16 @@ umask 077
 mkdir -p .wrangler
 state=$(mktemp -d "$worker_dir/.wrangler/conformance.XXXXXX")
 wrangler_pid=
-cleanup() {
-  local status=$?
+stop_wrangler() {
   if [[ -n "$wrangler_pid" ]]; then
     kill "$wrangler_pid" 2>/dev/null || true
     wait "$wrangler_pid" 2>/dev/null || true
+    wrangler_pid=
   fi
+}
+cleanup() {
+  local status=$?
+  stop_wrangler
   if [[ $status -ne 0 && -f "$state/wrangler.log" ]]; then
     tail -n 40 "$state/wrangler.log" >&2
   fi
@@ -29,34 +33,48 @@ trap 'exit 143' TERM
 # Disposable local test credentials and state.
 openssl rand -hex 32 > "$state/bootstrap.token"
 bootstrap_token=$(cat "$state/bootstrap.token")
-wrap_key=$(openssl rand -hex 32)
-printf 'BOOTSTRAP_TOKEN=%s\nWRAP_KEY_V1=%s\n' "$bootstrap_token" "$wrap_key" > "$state/test.env"
+wrap_key_v1=$(openssl rand -hex 32)
+wrap_key_v2=$(openssl rand -hex 32)
+operator_token=$(openssl rand -hex 32)
+printf 'BOOTSTRAP_TOKEN=%s\nWRAP_KEY_V1=%s\nWRAP_KEY_V2=%s\nWRAP_ROTATION_TOKEN=%s\n' \
+  "$bootstrap_token" "$wrap_key_v1" "$wrap_key_v2" "$operator_token" > "$state/test.env"
 
 origin=http://127.0.0.1:8787
-./node_modules/.bin/wrangler dev --local --ip 127.0.0.1 --port 8787 \
-  --var DEV_MODE:1 --env-file "$state/test.env" --persist-to "$state/sqlite" > "$state/wrangler.log" 2>&1 &
-wrangler_pid=$!
+mkdir "$state/home"
+start_wrangler() {
+  (
+    cd "$worker_dir"
+    exec env HOME="$state/home" ./node_modules/.bin/wrangler dev --local --ip 127.0.0.1 --port 8787 \
+      --var DEV_MODE:1 --env-file "$state/test.env" --persist-to "$state/sqlite"
+  ) > "$state/wrangler.log" 2>&1 &
+  wrangler_pid=$!
+}
+
+check_health() {
+  local deadline=$((SECONDS + 60)) status
+  until status=$(curl -fs -o "$state/health.json" -w '%{http_code}' --max-time 2 "$origin/healthz") &&
+    [[ $status == 200 ]]; do
+    if (( SECONDS >= deadline )) || ! kill -0 "$wrangler_pid" 2>/dev/null; then
+      echo "Wrangler did not become ready at /healthz" >&2
+      return 1
+    fi
+    sleep 1
+  done
+  kill -0 "$wrangler_pid"
+  test "$(cat "$state/health.json")" = '{"ok":true,"schema":5}'
+}
+start_wrangler
 
 cd "$worker_dir/../.."
 mkdir "$state/bin"
 go build -o "$state/bin/" ./apps/openplexer ./apps/openplexer-hub ./apps/openplexer-verify
 
-health_deadline=$((SECONDS + 60))
-until health_status=$(curl -fs -o "$state/health.json" -w '%{http_code}' --max-time 2 "$origin/healthz") &&
-  [[ $health_status == 200 ]]; do
-  if (( SECONDS >= health_deadline )) || ! kill -0 "$wrangler_pid" 2>/dev/null; then
-    echo "Wrangler did not become ready at /healthz" >&2
-    exit 1
-  fi
-  sleep 1
-done
-kill -0 "$wrangler_pid"
-health_body=$(cat "$state/health.json")
-test "$health_body" = '{"ok":true,"schema":5}'
+check_health
 foreign_status=$(curl -sS -o /dev/null -w '%{http_code}' --max-time 2 -H 'Host: foreign.example' "$origin/healthz")
 test "$foreign_status" = 404
 grep -Fq 'env.BOOTSTRAP_TOKEN' "$state/wrangler.log"
 grep -Fq 'env.WRAP_KEY_V1' "$state/wrangler.log"
+grep -Fq 'env.WRAP_KEY_V2' "$state/wrangler.log"
 
 hub="$state/bin/openplexer-hub"
 "$hub" init --hub "$origin" --token-file "$state/bootstrap.token" --id lead --lead-token-file "$state/lead.token"
@@ -74,6 +92,33 @@ cat > "$state/policy.json" <<'JSON'
 {"version":1,"project_id":"conformance","repos":["R&D"],"areas":[],"members":{},"roles":{}}
 JSON
 admin publish-policy --project conformance --file "$state/policy.json"
+
+# Pin the original signing keys before changing any wrapping key bindings.
+curl -fsS --max-time 5 "$origin/.well-known/jwks.json" > "$state/policy.jwks.json"
+curl -fsS --max-time 5 "$origin/.well-known/audit-jwks.json" > "$state/audit.jwks.json"
+printf 'Authorization: Bearer %s\nOpenPlexer-Operator-Token: %s\n' \
+  "$(cat "$state/lead.token")" "$operator_token" > "$state/wrap.headers"
+wrap_admin() {
+  curl -fsS --max-time 10 -H "@$state/wrap.headers" "$@" "$origin/api/v1/admin/wrapping-key"
+}
+test "$(wrap_admin)" = '{"wrap_key_ids":["v1"]}'
+test "$(wrap_admin -X PUT -H 'Content-Type: application/json' --data '{"wrap_key_id":"v2"}')" = '{"wrap_key_ids":["v2"]}'
+test "$(wrap_admin)" = '{"wrap_key_ids":["v2"]}'
+stop_wrangler
+printf 'WRAP_KEY_V2=%s\nWRAP_ROTATION_TOKEN=%s\n' "$wrap_key_v2" "$operator_token" > "$state/test.env"
+start_wrangler
+check_health
+if grep -Fq 'env.WRAP_KEY_V1' "$state/wrangler.log"; then
+  echo "Old wrapping key binding survived the Wrangler restart" >&2
+  exit 1
+fi
+test "$(wrap_admin)" = '{"wrap_key_ids":["v2"]}'
+test "$(wrap_admin --no-fail -o "$state/deleted-wrap.json" -w '%{http_code}' \
+  -X PUT -H 'Content-Type: application/json' --data '{"wrap_key_id":"v1"}')" = 503
+test "$(cat "$state/deleted-wrap.json")" = '{"error":"Missing WRAP_KEY_V1"}'
+admin stage-key --purpose policy > /dev/null
+admin stage-key --purpose audit > /dev/null
+test "$(wrap_admin)" = '{"wrap_key_ids":["v2"]}'
 
 invite_admin() {
   local subcommand=$1
@@ -109,16 +154,16 @@ grep -Fq "$invite_id" "$state/invites.json"
 invite_admin approve --id "$invite_id" > /dev/null
 invite_admin revoke --id "$invite_id" > /dev/null
 
-sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|queued-denial|room-events|claims|concurrency|live-stream|invites|member-sync|hook-policy-age)$'
+sections='^TestHub$/^(auth|methods|jwks|projects-and-policy|audit-export|queued-denial|room-events|claims|concurrency|live-stream|invites|member-sync|hook-policy-age|signing-continuity)$'
 OPENPLEXER_BIN_DIR="$state/bin" go test -count=1 -v ./test/hubconformance -run "$sections" -args \
   -hub-url "$origin" -wrangler-dev -lead-token-file "$state/lead.token" -member-token-file "$state/member.token" \
-  -revoked-token-file "$state/revoked.token"
+  -revoked-token-file "$state/revoked.token" -signing-pins "$state"
 
 admin members --project conformance-other | grep -F 'member  role member  policy v2  last check-in'
 
 admin export --out "$state/audit"
 verify() {
-  "$state/bin/openplexer-verify" --export "$state/audit/$1" --jwks "$state/audit/jwks.json" \
+  "$state/bin/openplexer-verify" --export "$state/audit/$1" --jwks "$state/audit.jwks.json" \
     --checkpoint "$state/audit/checkpoint.jws" --json
 }
 verify export.json > "$state/audit/verified.json"
@@ -132,7 +177,7 @@ if (result.ok !== true || result.completeness !== "through_checkpoint" ||
   throw new Error("Expected the checkpoint to authenticate the full export");
 }
 const actions = new Set(audit.entries.map((entry) => entry.action));
-for (const action of ["event.policy-denied", "claim.created", "claim.renewed", "claim.released", "claim.expired",
+for (const action of ["wrapping_key.rotated", "event.policy-denied", "claim.created", "claim.renewed", "claim.released", "claim.expired",
   "invite.created", "invite.requested", "invite.approved", "invite.redeemed", "invite.revoked"]) {
   if (!actions.has(action)) throw new Error("Missing audit action " + action);
 }
@@ -147,7 +192,6 @@ else
 fi
 grep -Fq '"rule":"A3"' "$state/audit/rejected.json"
 
-curl -fsS --max-time 5 "$origin/.well-known/jwks.json" > "$state/policy.jwks.json"
 export OPENPLEXER_HOME="$state/openplexer"
 cli="$state/bin/openplexer"
 "$cli" configure --hub "$origin" --project conformance --member member \

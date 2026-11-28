@@ -3,6 +3,7 @@ import type { AuditRecord } from "./audit";
 import { jsonHeaders } from "./http";
 import { activeSigningKey, activeTeam, bearerLead, signingKey } from "./state";
 import type { HubStorage, TransactionSQL } from "./storage";
+import type { WrapKeyBindings } from "./wrap";
 
 const utf8 = new TextEncoder();
 const chunkBytes = 64 << 10;
@@ -75,7 +76,7 @@ function exportBody(storage: HubStorage, through: number): ReadableStream<Uint8A
   });
 }
 
-export async function exportAudit(request: Request, storage: HubStorage, teamID: string, wrapSecret: string | undefined,
+export async function exportAudit(request: Request, storage: HubStorage, teamID: string, bindings: WrapKeyBindings,
   authorize = bearerLead(request),
 ) {
   const { checkpoint, key } = storage.transaction((sql) => {
@@ -89,7 +90,7 @@ export async function exportAudit(request: Request, storage: HubStorage, teamID:
       key: activeSigningKey(sql, "audit", current.audit_kid),
     };
   });
-  const signer = await signingKey(key, teamID, wrapSecret);
+  const signer = await signingKey(key, teamID, bindings);
   const token = await signCheckpoint(checkpoint, signer, key.kid);
   const body = request.method === "HEAD" ? null : exportBody(storage, checkpoint.entries);
   return new Response(body, { headers: { ...jsonHeaders, "OpenPlexer-Audit-Checkpoint": token } });
